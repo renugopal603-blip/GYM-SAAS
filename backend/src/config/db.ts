@@ -102,7 +102,7 @@ const tryStartLocalMongo = async (): Promise<boolean> => {
 };
 
 const connectDB = async () => {
-  const mongoURI = process.env.MONGO_URI || FALLBACK_MONGO_URI;
+  const mongoURI = process.env.MONGO_URI || process.env.MONGODB_URI || FALLBACK_MONGO_URI;
   const isLocal = mongoURI.includes('127.0.0.1') || mongoURI.includes('localhost');
 
   if (isLocal) {
