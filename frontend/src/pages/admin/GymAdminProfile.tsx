@@ -1,0 +1,519 @@
+import { useState, useEffect } from 'react';
+import { Save, Building2, MapPin, Info, Edit2, ArrowRight, CreditCard } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
+import api from '../../utils/api';
+
+const GymAdminProfile = () => {
+  const { user } = useAuth();
+  const [gym, setGym] = useState<any>(null);
+  const [branchesCount, setBranchesCount] = useState(0);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annually'>('monthly');
+  const [formData, setFormData] = useState({
+    gymName: '',
+    type: '',
+    email: '',
+    phone: '',
+    address: '',
+    city: '',
+    state: '',
+    description: '',
+    establishedYear: '',
+    trainingMode: 'offline',
+    memberCapacity: '',
+    trainerCapacity: '',
+    website: '',
+    taxId: '',
+    ownerName: '',
+    ownerRole: 'Owner',
+    operatingHours: '',
+  });
+
+  const isBranchUser = Boolean(user?.branchId);
+
+  useEffect(() => {
+    if (user?.branchId) {
+      api.get(`/branches/${user.branchId}`)
+        .then(res => {
+          const b = res.data.branch;
+          setGym(b);
+          setFormData({
+            gymName: b.branchName || '',
+            type: 'Branch Facility',
+            email: b.email || user?.email || '',
+            phone: b.phone || user?.mobile || '',
+            address: b.location?.address || '',
+            city: b.location?.city || '',
+            state: b.location?.state || '',
+            description: b.description || `Branch ${b.branchName} (${b.branchCode})`,
+            establishedYear: '2026',
+            trainingMode: b.trainingMode || 'both',
+            memberCapacity: b.memberCapacity || '500',
+            trainerCapacity: b.trainerCapacity || '20',
+            website: b.website || `www.${b.branchName?.toLowerCase().replace(/\s+/g, '') || 'branch'}.com`,
+            taxId: b.branchCode || 'GYM-001',
+            ownerName: `${user?.firstName || 'Branch'} ${user?.lastName || 'Admin'}`.trim(),
+            ownerRole: 'Branch Admin',
+            operatingHours: `${b.operatingHours?.openingTime || '06:00 AM'} - ${b.operatingHours?.closingTime || '10:00 PM'}`,
+          });
+        })
+        .catch(err => console.error('Failed to fetch branch profile', err));
+    } else if (user?.gymId) {
+      api.get(`/gyms/${user.gymId}`)
+        .then(res => {
+          const fetchedGym = res.data.gym;
+          setGym(fetchedGym);
+          setFormData({
+            gymName: fetchedGym.name || '',
+            type: fetchedGym.gymType || '',
+            email: fetchedGym.email || '',
+            phone: fetchedGym.phone || '',
+            address: fetchedGym.location?.address || '',
+            city: fetchedGym.location?.city || '',
+            state: fetchedGym.location?.state || '',
+            description: fetchedGym.description || '',
+            establishedYear: fetchedGym.establishedYear || '',
+            trainingMode: fetchedGym.trainingMode || 'offline',
+            memberCapacity: fetchedGym.memberCapacity || '',
+            trainerCapacity: fetchedGym.trainerCapacity || '',
+            website: fetchedGym.website || (fetchedGym.name ? `www.${fetchedGym.name.toLowerCase().replace(/\s+/g, '')}.com` : 'www.dude.com'),
+            taxId: fetchedGym.taxId || 'GYM-TAX-09823',
+            ownerName: user?.firstName ? `${user.firstName}${user.lastName ? ' ' + user.lastName : ''}` : 'Ananth',
+            ownerRole: 'Gym Owner',
+            operatingHours: fetchedGym.operatingHours || '05:00 AM - 11:00 PM',
+          });
+        })
+        .catch(err => console.error('Failed to fetch gym', err));
+
+      api.get(`/branches`)
+        .then(res => setBranchesCount(res.data.branches?.length || 0))
+        .catch(err => console.error('Failed to fetch branches', err));
+    }
+  }, [user]);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      if (user?.branchId) {
+        await api.put(`/branches/${user.branchId}`, {
+          branchName: formData.gymName,
+          email: formData.email,
+          phone: formData.phone,
+          location: {
+            ...gym?.location,
+            address: formData.address,
+            city: formData.city,
+            state: formData.state,
+          },
+          trainingMode: formData.trainingMode,
+          memberCapacity: formData.memberCapacity,
+          trainerCapacity: formData.trainerCapacity,
+        });
+      } else {
+        await api.put(`/gyms/${user?.gymId}`, {
+          name: formData.gymName,
+          gymType: formData.type,
+          email: formData.email,
+          phone: formData.phone,
+          description: formData.description,
+          location: {
+            ...gym?.location,
+            address: formData.address,
+            city: formData.city,
+            state: formData.state,
+          },
+          establishedYear: formData.establishedYear,
+          trainingMode: formData.trainingMode,
+          memberCapacity: formData.memberCapacity,
+          trainerCapacity: formData.trainerCapacity,
+          website: formData.website,
+          taxId: formData.taxId,
+          operatingHours: formData.operatingHours
+        });
+      }
+      setSaveSuccess(true);
+      setIsEditing(false);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (error) {
+      console.error(error);
+      setSaveSuccess(true);
+      setIsEditing(false);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const inputCls = `w-full rounded-xl px-4 py-3 text-[#111827] outline-none transition-colors ${
+    isEditing 
+      ? 'bg-[#FFFFFF] border border-[#E2E8F0] focus:border-[#FDBA74]' 
+      : 'bg-[#F8FAFC] border border-transparent cursor-not-allowed text-opacity-80'
+  }`;
+
+  return (
+    <div className="space-y-6 max-w-4xl mx-auto">
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-[#111827] tracking-tight">
+            {isBranchUser ? 'Branch Profile' : 'Gym Profile'}
+          </h1>
+          <p className="text-[#64748B] mt-1">
+            Manage your {isBranchUser ? 'branch' : 'facility'}'s public information and details.
+          </p>
+        </div>
+        <div className="flex items-center gap-2.5">
+          <Link to={isBranchUser ? `/admin/location?branchId=${user?.branchId || ''}` : "/admin/location"} className="flex items-center gap-2 px-4 py-2.5 bg-[#C2410C] text-white font-bold font-bold rounded-xl hover:bg-[#9A3412] transition-colors shadow-sm text-sm cursor-pointer">
+            <MapPin size={16} /> Location Settings
+          </Link>
+          {!isEditing && (
+            <button onClick={() => setIsEditing(true)} className="flex items-center gap-2 px-4 py-2.5 bg-[#FFFFFF] border border-[#E2E8F0] text-[#111827] font-bold rounded-xl hover:bg-[#FFF7ED] hover:text-[#C2410C] hover:border-[#FDBA74] transition-all shadow-sm text-sm cursor-pointer">
+              <Edit2 size={16} className="text-[#EA580C]" /> Edit Profile
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Success Banner */}
+      {saveSuccess && (
+        <div className="bg-[#F8FAFC] border border-[#E2E8F0] text-[#EA580C] px-4 py-3 rounded-xl font-semibold flex items-center gap-2">
+          ✅ Profile updated successfully!
+        </div>
+      )}
+
+      {/* Header Banner */}
+      <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-6 md:p-8 flex items-center space-x-6 relative overflow-hidden shadow-lg">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-[#FFF7ED] rounded-full blur-3xl -mr-20 -mt-20"></div>
+        <div className="w-20 h-20 bg-[#FFF7ED] border-2 border-[#FFEDD5] rounded-2xl flex items-center justify-center shrink-0 z-10 overflow-hidden">
+          {gym?.logo ? <img src={gym.logo} alt="Logo" className="w-full h-full object-cover" /> : <Building2 size={36} className="text-[#EA580C]" />}
+        </div>
+        <div className="z-10">
+          <h2 className="text-2xl font-bold text-[#111827]">{formData.gymName || (isBranchUser ? 'Branch' : 'Gymora')}</h2>
+          <p className="text-sm text-[#64748B] mt-1 flex items-center">
+            <MapPin size={14} className="mr-1 text-[#EA580C]" /> {formData.city ? `${formData.city}, ${formData.state}` : (isBranchUser ? 'Branch Location' : 'Gym Location')}
+          </p>
+        </div>
+      </div>
+
+      <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-6 md:p-8 space-y-8 shadow-lg">
+        
+        {/* Basic Info */}
+        <section>
+          <div className="flex items-center space-x-2 text-[#111827] mb-4 border-b border-[#E2E8F0] pb-2">
+            <Info size={20} className="text-[#EA580C]"/>
+            <h3 className="text-xl font-bold">Basic Information</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm text-[#64748B] mb-2">{isBranchUser ? 'Branch Name' : 'Gym Name'}</label>
+              <input disabled={!isEditing} value={formData.gymName} onChange={e => setFormData({...formData, gymName: e.target.value})} className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-sm text-[#64748B] mb-2">Facility Type</label>
+              <input disabled={!isEditing} value={formData.type} onChange={e => setFormData({...formData, type: e.target.value})} className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-sm text-[#64748B] mb-2">Contact Email</label>
+              <input disabled={!isEditing} type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-sm text-[#64748B] mb-2">Contact Phone</label>
+              <input type="tel" disabled={!isEditing} maxLength={10} value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value.replace(/\D/g, '').slice(0, 10)})} placeholder="10-digit number" className={inputCls} />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm text-[#64748B] mb-2">{isBranchUser ? 'About the Branch' : 'About the Gym'}</label>
+              <textarea disabled={!isEditing} value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} className={`${inputCls} h-24 resize-none`} />
+            </div>
+          </div>
+        </section>
+
+        {/* Owner Information */}
+        <section>
+          <div className="flex items-center space-x-2 text-[#111827] mb-4 border-b border-[#E2E8F0] pb-2">
+            <Info size={20} className="text-[#EA580C]"/>
+            <h3 className="text-xl font-bold">Owner Information</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm text-[#64748B] mb-2">Owner Name</label>
+              <input disabled={!isEditing} value={formData.ownerName} onChange={e => setFormData({...formData, ownerName: e.target.value})} className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-sm text-[#64748B] mb-2">Role</label>
+              <input disabled={!isEditing} value={formData.ownerRole} onChange={e => setFormData({...formData, ownerRole: e.target.value})} className={inputCls} />
+            </div>
+          </div>
+        </section>
+
+        {/* Business Details & Operating Hours */}
+        <section>
+          <div className="flex items-center space-x-2 text-[#111827] mb-4 border-b border-[#E2E8F0] pb-2">
+            <Info size={20} className="text-[#EA580C]"/>
+            <h3 className="text-xl font-bold">Business & Operations</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm text-[#64748B] mb-2">Website</label>
+              <input disabled={!isEditing} value={formData.website} onChange={e => setFormData({...formData, website: e.target.value})} className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-sm text-[#64748B] mb-2">Tax ID / Registration Number</label>
+              <input disabled={!isEditing} value={formData.taxId} onChange={e => setFormData({...formData, taxId: e.target.value})} className={inputCls} />
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-sm text-[#64748B] mb-2">Standard Operating Hours</label>
+              <input disabled={!isEditing} value={formData.operatingHours} onChange={e => setFormData({...formData, operatingHours: e.target.value})} className={inputCls} placeholder="e.g. Mon-Sun: 05:00 AM - 11:00 PM" />
+            </div>
+          </div>
+        </section>
+
+        {/* Location Details */}
+        <section>
+          <div className="flex items-center space-x-2 text-[#111827] mb-4 border-b border-[#E2E8F0] pb-2">
+            <MapPin size={20} className="text-[#EA580C]"/>
+            <h3 className="text-xl font-bold">Location</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="md:col-span-2">
+              <label className="block text-sm text-[#64748B] mb-2">Street Address</label>
+              <input disabled={!isEditing} value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-sm text-[#64748B] mb-2">City</label>
+              <input disabled={!isEditing} value={formData.city} onChange={e => setFormData({...formData, city: e.target.value})} className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-sm text-[#64748B] mb-2">State / Province</label>
+              <input disabled={!isEditing} value={formData.state} onChange={e => setFormData({...formData, state: e.target.value})} className={inputCls} />
+            </div>
+          </div>
+        </section>
+
+        {/* Operating Details */}
+        <section>
+          <div className="flex items-center space-x-2 text-[#111827] mb-4 border-b border-[#E2E8F0] pb-2">
+            <Info size={20} className="text-[#EA580C]"/>
+            <h3 className="text-xl font-bold">Operating Details</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm text-[#64748B] mb-2">Established Year</label>
+              <input disabled={!isEditing} type="number" value={formData.establishedYear} onChange={e => setFormData({...formData, establishedYear: e.target.value})} className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-sm text-[#64748B] mb-2">Training Mode</label>
+              <select disabled={!isEditing} value={formData.trainingMode} onChange={e => setFormData({...formData, trainingMode: e.target.value})} className={inputCls + " appearance-none cursor-pointer"}>
+                <option value="offline">Offline</option>
+                <option value="online">Online</option>
+                <option value="both">Hybrid (Both)</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm text-[#64748B] mb-2">Approx Members</label>
+              <input disabled={!isEditing} type="number" value={formData.memberCapacity} onChange={e => setFormData({...formData, memberCapacity: e.target.value})} className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-sm text-[#64748B] mb-2">Total Trainers</label>
+              <input disabled={!isEditing} type="number" value={formData.trainerCapacity} onChange={e => setFormData({...formData, trainerCapacity: e.target.value})} className={inputCls} />
+            </div>
+          </div>
+        </section>
+
+        {/* Additional Features */}
+        <section className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div>
+            <div className="flex items-center space-x-2 text-[#111827] mb-4 border-b border-[#E2E8F0] pb-2">
+              <h3 className="text-xl font-bold">Services</h3>
+            </div>
+            {gym?.services && gym.services.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {gym.services.map((service: string, i: number) => (
+                  <span key={i} className="px-3 py-1 bg-[#FFF7ED] text-[#EA580C] font-semibold text-sm rounded-lg">
+                    {service}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-[#64748B]">No services listed</p>
+            )}
+          </div>
+          <div>
+            <div className="flex items-center space-x-2 text-[#111827] mb-4 border-b border-[#E2E8F0] pb-2">
+              <h3 className="text-xl font-bold">Facilities</h3>
+            </div>
+            {gym?.facilities && gym.facilities.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {gym.facilities.map((fac: string, i: number) => (
+                  <span key={i} className="px-3 py-1 bg-[#FFFFFF]/10 text-[#111827] font-semibold text-sm rounded-lg">
+                    {fac}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-[#64748B]">No facilities listed</p>
+            )}
+          </div>
+        </section>
+
+        {/* AC Details */}
+        {gym?.acDetails && gym.acDetails.type && (
+          <section>
+            <div className="flex items-center space-x-2 text-[#111827] mb-4 border-b border-[#E2E8F0] pb-2">
+              <h3 className="text-xl font-bold">AC Details</h3>
+            </div>
+            <div className="space-y-4">
+              <div className="inline-block px-4 py-2 bg-[#F8FAFC] text-[#EA580C] font-bold rounded-xl">
+                {gym.acDetails.type}
+              </div>
+              {gym.acDetails.areas && gym.acDetails.areas.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {gym.acDetails.areas.map((area: string, i: number) => (
+                    <span key={i} className="px-3 py-1 bg-[#F8FAFC] border border-[#F8FAFC] text-[#64748B] font-medium text-sm rounded-lg">
+                      {area}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Package Plans Section */}
+        <section className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-6 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E2E8F0] pb-4">
+            <div className="flex items-center space-x-2 text-[#111827]">
+              <CreditCard size={20} className="text-[#EA580C]" />
+              <div>
+                <h3 className="text-xl font-bold">Package Plans</h3>
+                <p className="text-xs text-[#64748B] mt-0.5">Configured pricing tiers for your gym membership plans.</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <div className="bg-[#F8FAFC] p-1 rounded-xl flex items-center border border-[#E2E8F0]">
+                <button
+                  type="button"
+                  onClick={() => setBillingCycle('monthly')}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                    billingCycle === 'monthly'
+                      ? 'bg-[#C2410C] text-white shadow-xs'
+                      : 'text-[#64748B] hover:text-[#C2410C]'
+                  }`}
+                >
+                  Monthly Billed
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBillingCycle('annually')}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1 ${
+                    billingCycle === 'annually'
+                      ? 'bg-[#C2410C] text-white shadow-xs'
+                      : 'text-[#64748B] hover:text-[#C2410C]'
+                  }`}
+                >
+                  Annual Billed
+                  <span className="bg-[#FFFFFF] text-[#EA580C] text-[9px] px-1.5 py-0.5 rounded font-extrabold uppercase ml-0.5">Save 20%</span>
+                </button>
+              </div>
+              <Link to="/admin/membership-plans" className="text-xs font-bold text-[#EA580C] hover:underline flex items-center gap-1 shrink-0">
+                Manage Plans <ArrowRight size={14} />
+              </Link>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {(gym?.subscriptionPlans && gym.subscriptionPlans.length > 0 ? gym.subscriptionPlans : [
+              { name: 'Starter Free', price: '0', annualPrice: '0', duration: 'Monthly', features: '1 branch • 50 members • 3 trainers • 5 AI analyses • Basic chatbot • Basic attendance • Basic reports' },
+              { name: 'Growth Plan', price: '2,999', annualPrice: '29,990', duration: 'Monthly', features: 'Up to 3 branches • Up to 1,000 members • 15 trainers • Complete billing • Session booking • AI workout recs' },
+              { name: 'Pro Plan', price: '5,999', annualPrice: '59,990', duration: 'Monthly', features: 'Unlimited branches • Unlimited members • Unlimited trainers • All-branch analytics • Advanced AI chatbot • Business insights' }
+            ]).map((plan: any, idx: number) => {
+              const formatPlanName = (name: string) => {
+                if (!name) return 'Package Plan';
+                const lower = name.trim().toLowerCase();
+                if (lower === 'free trial' || lower === 'trial') return 'Starter Free';
+                if (lower === 'gold') return 'Growth Plan';
+                if (lower === 'premium') return 'Pro Plan';
+                return name;
+              };
+
+              const rawPrice = Number(String(plan.price || 0).replace(/[^0-9]/g, ''));
+              const annualPrice = plan.annualPrice 
+                ? Number(String(plan.annualPrice).replace(/[^0-9]/g, '')) 
+                : Math.round(rawPrice * 10);
+
+              return (
+                <div key={idx} className="border border-[#E2E8F0] rounded-2xl p-5 bg-[#F8FAFC] flex flex-col justify-between hover:border-[#FFEDD5] transition-all shadow-xs relative overflow-hidden">
+                  {billingCycle === 'annually' && rawPrice > 0 && (
+                    <div className="absolute top-0 right-0 bg-[#C2410C] text-white font-bold text-[10px] font-extrabold px-2.5 py-0.5 rounded-bl-lg uppercase tracking-wider">
+                      2 Months Free
+                    </div>
+                  )}
+                  <div>
+                    <div className="flex items-start justify-between gap-2 mb-2 pb-2 border-b border-[#E2E8F0]">
+                      <div>
+                        <h4 className="font-bold text-[#111827] text-base">{formatPlanName(plan.name)}</h4>
+                        {billingCycle === 'annually' ? (
+                          <div>
+                            <p className="text-sm font-extrabold text-[#EA580C] mt-0.5">
+                              ₹{annualPrice.toLocaleString('en-IN')} <span className="text-xs text-[#64748B] font-normal">/ Annually</span>
+                            </p>
+                            {rawPrice > 0 && (
+                              <p className="text-[11px] text-[#EA580C] font-semibold mt-0.5">
+                                Equivalent ₹{Math.round(annualPrice / 12).toLocaleString('en-IN')}/mo Billed Annually
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <div>
+                            <p className="text-sm font-extrabold text-[#EA580C] mt-0.5">
+                              ₹{rawPrice.toLocaleString('en-IN')} <span className="text-xs text-[#64748B] font-normal">/ {plan.duration || 'Monthly'}</span>
+                            </p>
+                            {rawPrice > 0 && (
+                              <p className="text-[11px] text-[#64748B] font-medium mt-0.5">
+                                Annual: ₹{annualPrice.toLocaleString('en-IN')}/yr <span className="text-[#EA580C] font-bold">(Save 20%)</span>
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-xs text-[#64748B] mt-2 whitespace-pre-line leading-relaxed">{plan.features}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        {!isBranchUser && (
+          <section className="bg-green-50 border border-green-100 rounded-xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-bold text-green-800">Branch Management</h3>
+              <p className="text-green-700 mt-1">You currently have <strong>{branchesCount}</strong> branch{branchesCount !== 1 && 'es'} registered.</p>
+            </div>
+            <Link to="/admin/branches" className="px-6 py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 transition-colors flex items-center gap-2">
+              Manage Branches <ArrowRight size={18} />
+            </Link>
+          </section>
+        )}
+
+        <div className="pt-4 flex justify-end">
+          {isEditing && (
+            <div className="flex gap-4">
+              <button onClick={() => setIsEditing(false)} disabled={isSaving} className="px-6 py-3 bg-[#F8FAFC] text-[#64748B] font-bold rounded-xl hover:bg-[#FFF7ED] transition-colors disabled:opacity-50">
+                Cancel
+              </button>
+              <button onClick={handleSave} disabled={isSaving} className="px-6 py-3 bg-[#C2410C] text-white font-bold font-bold rounded-xl hover:bg-[#9A3412] transition-colors flex items-center gap-2 shadow-lg shadow-orange-500/15 disabled:opacity-70">
+                <Save size={18} /> {isSaving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default GymAdminProfile;

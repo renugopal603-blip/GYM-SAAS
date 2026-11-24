@@ -1,0 +1,251 @@
+import React, { useState } from 'react';
+import { FileText, Download, ExternalLink, Video, File, X, ZoomIn, Image as ImageIcon } from 'lucide-react';
+import AudioMessagePlayer from './AudioMessagePlayer';
+import { formatFileSize } from './AttachmentPreview';
+import { isSafeMediaUrl } from '../../utils/url';
+
+export interface MessageAttachment {
+  url: string;
+  fileName: string;
+  fileType: 'image' | 'video' | 'audio' | 'document' | 'other';
+  mimeType?: string;
+  fileSize?: number;
+  duration?: number;
+}
+
+export interface MessageData {
+  _id: string;
+  senderId: string;
+  receiverId: string;
+  message?: string;
+  messageType?: 'text' | 'voice' | 'image' | 'video' | 'file';
+  attachments?: MessageAttachment[];
+  attachmentUrl?: string;
+  fileName?: string;
+  fileType?: string;
+  fileSize?: number;
+  duration?: number;
+  read?: boolean;
+  createdAt: string;
+}
+
+interface MessageBubbleProps {
+  message: MessageData;
+  isMine: boolean;
+  senderLabel: string;
+  avatarChar: string;
+}
+
+export const MessageBubble: React.FC<MessageBubbleProps> = ({
+  message,
+  isMine,
+  senderLabel,
+  avatarChar
+}) => {
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+
+  const timeFormatted = new Date(message.createdAt).toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  // Combine attachments from array or fallback single fields
+  const attachments: MessageAttachment[] = [];
+  if (message.attachments && message.attachments.length > 0) {
+    attachments.push(...message.attachments);
+  } else if (message.attachmentUrl) {
+    const isVoiceType = message.messageType === 'voice' || (message.fileName && message.fileName.startsWith('voice_'));
+    attachments.push({
+      url: message.attachmentUrl,
+      fileName: message.fileName || (isVoiceType ? 'voice-message.webm' : 'attachment'),
+      fileType: (isVoiceType ? 'audio' : (message.fileType as any) || 'other'),
+      fileSize: message.fileSize,
+      duration: message.duration
+    });
+  }
+
+  const isVoice = message.messageType === 'voice' || 
+    attachments.some(a => a.fileType === 'audio' || (a.fileName && a.fileName.startsWith('voice_'))) ||
+    Boolean(message.fileName && message.fileName.startsWith('voice_'));
+  const voiceAttachment = attachments.find(a => a.fileType === 'audio' || (a.fileName && a.fileName.startsWith('voice_'))) || (isVoice ? attachments[0] : null);
+
+  return (
+    <>
+      <div className={`flex gap-2 sm:gap-2.5 max-w-[92%] sm:max-w-[75%] min-w-0 ${isMine ? 'ml-auto flex-row-reverse' : ''}`}>
+        {/* Avatar */}
+        <div className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex shrink-0 items-center justify-center font-bold text-xs ${
+          isMine ? 'bg-[#C2410C] text-white shadow-xs' : 'bg-[#F8FAFC] text-[#111827]'
+        }`}>
+          {avatarChar}
+        </div>
+
+        {/* Bubble Container */}
+        <div className={`flex flex-col ${isMine ? 'items-end' : 'items-start'} max-w-full min-w-0 overflow-hidden`}>
+          <span className="text-[11px] font-bold text-[#64748B] mb-1 px-1 truncate max-w-full">
+            {senderLabel}
+          </span>
+
+          <div className={`p-3 sm:p-3.5 rounded-2xl text-xs sm:text-sm shadow-xs transition-all max-w-full overflow-hidden break-words ${
+            isMine
+              ? 'bg-[#C2410C] text-white rounded-tr-none'
+              : 'bg-[#FFFFFF] border border-[#E2E8F0] text-[#111827] rounded-tl-none'
+          }`}>
+            {/* 1. Voice Message Player */}
+            {isVoice && voiceAttachment && (
+              <div className="mb-1">
+                <AudioMessagePlayer
+                  src={voiceAttachment.url}
+                  duration={voiceAttachment.duration || message.duration}
+                  isMine={isMine}
+                />
+              </div>
+            )}
+
+            {/* 2. Attachments (Images, Videos, Documents) */}
+            {!isVoice && attachments.length > 0 && (
+              <div className="space-y-2 mb-2">
+                {attachments.map((att, i) => {
+                  if (att.fileType === 'image') {
+                    if (!isSafeMediaUrl(att.url)) {
+                      return (
+                        <div key={i} className="p-3 bg-black/5 rounded-xl flex items-center gap-2.5 text-xs border border-black/10">
+                          <ImageIcon size={18} className="text-[#EA580C] shrink-0" />
+                          <div className="min-w-0">
+                            <span className="font-bold block truncate">{att.fileName || 'Photo Attachment'}</span>
+                            <span className="text-[10px] opacity-75 block">Local device photo</span>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div key={i} className="relative group overflow-hidden rounded-xl border border-black/10">
+                        <img
+                          src={att.url}
+                          alt={att.fileName || 'attachment'}
+                          className="max-h-72 max-w-full rounded-xl object-cover cursor-pointer hover:opacity-95 transition-opacity"
+                          onClick={() => setLightboxUrl(att.url)}
+                          loading="lazy"
+                          onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none'; }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setLightboxUrl(att.url)}
+                          className="absolute bottom-2 right-2 p-1.5 bg-black/60 text-white rounded-lg opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 text-[10px] font-bold"
+                        >
+                          <ZoomIn size={12} /> View Full
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  if (att.fileType === 'video') {
+                    if (!isSafeMediaUrl(att.url)) {
+                      return (
+                        <div key={i} className="p-3 bg-black/5 rounded-xl flex items-center gap-2.5 text-xs border border-black/10">
+                          <Video size={18} className="text-[#EA580C] shrink-0" />
+                          <span className="font-bold truncate">{att.fileName || 'Video Attachment'}</span>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div key={i} className="rounded-xl overflow-hidden border border-black/10 max-w-full">
+                        <video
+                          src={att.url}
+                          controls
+                          className="max-h-72 max-w-full rounded-xl bg-black"
+                          preload="metadata"
+                        />
+                      </div>
+                    );
+                  }
+
+                  // Documents & Other files
+                  return (
+                    <div
+                      key={i}
+                      className="flex items-center justify-between gap-3 p-3 rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] text-[#111827] shadow-xs transition-all"
+                    >
+                      <div className="flex items-center gap-2.5 overflow-hidden">
+                        <div className="w-9 h-9 rounded-lg bg-[#FFF7ED] text-[#EA580C] flex items-center justify-center shrink-0 border border-[#FFEDD5]">
+                          <FileText size={20} />
+                        </div>
+                        <div className="overflow-hidden">
+                          <p className="font-bold text-xs truncate text-[#111827]" title={att.fileName}>
+                            {att.fileName}
+                          </p>
+                          {att.fileSize ? (
+                            <span className="text-[10px] text-[#64748B] font-semibold block">
+                              {formatFileSize(att.fileSize)}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <a
+                        href={att.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        download={att.fileName}
+                        className="p-2 rounded-lg bg-[#C2410C] hover:bg-[#9A3412] text-white transition-transform active:scale-95 shrink-0 flex items-center justify-center shadow-xs"
+                        title="Download or view file"
+                      >
+                        <Download size={14} />
+                      </a>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* 3. Text Message content (if present) */}
+            {message.message && message.message.trim().length > 0 && (
+              <p className="leading-relaxed whitespace-pre-wrap font-medium break-words overflow-hidden">
+                {message.message}
+              </p>
+            )}
+
+            {/* 4. Timestamp */}
+            <span className={`text-[10px] block mt-1 ${isMine ? 'text-white/80 text-right' : 'text-[#64748B]'}`}>
+              {timeFormatted}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Lightbox Modal for Images */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <div className="relative max-w-4xl max-h-[90vh] flex flex-col items-center" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setLightboxUrl(null)}
+              className="absolute -top-10 right-0 p-2 text-white/80 hover:text-white bg-[#FFFFFF]/10 rounded-full transition-colors"
+              title="Close image"
+            >
+              <X size={20} />
+            </button>
+            <img
+              src={lightboxUrl}
+              alt="Preview"
+              className="max-h-[85vh] max-w-full rounded-2xl object-contain shadow-2xl"
+            />
+            <a
+              href={lightboxUrl}
+              target="_blank"
+              rel="noreferrer"
+              download
+              className="mt-3 px-4 py-2 bg-[#C2410C] text-white font-bold rounded-xl text-xs font-bold hover:bg-[#9A3412] transition-colors flex items-center gap-1.5"
+            >
+              <ExternalLink size={14} /> Open Full Resolution
+            </a>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
+export default MessageBubble;

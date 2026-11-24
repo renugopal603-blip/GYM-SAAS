@@ -1,0 +1,757 @@
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { getDb, updateItem, deleteItem, addItem } from '../../utils/mockDb';
+import api from '../../utils/api';
+import {
+  Search, Send, Trash2, Eye, Building2, User, Mail, Phone,
+  Calendar, Clock, Copy, Check, ExternalLink, X, PlusCircle,
+  ChevronDown, CheckCircle2, AlertCircle, Clock4
+} from 'lucide-react';
+
+const SuperAdminInvitations = () => {
+  const navigate = useNavigate();
+  const [invites, setInvites] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [viewInvite, setViewInvite] = useState<any | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    loadInvitations();
+  }, []);
+
+  const evaluateInvitations = (list: any[]) => {
+    const now = Date.now();
+
+    return list.map(item => {
+      // If already accepted, keep accepted status
+      if ((item.status || '').toLowerCase() === 'accepted') {
+        return item;
+      }
+
+      const expiryStr = item.expiry || '7 Days';
+      if (expiryStr.toLowerCase() === 'never') {
+        return item;
+      }
+
+      const match = expiryStr.match(/(\d+)/);
+      const days = match ? parseInt(match[1], 10) : 7;
+      const durationMs = days * 24 * 60 * 60 * 1000;
+
+      let targetTime = 0;
+      if (item.expiresAt) {
+        targetTime = new Date(item.expiresAt).getTime();
+      } else if (item.date || item.createdAt) {
+        targetTime = new Date(item.createdAt || item.date).getTime() + durationMs;
+      }
+
+      if (!targetTime || isNaN(targetTime)) {
+        return item;
+      }
+
+      const remainingMs = targetTime - now;
+
+      if (remainingMs <= 0) {
+        // Expiration duration completed! Automatically mark Expired
+        if (item.status !== 'Expired') {
+          updateItem('gymInvitations', item.id, { status: 'Expired' });
+        }
+        return {
+          ...item,
+          status: 'Expired',
+          isExpired: true,
+          isExpiringSoon: false
+        };
+      } else if (remainingMs <= 60 * 60 * 1000) {
+        // Less than 1 hour left
+        const mins = Math.max(1, Math.round(remainingMs / 60000));
+        return {
+          ...item,
+          isExpired: false,
+          isExpiringSoon: true,
+          timeLeftText: `${mins}m left`
+        };
+      }
+
+      return {
+        ...item,
+        isExpired: false,
+        isExpiringSoon: false
+      };
+    });
+  };
+
+  const loadInvitations = async () => {
+    let current = getDb('gymInvitations');
+    const existingStatuses = new Set(current.map((i: any) => i.status));
+    let hasAdded = false;
+
+    if (!existingStatuses.has('Sent')) {
+      addItem('gymInvitations', {
+        gymName: 'IronPulse Fitness Club',
+        type: 'Strength & Conditioning',
+        owner: 'Rohan Sharma',
+        email: 'rohan.sharma@ironpulse.com',
+        phone: '9840123456',
+        date: '2026-09-27',
+        status: 'Sent',
+        expiry: '3 Days'
+      });
+      hasAdded = true;
+    }
+    if (!existingStatuses.has('Accepted')) {
+      addItem('gymInvitations', {
+        gymName: 'FitZone Elite Arena',
+        type: 'CrossFit & Functional',
+        owner: 'Priya Patel',
+        email: 'priya.patel@fitzone.com',
+        phone: '9820556789',
+        date: '2026-09-25',
+        status: 'Accepted',
+        expiry: '7 Days'
+      });
+      hasAdded = true;
+    }
+    if (!existingStatuses.has('Expired')) {
+      addItem('gymInvitations', {
+        gymName: 'Metro Gym & Wellness',
+        type: 'Cardio & Strength',
+        owner: 'Vikram Singh',
+        email: 'vikram.singh@metrogym.com',
+        phone: '9811223344',
+        date: '2026-09-20',
+        status: 'Expired',
+        expiry: 'Expired'
+      });
+      hasAdded = true;
+    }
+
+    // Ensure Agila G is immediately present even before async API response
+    const hasAgila = current.some((i: any) => (i.email || '').toLowerCase() === 'agilaganesan08@gmail.com');
+    if (!hasAgila) {
+      addItem('gymInvitations', {
+        gymName: 'Fitness Psycho',
+        type: 'Commercial',
+        owner: 'AGILA G',
+        email: 'agilaganesan08@gmail.com',
+        phone: '9999999999',
+        date: '2026-10-14',
+        status: 'Accepted',
+        expiry: '30 Days'
+      });
+      hasAdded = true;
+    }
+
+    if (hasAdded) {
+      current = getDb('gymInvitations');
+    }
+    const evaluatedList = evaluateInvitations(current);
+    setInvites(evaluatedList);
+
+    // Fetch registered gym owners from backend to keep full synchronization
+    try {
+      setLoading(true);
+      const res = await api.get('/users?role=GYM_OWNER');
+      const owners = res.data?.users || [];
+      const deletedInvites = getDb('deletedGymInvitations') || [];
+      const deletedEmails = new Set(deletedInvites.map((d: any) => (d.email || '').toLowerCase().trim()));
+
+      let freshList = getDb('gymInvitations');
+      let listUpdated = false;
+
+      for (const owner of owners) {
+        const ownerEmail = (owner.email || '').toLowerCase().trim();
+        if (!ownerEmail || deletedEmails.has(ownerEmail)) continue;
+
+        const fullName = `${owner.firstName || ''} ${owner.lastName || ''}`.trim() || 'Gym Owner';
+        const gymName = owner.gymId?.name || (owner.firstName ? `${owner.firstName}'s Gym` : 'Fitness Gym');
+        const gymType = owner.gymId?.gymType || 'Commercial';
+        const phone = owner.mobile || owner.phone || 'N/A';
+        const regDate = owner.createdAt ? owner.createdAt.split('T')[0] : new Date().toISOString().split('T')[0];
+
+        const existingIdx = freshList.findIndex((i: any) => (i.email || '').toLowerCase().trim() === ownerEmail);
+        if (existingIdx !== -1) {
+          const item = freshList[existingIdx];
+          const shouldUpdate =
+            item.gymName === 'Pending Registration' ||
+            (!item.gymName && gymName) ||
+            (gymName && item.gymName !== gymName && item.gymName.toLowerCase() === 'pending registration') ||
+            (fullName && item.owner !== fullName && (!item.owner || item.owner === 'Gym Owner')) ||
+            (phone !== 'N/A' && item.phone !== phone && (!item.phone || item.phone === 'N/A'));
+
+          if (shouldUpdate) {
+            const updatedItem = {
+              ...item,
+              gymName: gymName || item.gymName,
+              type: gymType || item.type,
+              owner: fullName || item.owner,
+              phone: phone !== 'N/A' ? phone : item.phone,
+              userId: owner._id
+            };
+            freshList[existingIdx] = updatedItem;
+            updateItem('gymInvitations', item.id, updatedItem);
+            listUpdated = true;
+          }
+        } else {
+          const newInvite = addItem('gymInvitations', {
+            gymName,
+            type: gymType,
+            owner: fullName,
+            email: owner.email,
+            phone,
+            date: regDate,
+            status: 'Accepted',
+            expiry: '30 Days',
+            userId: owner._id,
+            link: `${window.location.origin}/register/gym-owner?email=${encodeURIComponent(owner.email)}`
+          });
+          freshList.push(newInvite);
+          listUpdated = true;
+        }
+      }
+
+      if (listUpdated) {
+        setInvites(evaluateInvitations([...freshList]));
+      }
+    } catch (apiErr) {
+      console.warn('Could not fetch registered gym owners from API:', apiErr);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatDate = (dateInput?: string | Date | null): string => {
+    if (!dateInput || dateInput === 'N/A') return 'N/A';
+    if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
+      const [year, monthNum, day] = dateInput.split('-');
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const month = months[parseInt(monthNum, 10) - 1] || monthNum;
+      return `${day} ${month} ${year}`;
+    }
+    const d = new Date(dateInput);
+    if (isNaN(d.getTime())) return String(dateInput);
+    const day = String(d.getDate()).padStart(2, '0');
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = months[d.getMonth()];
+    const year = d.getFullYear();
+    return `${day} ${month} ${year}`;
+  };
+
+  const getStatusBadgeClass = (status?: string) => {
+    const s = (status || '').toLowerCase();
+    switch (s) {
+      case 'accepted':
+        return 'bg-[#F8FAFC] text-[#EA580C] border-[#E2E8F0] hover:bg-[#FFF7ED]';
+      case 'sent':
+        return 'bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100';
+      case 'expired':
+        return 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 font-extrabold';
+      case 'pending':
+      default:
+        return 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100';
+    }
+  };
+
+  const handleStatusChange = (inviteId: string, newStatus: string) => {
+    const updated = updateItem('gymInvitations', inviteId, { status: newStatus });
+    setInvites(prev => prev.map(i => i.id === inviteId ? updated : i));
+    if (viewInvite?.id === inviteId) {
+      setViewInvite(updated);
+    }
+  };
+
+  const handleSendWarning = async (invite: any) => {
+    try {
+      const inviteLink = invite.link || `${window.location.origin}/register/gym-owner?invite=${invite.id}&email=${encodeURIComponent(invite.email)}&name=${encodeURIComponent(invite.owner || '')}&phone=${encodeURIComponent(invite.phone || '')}`;
+      const res = await api.post('/auth/send-expiry-warning', {
+        ownerName: invite.owner,
+        ownerEmail: invite.email,
+        inviteLink,
+        timeLeftText: invite.timeLeftText || 'less than 1 hour'
+      });
+      alert(`⚠️ 1-Hour Expiry Alert dispatched successfully to ${invite.email}!\n\nMessage: ${res.data?.message || 'Warning email dispatched via Brevo'}`);
+    } catch (err: any) {
+      alert(`Notice: Expiry warning alert triggered for ${invite.email}. Please notify recipient.`);
+    }
+  };
+
+  const handleResend = async (invite: any) => {
+    const expiryDays = (invite.expiry || '').toLowerCase() === 'never' ? null : (parseInt(invite.expiry, 10) || 7);
+    const expiresAtMs = expiryDays ? Date.now() + expiryDays * 24 * 60 * 60 * 1000 : null;
+    const expiresAtIso = expiresAtMs ? new Date(expiresAtMs).toISOString() : null;
+    const inviteLink = `${window.location.origin}/register/gym-owner?invite=${invite.id}&email=${encodeURIComponent(invite.email)}&name=${encodeURIComponent(invite.owner || '')}&phone=${encodeURIComponent(invite.phone || '')}${expiresAtMs ? `&expiresAt=${expiresAtMs}` : ''}&expiry=${encodeURIComponent(invite.expiry || '7 Days')}`;
+
+    try {
+      const res = await api.post('/auth/send-gym-invitation', {
+        ownerName: invite.owner,
+        ownerEmail: invite.email,
+        ownerPhone: invite.phone,
+        linkExpiry: invite.expiry || '7 Days',
+        inviteLink
+      });
+
+      const updated = updateItem('gymInvitations', invite.id, {
+        status: 'Sent',
+        date: new Date().toISOString().split('T')[0],
+        createdAt: new Date().toISOString(),
+        expiresAt: expiresAtIso,
+        link: inviteLink
+      });
+      setInvites(evaluateInvitations(invites.map(i => i.id === invite.id ? updated : i)));
+      if (viewInvite?.id === invite.id) {
+        setViewInvite(updated);
+      }
+
+      if (res.data?.emailSent) {
+        alert(`Invitation email resent successfully to ${invite.email} with renewed ${invite.expiry || '7 Days'} validity!`);
+      } else {
+        alert(`Invitation link ready: ${inviteLink}\n\nNotice: ${res.data?.message || 'Brevo email delivery failed. Please copy and share the link directly.'}`);
+      }
+    } catch (err: any) {
+      alert(`Error: ${err.response?.data?.message || err.message}`);
+    }
+  };
+
+  const handleCancel = (invite: any) => {
+    if (confirm(`Are you sure you want to cancel the invitation for ${invite.gymName}?`)) {
+      import('../../utils/mockDb').then(({ addItem }) => {
+        addItem('deletedGymInvitations', { ...invite, deletedAt: new Date().toISOString() });
+      });
+      deleteItem('gymInvitations', invite.id);
+      setInvites(invites.filter(i => i.id !== invite.id));
+      if (viewInvite?.id === invite.id) {
+        setViewInvite(null);
+      }
+    }
+  };
+
+  const handleCopyLink = (link: string) => {
+    navigator.clipboard.writeText(link);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
+  };
+
+  const filteredInvites = invites.filter(invite => {
+    const query = searchQuery.toLowerCase();
+    const matchQuery =
+      (invite.gymName || '').toLowerCase().includes(query) ||
+      (invite.owner || '').toLowerCase().includes(query) ||
+      (invite.email || '').toLowerCase().includes(query);
+    const matchStatus =
+      statusFilter === 'ALL' ||
+      (invite.status || 'Pending').toLowerCase() === statusFilter.toLowerCase();
+    return matchQuery && matchStatus;
+  });
+
+  const pendingCount = invites.filter(i => (i.status || 'Pending').toLowerCase() === 'pending').length;
+  const sentCount = invites.filter(i => (i.status || '').toLowerCase() === 'sent').length;
+  const acceptedCount = invites.filter(i => (i.status || '').toLowerCase() === 'accepted').length;
+  const expiredCount = invites.filter(i => (i.status || '').toLowerCase() === 'expired').length;
+
+  return (
+    <div className="space-y-6">
+      {/* Header and Add Button */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-[#111827] tracking-tight">Gym Invitations</h1>
+          <p className="text-[#64748B] mt-1">Track and manage invitations sent to potential gym partners.</p>
+        </div>
+        <button
+          onClick={() => navigate('/super-admin/gyms/add')}
+          className="flex items-center space-x-2 px-4 py-2.5 bg-[#EA580C] hover:bg-[#C2410C] active:bg-[#9A3412] text-white font-bold rounded-xl text-sm transition-colors shadow-md shadow-orange-500/20 cursor-pointer self-start sm:self-auto"
+        >
+          <PlusCircle size={16} />
+          <span>Send New Invitation</span>
+        </button>
+      </div>
+
+      {/* Filter Tabs & Search Bar */}
+      <div className="space-y-3">
+        {/* Quick Filter Pill Buttons */}
+        <div className="flex items-center flex-wrap gap-2">
+          <button
+            onClick={() => setStatusFilter('ALL')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+              statusFilter === 'ALL'
+                ? 'bg-[#C2410C] text-white border-[#FDBA74] shadow-sm'
+                : 'bg-[#FFFFFF] text-[#64748B] border-[#E2E8F0] hover:bg-[#FFF7ED]'
+            }`}
+          >
+            All Statuses ({invites.length})
+          </button>
+          <button
+            onClick={() => setStatusFilter('Pending')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 ${
+              statusFilter === 'Pending'
+                ? 'bg-amber-600 text-white border-amber-600 shadow-sm'
+                : 'bg-amber-50/60 text-amber-700 border-amber-200/80 hover:bg-amber-100/60'
+            }`}
+          >
+            <Clock4 size={12} />
+            <span>Pending ({pendingCount})</span>
+          </button>
+          <button
+            onClick={() => setStatusFilter('Sent')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 ${
+              statusFilter === 'Sent'
+                ? 'bg-sky-600 text-white border-sky-600 shadow-sm'
+                : 'bg-sky-50/60 text-sky-700 border-sky-200/80 hover:bg-sky-100/60'
+            }`}
+          >
+            <Send size={12} />
+            <span>Sent ({sentCount})</span>
+          </button>
+          <button
+            onClick={() => setStatusFilter('Accepted')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 ${
+              statusFilter === 'Accepted'
+                ? 'bg-[#C2410C] text-white border-[#E2E8F0] shadow-sm'
+                : 'bg-[#FFF7ED] text-[#EA580C] border-[#E2E8F0]/80 hover:bg-[#FFF7ED]/60'
+            }`}
+          >
+            <CheckCircle2 size={12} />
+            <span>Accepted ({acceptedCount})</span>
+          </button>
+          <button
+            onClick={() => setStatusFilter('Expired')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 ${
+              statusFilter === 'Expired'
+                ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
+                : 'bg-rose-50/60 text-rose-700 border-rose-200/80 hover:bg-rose-100/60'
+            }`}
+          >
+            <AlertCircle size={12} />
+            <span>Expired ({expiredCount})</span>
+          </button>
+        </div>
+
+        {/* Search and Dropdown Bar */}
+        <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-4 flex flex-col sm:flex-row gap-3 items-center justify-between">
+          <div className="relative flex-1 w-full">
+            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#64748B]" />
+            <input
+              type="text"
+              placeholder="Search by gym name, owner, or email..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full bg-[#F8FAFC] border border-[#E2E8F0] text-[#111827] rounded-xl pl-10 pr-4 py-2 text-sm outline-none focus:border-[#F8FAFC] focus:bg-[#FFFFFF] transition-all"
+            />
+          </div>
+          <div className="flex items-center space-x-2 w-full sm:w-auto">
+            <div className="relative w-full sm:w-auto">
+              <select
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value)}
+                className="w-full sm:w-auto appearance-none bg-[#F8FAFC] border border-[#E2E8F0] text-[#111827] font-semibold rounded-xl pl-3.5 pr-8 py-2 text-sm outline-none focus:border-[#F8FAFC] cursor-pointer"
+              >
+                <option value="ALL">All Statuses ({invites.length})</option>
+                <option value="Pending">Pending ({pendingCount})</option>
+                <option value="Sent">Sent ({sentCount})</option>
+                <option value="Accepted">Accepted ({acceptedCount})</option>
+                <option value="Expired">Expired ({expiredCount})</option>
+              </select>
+              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] pointer-events-none" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Table Container */}
+      <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm text-[#64748B]">
+            <thead className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[#111827]">
+              <tr>
+                <th className="px-4 py-4 font-bold text-xs uppercase tracking-wider text-center w-16 whitespace-nowrap">S.No</th>
+                <th className="px-6 py-4 font-bold text-xs uppercase tracking-wider">Gym Name</th>
+                <th className="px-6 py-4 font-bold text-xs uppercase tracking-wider">Recipient</th>
+                <th className="px-6 py-4 font-bold text-xs uppercase tracking-wider">Invite Date</th>
+                <th className="px-6 py-4 font-bold text-xs uppercase tracking-wider">Expiry</th>
+                <th className="px-6 py-4 font-bold text-xs uppercase tracking-wider">Status</th>
+                <th className="px-6 py-4 font-bold text-xs uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#E2E8F0]">
+              {filteredInvites.map((invite, index) => (
+                <tr key={invite.id} className="hover:bg-[#FFF7ED] transition-colors">
+                  <td className="px-4 py-4 text-center font-bold text-xs text-[#64748B] whitespace-nowrap">
+                    {index + 1}
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="font-bold text-[#111827] flex items-center space-x-2">
+                      <div className="w-7 h-7 rounded-lg bg-[#FFF7ED] flex items-center justify-center text-[#EA580C] shrink-0">
+                        <Building2 size={14} />
+                      </div>
+                      <span>{invite.gymName}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="text-[#111827] font-semibold">{invite.owner || 'N/A'}</div>
+                    <div className="text-xs text-[#111827] font-semibold">{invite.email}</div>
+                  </td>
+                  <td className="px-6 py-4 text-[#111827] font-medium">{formatDate(invite.date)}</td>
+                  <td className="px-6 py-4 text-[#64748B]">
+                    <div className="flex flex-col gap-1">
+                      <span className="inline-flex items-center gap-1 font-semibold text-[#111827]">
+                        <Clock size={13} className="text-[#64748B]" />
+                        <span>{invite.expiry || '7 Days'}</span>
+                      </span>
+                      {invite.isExpiringSoon && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-black text-amber-800 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-300 w-fit animate-pulse">
+                          <AlertCircle size={10} className="text-amber-700" /> Expiring Soon ({invite.timeLeftText})
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    {/* Interactive Status Selector in Table Row */}
+                    <div className="relative inline-block" title="Click to change status">
+                      <select
+                        value={invite.status || 'Pending'}
+                        onChange={(e) => handleStatusChange(invite.id, e.target.value)}
+                        className={`appearance-none cursor-pointer pl-3 pr-7 py-1 rounded-full text-xs font-bold border transition-colors outline-none focus:ring-2 focus:ring-offset-1 focus:ring-[#F97316] ${getStatusBadgeClass(invite.status)}`}
+                      >
+                        <option value="Pending" className="text-[#111827] bg-[#FFFFFF]">Pending</option>
+                        <option value="Sent" className="text-[#111827] bg-[#FFFFFF]">Sent</option>
+                        <option value="Accepted" className="text-[#111827] bg-[#FFFFFF]">Accepted</option>
+                        <option value="Expired" className="text-[#111827] bg-[#FFFFFF]">Expired</option>
+                      </select>
+                      <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" />
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center space-x-2">
+                      {/* View Details Button */}
+                      <button
+                        onClick={() => setViewInvite(invite)}
+                        className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-[#F8FAFC] text-[#9A3412] hover:bg-[#FFF7ED] border border-[#E2E8F0] font-bold text-xs transition-colors shadow-xs"
+                        title="View Details"
+                      >
+                        <Eye size={14} className="text-[#EA580C]" />
+                        <span>View Details</span>
+                      </button>
+
+                      {/* Quick Copy Link Button */}
+                      <button
+                        onClick={() => {
+                          const link = invite.link || `${window.location.origin}/register/gym-owner?invite=${invite.id}&email=${encodeURIComponent(invite.email)}&name=${encodeURIComponent(invite.owner || '')}&phone=${encodeURIComponent(invite.phone || '')}`;
+                          handleCopyLink(link);
+                        }}
+                        className="p-1.5 text-[#64748B] hover:text-[#EA580C] hover:bg-[#FFF7ED] rounded-lg transition-colors"
+                        title="Copy Registration Link"
+                      >
+                        <Copy size={15} />
+                      </button>
+
+                      {/* Send 1-Hour Expiry Alert Button */}
+                      {invite.isExpiringSoon && (
+                        <button
+                          onClick={() => handleSendWarning(invite)}
+                          className="p-1.5 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors"
+                          title="Send 1-Hour Expiry Alert Email"
+                        >
+                          <AlertCircle size={15} />
+                        </button>
+                      )}
+
+                      {/* Resend Invitation Button */}
+                      <button
+                        onClick={() => handleResend(invite)}
+                        className="p-1.5 text-[#EA580C] hover:text-[#EA580C] hover:bg-[#FFF7ED] rounded-lg transition-colors"
+                        title="Resend Invitation via Email"
+                      >
+                        <Send size={15} />
+                      </button>
+
+                      {/* Cancel / Delete Button */}
+                      <button
+                        onClick={() => handleCancel(invite)}
+                        className="p-1.5 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Cancel Invitation"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {filteredInvites.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="text-center py-12 text-[#64748B]">
+                    <div className="flex flex-col items-center justify-center space-y-2">
+                      <Send size={32} className="text-[#64748B]" />
+                      <p className="font-semibold text-[#111827]">No invitations found</p>
+                      <p className="text-xs text-[#64748B]">
+                        {statusFilter !== 'ALL'
+                          ? `No invitations found with "${statusFilter}" status.`
+                          : 'Try changing your search query or send a new invitation.'}
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ─── View Details Modal ─── */}
+      {viewInvite && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 sm:p-6 overflow-y-auto">
+          <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 my-auto max-h-[85vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-[#E2E8F0] bg-[#F8FAFC] shrink-0">
+              <div className="flex items-center space-x-3">
+                <div className="w-11 h-11 bg-[#FFF7ED] text-[#EA580C] rounded-xl flex items-center justify-center">
+                  <Building2 size={22} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-[#111827]">{viewInvite.gymName}</h2>
+                  <p className="text-xs text-[#64748B]">Invitation Details</p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <div className="relative inline-block">
+                  <select
+                    value={viewInvite.status || 'Pending'}
+                    onChange={(e) => handleStatusChange(viewInvite.id, e.target.value)}
+                    className={`appearance-none cursor-pointer pl-3 pr-7 py-1 rounded-full text-xs font-bold border transition-colors outline-none focus:ring-2 focus:ring-offset-1 focus:ring-[#F97316] ${getStatusBadgeClass(viewInvite.status)}`}
+                  >
+                    <option value="Pending" className="text-[#111827] bg-[#FFFFFF]">Pending</option>
+                    <option value="Sent" className="text-[#111827] bg-[#FFFFFF]">Sent</option>
+                    <option value="Accepted" className="text-[#111827] bg-[#FFFFFF]">Accepted</option>
+                    <option value="Expired" className="text-[#111827] bg-[#FFFFFF]">Expired</option>
+                  </select>
+                  <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" />
+                </div>
+                <button
+                  onClick={() => setViewInvite(null)}
+                  className="p-1 rounded-lg text-[#64748B] hover:text-[#111827] hover:bg-slate-200 transition-colors"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 space-y-5 overflow-y-auto flex-1">
+              {/* Gym & Recipient Info */}
+              <div className="border border-[#E2E8F0] rounded-xl overflow-hidden divide-y divide-[#E2E8F0] bg-[#FFFFFF] shadow-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-[#E2E8F0]">
+                  <div className="p-3.5 bg-[#FFFFFF] flex flex-col justify-center">
+                    <span className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider mb-1 flex items-center gap-1">
+                      <User size={12} /> Recipient Name
+                    </span>
+                    <span className="font-bold text-[#111827] text-sm">{viewInvite.owner || 'N/A'}</span>
+                  </div>
+
+                  <div className="p-3.5 bg-[#FFFFFF] flex flex-col justify-center">
+                    <span className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider mb-1 flex items-center gap-1">
+                      <Building2 size={12} /> Gym Type
+                    </span>
+                    <span className="font-bold text-[#111827] text-sm">{viewInvite.type || 'Standard Gym'}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-[#E2E8F0]">
+                  <div className="p-3.5 bg-[#FFFFFF] flex flex-col justify-center">
+                    <span className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider mb-1 flex items-center gap-1">
+                      <Mail size={12} /> Email Address
+                    </span>
+                    <span className="font-semibold text-[#111827] text-sm break-all" title={viewInvite.email}>
+                      {viewInvite.email}
+                    </span>
+                  </div>
+
+                  <div className="p-3.5 bg-[#FFFFFF] flex flex-col justify-center">
+                    <span className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider mb-1 flex items-center gap-1">
+                      <Phone size={12} /> Phone Number
+                    </span>
+                    <span className="font-semibold text-[#111827] text-sm">{viewInvite.phone || 'N/A'}</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-[#E2E8F0]">
+                  <div className="p-3.5 bg-[#FFFFFF] flex flex-col justify-center">
+                    <span className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider mb-1 flex items-center gap-1">
+                      <Calendar size={12} /> Sent Date
+                    </span>
+                    <span className="font-semibold text-[#111827] text-sm">{formatDate(viewInvite.date)}</span>
+                  </div>
+
+                  <div className="p-3.5 bg-[#FFFFFF] flex flex-col justify-center">
+                    <span className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider mb-1 flex items-center gap-1">
+                      <Clock size={12} /> Link Expiry
+                    </span>
+                    <span className="font-semibold text-[#111827] text-sm">{viewInvite.expiry || '7 Days'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Registration Link */}
+              <div className="p-4 bg-[#F8FAFC] border border-[#F8FAFC] rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-[#111827]">Invitation Registration Link</span>
+                  {copiedLink && (
+                    <span className="text-xs font-bold text-[#EA580C] flex items-center gap-1">
+                      <Check size={13} /> Copied to clipboard!
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={viewInvite.link || `${window.location.origin}/register/gym-owner?invite=${viewInvite.id}&email=${encodeURIComponent(viewInvite.email)}`}
+                    className="flex-1 bg-[#FFFFFF] border border-[#E2E8F0] text-[#111827] rounded-lg px-3 py-1.5 text-xs outline-none select-all"
+                  />
+                  <button
+                    onClick={() => handleCopyLink(viewInvite.link || `${window.location.origin}/register/gym-owner?invite=${viewInvite.id}&email=${encodeURIComponent(viewInvite.email)}`)}
+                    className="px-3 py-1.5 bg-[#EA580C] hover:bg-[#C2410C] active:bg-[#9A3412] text-white font-bold rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <Copy size={13} />
+                    <span>Copy</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-5 border-t border-[#E2E8F0] bg-[#FFFFFF]">
+              <button
+                onClick={() => {
+                  setViewInvite(null);
+                  navigate('/super-admin/gym-owners');
+                }}
+                className="w-full sm:w-auto flex items-center justify-center space-x-1.5 px-4 py-2 border border-[#FFEDD5] text-[#EA580C] hover:bg-[#FFF7ED] rounded-xl text-xs font-bold transition-colors"
+              >
+                <ExternalLink size={13} />
+                <span>Go to Gym Owner Details</span>
+              </button>
+
+              <div className="flex items-center space-x-2 w-full sm:w-auto">
+                <button
+                  onClick={() => handleResend(viewInvite)}
+                  className="flex-1 sm:flex-initial flex items-center justify-center space-x-1 px-4 py-2 bg-[#F8FAFC] hover:bg-[#FFF7ED] text-[#EA580C] rounded-xl text-xs font-bold transition-colors"
+                >
+                  <Send size={13} />
+                  <span>Resend</span>
+                </button>
+                <button
+                  onClick={() => setViewInvite(null)}
+                  className="flex-1 sm:flex-initial px-4 py-2 bg-[#F8FAFC] hover:bg-slate-200 text-[#111827] rounded-xl text-xs font-bold transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default SuperAdminInvitations;

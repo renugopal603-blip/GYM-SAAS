@@ -1,0 +1,550 @@
+import { useState, useEffect } from 'react';
+import { Search, Plus, Wrench, CheckCircle2, AlertTriangle, Edit2, X, Download } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { useOutletContext } from 'react-router-dom';
+import api from '../../utils/api';
+import { exportToPDF } from '../../utils/export';
+
+const GymAdminEquipment = () => {
+  const { user } = useAuth();
+  const { selectedBranch } = useOutletContext<{ selectedBranch: string }>();
+  const [search, setSearch] = useState('');
+  const [gym, setGym] = useState<any>(null);
+  const [localEquipmentList, setLocalEquipmentList] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingEq, setEditingEq] = useState<any>(null);
+  const [selectedEq, setSelectedEq] = useState<any>(null);
+  const [formData, setFormData] = useState({
+    name: '',
+    category: 'Cardio',
+    brand: '',
+    quantity: 1,
+    condition: 'Excellent',
+    status: 'Active',
+    nextService: ''
+  });
+  const [editFormData, setEditFormData] = useState({
+    name: '',
+    category: 'Cardio',
+    brand: '',
+    quantity: 1,
+    condition: 'Excellent',
+    status: 'Active',
+    nextService: ''
+  });
+
+  const effectiveBranchId = user?.branchId || (selectedBranch !== 'main' && selectedBranch !== 'all' ? selectedBranch : undefined);
+
+  useEffect(() => {
+    setIsLoading(true);
+    if (user?.branchId) {
+      api.get(`/branches/${user.branchId}`)
+        .then(res => {
+          const b = res.data.branch;
+          setGym(b);
+          setLocalEquipmentList(b?.equipment || []);
+        })
+        .catch(err => {
+          console.error(err);
+          setLocalEquipmentList([]);
+        })
+        .finally(() => setIsLoading(false));
+    } else if (user?.gymId) {
+      api.get(`/gyms/${user.gymId}`)
+        .then(res => {
+          setGym(res.data.gym);
+          setLocalEquipmentList(res.data.gym?.equipment || []);
+        })
+        .catch(err => {
+          console.error(err);
+          // Try /gyms/my-gym as fallback
+          api.get('/gyms/my-gym')
+            .then(res2 => {
+              setGym(res2.data.gym);
+              setLocalEquipmentList(res2.data.gym?.equipment || []);
+            })
+            .catch(() => setLocalEquipmentList([]));
+        })
+        .finally(() => setIsLoading(false));
+    } else {
+      api.get('/gyms/my-gym')
+        .then(res => {
+          if (res.data?.gym) {
+            setGym(res.data.gym);
+            setLocalEquipmentList(res.data.gym?.equipment || []);
+          }
+        })
+        .catch(err => {
+          console.error(err);
+          setLocalEquipmentList([]);
+        })
+        .finally(() => setIsLoading(false));
+    }
+  }, [user, effectiveBranchId]);
+
+  const equipmentToDisplay = localEquipmentList.filter(eq => {
+    if (user?.branchId) return true;
+    if (!effectiveBranchId || effectiveBranchId === 'main') {
+      return !eq.branchId || eq.branchId === 'main';
+    }
+    return eq.branchId === effectiveBranchId;
+  });
+
+  const getStatusColor = (status: string) => {
+    switch(status) {
+      case 'Active': return 'bg-green-500/10 text-green-500 border-green-500/20';
+      case 'Maintenance': return 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20';
+      case 'Out of Order': return 'bg-[#FFF7ED] text-[#9A3412] border-[#F8FAFC]/20';
+      default: return 'bg-gray-500/10 text-[#64748B] border-gray-500/20';
+    }
+  };
+
+  const getStatusIcon = (status: string) => {
+    switch(status) {
+      case 'Active': return <CheckCircle2 size={14} className="mr-1.5" />;
+      case 'Maintenance': return <Wrench size={14} className="mr-1.5" />;
+      case 'Out of Order': return <AlertTriangle size={14} className="mr-1.5" />;
+      default: return null;
+    }
+  };
+
+  const resolveCurrentGym = async () => {
+    if (gym) return gym;
+    try {
+      if (user?.branchId) {
+        const res = await api.get(`/branches/${user.branchId}`);
+        if (res.data?.branch) { setGym(res.data.branch); return res.data.branch; }
+      }
+      const res = await api.get('/gyms/my-gym');
+      if (res.data?.gym) { setGym(res.data.gym); return res.data.gym; }
+    } catch (e) {
+      console.error('Failed to resolve gym', e);
+    }
+    return null;
+  };
+
+  const handleAddEquipment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const currentGym = await resolveCurrentGym();
+    if (!currentGym) {
+      alert('Could not find gym details. Please refresh and try again.');
+      return;
+    }
+    
+    const newEq = {
+      id: `EQ${String(localEquipmentList.length + 1).padStart(3, '0')}`,
+      name: formData.name,
+      category: formData.category,
+      brand: formData.brand,
+      quantity: Number(formData.quantity) || 1,
+      condition: formData.condition || 'Excellent',
+      branchId: selectedBranch === 'main' ? undefined : selectedBranch,
+      status: formData.status,
+      nextService: formData.nextService || 'N/A'
+    };
+
+    const updatedEquipment = [newEq, ...localEquipmentList];
+    setLocalEquipmentList(updatedEquipment);
+
+    try {
+      if (user?.branchId) {
+        await api.put(`/branches/${user.branchId}`, { equipment: updatedEquipment });
+      } else {
+        await api.put(`/gyms/${currentGym._id}`, { equipment: updatedEquipment });
+      }
+    } catch (err) {
+      console.error('Error saving equipment:', err);
+      setLocalEquipmentList(localEquipmentList);
+      alert('Failed to save equipment. Please try again.');
+      return;
+    }
+    setShowAddModal(false);
+    setFormData({ name: '', category: 'Cardio', brand: '', quantity: 1, condition: 'Excellent', status: 'Active', nextService: '' });
+  };
+
+  const handleEditClick = (eq: any) => {
+    setEditingEq(eq);
+    setEditFormData({
+      name: eq.name || '',
+      category: eq.category || 'Cardio',
+      brand: eq.brand || '',
+      quantity: eq.quantity || 1,
+      condition: eq.condition || 'Excellent',
+      status: eq.status || (eq.condition === 'Poor' ? 'Maintenance' : 'Active'),
+      nextService: eq.nextService && eq.nextService !== 'N/A' ? eq.nextService : ''
+    });
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const currentGym = await resolveCurrentGym();
+    if (!editingEq || !currentGym) return;
+
+    const targetId = editingEq.id || editingEq._id;
+    const updatedEquipment = localEquipmentList.map((eq: any) => {
+      if ((eq.id || eq._id) === targetId) {
+        return {
+          ...eq,
+          name: editFormData.name,
+          category: editFormData.category,
+          brand: editFormData.brand,
+          quantity: Number(editFormData.quantity) || 1,
+          condition: editFormData.condition,
+          status: editFormData.status,
+          nextService: editFormData.nextService || 'N/A'
+        };
+      }
+      return eq;
+    });
+
+    setLocalEquipmentList(updatedEquipment);
+    setShowEditModal(false);
+    setEditingEq(null);
+
+    try {
+      if (user?.branchId) {
+        await api.put(`/branches/${user.branchId}`, { equipment: updatedEquipment });
+      } else {
+        await api.put(`/gyms/${currentGym._id}`, { equipment: updatedEquipment });
+      }
+    } catch (err) {
+      console.error('Error updating equipment:', err);
+      setLocalEquipmentList(localEquipmentList);
+      alert('Failed to update equipment. Please try again.');
+    }
+  };
+
+  const handleDeleteEquipment = async (id: string) => {
+    const currentGym = await resolveCurrentGym();
+    if (!currentGym || !window.confirm('Are you sure you want to delete this equipment?')) return;
+    
+    const updatedEquipment = localEquipmentList.filter(eq => (eq.id || eq._id) !== id);
+    setLocalEquipmentList(updatedEquipment);
+    
+    try {
+      if (user?.branchId) {
+        await api.put(`/branches/${user.branchId}`, { equipment: updatedEquipment });
+      } else {
+        await api.put(`/gyms/${currentGym._id}`, { equipment: updatedEquipment });
+      }
+    } catch (err) {
+      console.error('Error deleting equipment:', err);
+      setLocalEquipmentList(localEquipmentList);
+      alert('Failed to delete equipment. Please try again.');
+    }
+  };
+
+  const handleDownloadPDF = () => {
+    const columns = ['Equipment Name', 'Category', 'Brand', 'Quantity', 'Condition', 'Status', 'Next Service'];
+    const data = equipmentToDisplay.map((eq: any) => [
+      eq.name || '-',
+      eq.category || '-',
+      eq.brand || '-',
+      String(eq.quantity || 1),
+      eq.condition || '-',
+      eq.status || '-',
+      eq.nextService || 'N/A'
+    ]);
+    exportToPDF({
+      filename: `Gym_Equipment_${new Date().toISOString().split('T')[0]}`,
+      columns,
+      data,
+      title: 'Gym Equipment Inventory'
+    });
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-start md:items-center flex-col md:flex-row gap-4 md:gap-0">
+        <div>
+          <h1 className="text-3xl font-bold text-[#111827] tracking-tight">Equipment</h1>
+          <p className="text-[#64748B] mt-1">Manage inventory and track maintenance schedules.</p>
+        </div>
+        <div className="flex gap-2">
+          <button 
+            onClick={handleDownloadPDF} 
+            className="flex items-center space-x-2 px-4 py-2 bg-[#FFFFFF] text-[#EA580C] border border-[#E2E8F0] rounded-xl font-bold hover:bg-[#FFF7ED] transition-colors shadow-sm cursor-pointer"
+          >
+            <Download size={18} />
+            <span>Download PDF</span>
+          </button>
+          <button onClick={() => setShowAddModal(true)} className="flex items-center space-x-2 px-4 py-2 bg-[#C2410C] text-white font-bold rounded-xl font-bold hover:bg-[#9A3412] transition-colors shadow-lg shadow-orange-500/15 cursor-pointer">
+            <Plus size={20} />
+            <span>Add Equipment</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-4 mb-8">
+        <div className="relative flex-1">
+          <input 
+            type="text" 
+            placeholder="Search equipment by name or ID..." 
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl pl-10 pr-4 py-3 text-[#111827] outline-none focus:border-[#FDBA74]"
+          />
+          <Search className="absolute left-3 top-3.5 text-[#64748B]" size={18} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        {isLoading ? (
+          <div className="col-span-1 md:col-span-2 xl:col-span-3 text-center py-10 text-[#64748B]">Loading equipment...</div>
+        ) : equipmentToDisplay.length === 0 ? (
+          <div className="col-span-1 md:col-span-2 xl:col-span-3 text-center py-16 bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl flex flex-col items-center justify-center">
+            <div className="w-16 h-16 bg-[#F8FAFC] rounded-full flex items-center justify-center mb-4">
+              <Wrench size={32} className="text-[#64748B]" />
+            </div>
+            <h3 className="text-xl font-bold text-[#111827] mb-2">No Equipment Found</h3>
+            <p className="text-[#64748B] max-w-md">There is no equipment in this branch yet. Add your first piece of equipment to start managing your inventory.</p>
+            <button onClick={() => setShowAddModal(true)} className="mt-6 flex items-center space-x-2 px-6 py-2 bg-[#C2410C] text-white font-bold rounded-xl font-bold hover:bg-[#9A3412] transition-colors">
+              <Plus size={18} />
+              <span>Add Equipment</span>
+            </button>
+          </div>
+        ) : equipmentToDisplay
+          .filter((eq: any) => eq.name?.toLowerCase().includes(search.toLowerCase()))
+          .map((eq: any, idx: number) => {
+            const status = eq.status || (eq.condition === 'Poor' ? 'Maintenance' : 'Active');
+            return (
+          <div key={eq._id || eq.id || idx} className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-6 hover:border-[#FFEDD5] transition-all group relative overflow-hidden shadow-lg">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <div className="flex items-center space-x-2 mb-1">
+                  <span className="text-xs font-bold text-[#64748B] bg-[#F8FAFC] border border-[#E2E8F0] px-2 py-1 rounded-md">{eq.id || `EQ00${idx+1}`}</span>
+                  <span className="text-xs font-semibold text-[#EA580C] uppercase tracking-wider">{eq.category || 'General'}</span>
+                </div>
+                <h3 className="text-lg font-bold text-[#111827]">{eq.name}</h3>
+                <p className="text-sm text-[#64748B] mt-0.5">{eq.brand || `Quantity: ${eq.quantity || 1}`}</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex justify-between items-center py-3 border-t border-[#E2E8F0]">
+                <span className="text-sm text-[#64748B]">Current Status</span>
+                <span className={`flex items-center text-xs font-bold px-3 py-1.5 rounded-lg border ${getStatusColor(status)}`}>
+                  {getStatusIcon(status)}
+                  {status}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-sm text-[#64748B]">Next Service</span>
+                <span className="text-sm font-semibold text-[#111827] bg-[#F8FAFC] border border-[#E2E8F0] px-3 py-1 rounded-lg">
+                  {eq.nextService || 'N/A'}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-[#E2E8F0] flex gap-2">
+              <button onClick={() => setSelectedEq(eq)} className="flex-1 py-2 bg-[#F8FAFC] border border-[#E2E8F0] hover:bg-[#FFF7ED] text-[#111827] text-sm font-bold rounded-xl transition-colors cursor-pointer">
+                View Details
+              </button>
+              <button 
+                onClick={() => handleEditClick(eq)} 
+                className="flex-1 py-2 bg-[#F8FAFC] border border-[#E2E8F0] hover:bg-[#C2410C] hover:text-[#FFFFFF] font-bold text-[#EA580C] text-sm font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                title="Edit Equipment"
+              >
+                <Edit2 size={14} />
+                <span>Edit</span>
+              </button>
+              <button 
+                onClick={() => handleDeleteEquipment(eq.id || eq._id)}
+                className="py-2 px-3 bg-[#F8FAFC] border border-[#E2E8F0] hover:bg-rose-500/15 text-[#B91C1C] hover:border-rose-500/30 text-sm font-bold rounded-xl transition-colors cursor-pointer"
+                title="Delete Equipment"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+          )
+        })}
+      </div>
+
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-[#FFFFFF] rounded-2xl max-w-2xl w-full shadow-2xl border border-[#E2E8F0] mt-10 mb-10">
+            <div className="p-6 border-b border-[#E2E8F0] flex justify-between items-center sticky top-0 bg-[#F8FAFC] z-10 rounded-t-2xl">
+              <h2 className="text-2xl font-bold text-[#111827]">Add New Equipment</h2>
+              <button onClick={() => setShowAddModal(false)} className="text-[#64748B] hover:text-[#C2410C]"><X size={24} /></button>
+            </div>
+            <form onSubmit={handleAddEquipment} className="p-6 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Equipment Name *</label>
+                  <input required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-[#FFFFFF] text-[#111827] placeholder:text-[#64748B] border border-[#E2E8F0] rounded-lg px-4 py-2 outline-none focus:border-[#FDBA74]" placeholder="e.g. Treadmill Series X" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Category *</label>
+                  <select required value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})} className="w-full bg-[#FFFFFF] text-[#111827] border border-[#E2E8F0] rounded-lg px-4 py-2 outline-none focus:border-[#FDBA74]">
+                    <option value="Cardio" className="bg-[#FFFFFF]">Cardio</option>
+                    <option value="Strength" className="bg-[#FFFFFF]">Strength</option>
+                    <option value="Free Weights" className="bg-[#FFFFFF]">Free Weights</option>
+                    <option value="Accessories" className="bg-[#FFFFFF]">Accessories</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Brand</label>
+                  <input value={formData.brand} onChange={e => setFormData({...formData, brand: e.target.value})} className="w-full bg-[#FFFFFF] text-[#111827] placeholder:text-[#64748B] border border-[#E2E8F0] rounded-lg px-4 py-2 outline-none focus:border-[#FDBA74]" placeholder="e.g. LifeFitness" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Quantity *</label>
+                  <input type="number" min="1" required value={formData.quantity} onChange={e => setFormData({...formData, quantity: parseInt(e.target.value) || 1})} className="w-full bg-[#FFFFFF] text-[#111827] border border-[#E2E8F0] rounded-lg px-4 py-2 outline-none focus:border-[#FDBA74]" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Condition</label>
+                  <select value={formData.condition} onChange={e => setFormData({...formData, condition: e.target.value})} className="w-full bg-[#FFFFFF] text-[#111827] border border-[#E2E8F0] rounded-lg px-4 py-2 outline-none focus:border-[#FDBA74]">
+                    <option value="Excellent" className="bg-[#FFFFFF]">Excellent</option>
+                    <option value="Good" className="bg-[#FFFFFF]">Good</option>
+                    <option value="Fair" className="bg-[#FFFFFF]">Fair</option>
+                    <option value="Poor" className="bg-[#FFFFFF]">Poor</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Status</label>
+                  <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="w-full bg-[#FFFFFF] text-[#111827] border border-[#E2E8F0] rounded-lg px-4 py-2 outline-none focus:border-[#FDBA74]">
+                    <option value="Active" className="bg-[#FFFFFF]">Active</option>
+                    <option value="Inactive" className="bg-[#FFFFFF]">Inactive</option>
+                    <option value="Maintenance" className="bg-[#FFFFFF]">Maintenance</option>
+                    <option value="Out of Order" className="bg-[#FFFFFF]">Out of Order</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Next Service Date</label>
+                  <input type="date" value={formData.nextService} onChange={e => setFormData({...formData, nextService: e.target.value})} className="w-full bg-[#FFFFFF] text-[#111827] border border-[#E2E8F0] rounded-lg px-4 py-2 outline-none focus:border-[#FDBA74]" />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-4 border-t border-[#E2E8F0]">
+                <button type="button" onClick={() => setShowAddModal(false)} className="px-6 py-2 text-[#64748B] font-bold hover:bg-[#FFF7ED] rounded-xl transition-colors">Cancel</button>
+                <button type="submit" className="px-8 py-2 bg-[#C2410C] text-white font-bold rounded-xl font-bold hover:bg-[#9A3412] transition-colors shadow-lg shadow-orange-500/15">Add Equipment</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-[#FFFFFF] rounded-2xl max-w-2xl w-full shadow-2xl border border-[#E2E8F0] mt-10 mb-10">
+            <div className="p-6 border-b border-[#E2E8F0] flex justify-between items-center sticky top-0 bg-[#F8FAFC] z-10 rounded-t-2xl">
+              <div className="flex items-center space-x-2">
+                <div className="w-9 h-9 rounded-lg bg-[#FFF7ED] text-[#EA580C] flex items-center justify-center">
+                  <Edit2 size={18} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-[#111827]">Edit Equipment</h2>
+                  <p className="text-xs text-[#64748B]">Modify equipment specifications and maintenance status</p>
+                </div>
+              </div>
+              <button onClick={() => setShowEditModal(false)} className="text-[#64748B] hover:text-[#C2410C]"><X size={24} /></button>
+            </div>
+            <form onSubmit={handleSaveEdit} className="p-6 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Equipment Name *</label>
+                  <input required value={editFormData.name} onChange={e => setEditFormData({...editFormData, name: e.target.value})} className="w-full bg-[#FFFFFF] text-[#111827] placeholder:text-[#64748B] border border-[#E2E8F0] rounded-lg px-4 py-2 outline-none focus:border-[#FDBA74]" placeholder="e.g. Treadmill Series X" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Category *</label>
+                  <select required value={editFormData.category} onChange={e => setEditFormData({...editFormData, category: e.target.value})} className="w-full bg-[#FFFFFF] text-[#111827] border border-[#E2E8F0] rounded-lg px-4 py-2 outline-none focus:border-[#FDBA74]">
+                    <option value="Cardio" className="bg-[#FFFFFF]">Cardio</option>
+                    <option value="Strength" className="bg-[#FFFFFF]">Strength</option>
+                    <option value="Free Weights" className="bg-[#FFFFFF]">Free Weights</option>
+                    <option value="Accessories" className="bg-[#FFFFFF]">Accessories</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Brand</label>
+                  <input value={editFormData.brand} onChange={e => setEditFormData({...editFormData, brand: e.target.value})} className="w-full bg-[#FFFFFF] text-[#111827] placeholder:text-[#64748B] border border-[#E2E8F0] rounded-lg px-4 py-2 outline-none focus:border-[#FDBA74]" placeholder="e.g. LifeFitness" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Quantity *</label>
+                  <input type="number" min="1" required value={editFormData.quantity} onChange={e => setEditFormData({...editFormData, quantity: parseInt(e.target.value) || 1})} className="w-full bg-[#FFFFFF] text-[#111827] border border-[#E2E8F0] rounded-lg px-4 py-2 outline-none focus:border-[#FDBA74]" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Condition</label>
+                  <select value={editFormData.condition} onChange={e => setEditFormData({...editFormData, condition: e.target.value})} className="w-full bg-[#FFFFFF] text-[#111827] border border-[#E2E8F0] rounded-lg px-4 py-2 outline-none focus:border-[#FDBA74]">
+                    <option value="Excellent" className="bg-[#FFFFFF]">Excellent</option>
+                    <option value="Good" className="bg-[#FFFFFF]">Good</option>
+                    <option value="Fair" className="bg-[#FFFFFF]">Fair</option>
+                    <option value="Poor" className="bg-[#FFFFFF]">Poor</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Status</label>
+                  <select value={editFormData.status} onChange={e => setEditFormData({...editFormData, status: e.target.value})} className="w-full bg-[#FFFFFF] text-[#111827] border border-[#E2E8F0] rounded-lg px-4 py-2 outline-none focus:border-[#FDBA74]">
+                    <option value="Active" className="bg-[#FFFFFF]">Active</option>
+                    <option value="Inactive" className="bg-[#FFFFFF]">Inactive</option>
+                    <option value="Maintenance" className="bg-[#FFFFFF]">Maintenance</option>
+                    <option value="Out of Order" className="bg-[#FFFFFF]">Out of Order</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Next Service Date</label>
+                  <input type="date" value={editFormData.nextService} onChange={e => setEditFormData({...editFormData, nextService: e.target.value})} className="w-full bg-[#FFFFFF] text-[#111827] border border-[#E2E8F0] rounded-lg px-4 py-2 outline-none focus:border-[#FDBA74]" />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-4 border-t border-[#E2E8F0]">
+                <button type="button" onClick={() => setShowEditModal(false)} className="px-6 py-2 text-[#64748B] font-bold hover:bg-[#FFF7ED] rounded-xl transition-colors">Cancel</button>
+                <button type="submit" className="px-8 py-2 bg-[#C2410C] text-white font-bold rounded-xl font-bold hover:bg-[#9A3412] transition-colors shadow-lg shadow-orange-500/15">Save Changes</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {selectedEq && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-[#FFFFFF] rounded-2xl max-w-md w-full shadow-2xl border border-[#E2E8F0] mt-20 mb-10 overflow-hidden">
+            <div className="p-6 border-b border-[#E2E8F0] flex justify-between items-center bg-[#F8FAFC]">
+              <h2 className="text-xl font-bold text-[#111827]">Equipment Details</h2>
+              <button onClick={() => setSelectedEq(null)} className="text-[#64748B] hover:text-[#C2410C]"><X size={24} /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <span className="text-sm font-bold text-[#64748B]">Name</span>
+                <p className="text-[#111827] font-semibold">{selectedEq.name}</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <span className="text-sm font-bold text-[#64748B]">Category</span>
+                  <p className="text-[#111827] font-semibold capitalize">{selectedEq.category}</p>
+                </div>
+                <div>
+                  <span className="text-sm font-bold text-[#64748B]">Brand</span>
+                  <p className="text-[#111827] font-semibold">{selectedEq.brand || 'N/A'}</p>
+                </div>
+                <div>
+                  <span className="text-sm font-bold text-[#64748B]">Quantity</span>
+                  <p className="text-[#111827] font-semibold">{selectedEq.quantity || 1}</p>
+                </div>
+                <div>
+                  <span className="text-sm font-bold text-[#64748B]">Status</span>
+                  <p className="text-[#111827] font-semibold">{selectedEq.status || (selectedEq.condition === 'Poor' ? 'Maintenance' : 'Active')}</p>
+                </div>
+                <div>
+                  <span className="text-sm font-bold text-[#64748B]">Condition</span>
+                  <p className="text-[#111827] font-semibold">{selectedEq.condition || 'N/A'}</p>
+                </div>
+                <div>
+                  <span className="text-sm font-bold text-[#64748B]">Next Service Date</span>
+                  <p className="text-[#111827] font-semibold">{selectedEq.nextService || 'N/A'}</p>
+                </div>
+              </div>
+            </div>
+            <div className="p-6 border-t border-[#E2E8F0] bg-[#F8FAFC] flex justify-end">
+              <button onClick={() => setSelectedEq(null)} className="px-6 py-2 bg-[#F8FAFC] border border-[#E2E8F0] text-[#111827] font-bold hover:bg-[#FFF7ED] rounded-xl transition-colors cursor-pointer">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default GymAdminEquipment;

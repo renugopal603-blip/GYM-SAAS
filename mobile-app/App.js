@@ -1,0 +1,716 @@
+import React, { useState, useEffect } from 'react';
+import { View, StyleSheet, Platform, StatusBar as RNStatusBar, ActivityIndicator, Text, BackHandler, Alert, Linking } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
+
+// Context & Theme
+import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { COLORS } from './src/constants/theme';
+import { Header } from './src/components/Header';
+import { BottomTabBar } from './src/components/BottomTabBar';
+import { GymSmartAssistant } from './src/components/GymSmartAssistant';
+
+// Auth Screen
+import { AuthEntryScreen } from './src/screens/auth/AuthEntryScreen';
+
+// Owner Screens
+import { OwnerDashboardScreen } from './src/screens/owner/OwnerDashboardScreen';
+import { OwnerMembersScreen } from './src/screens/owner/OwnerMembersScreen';
+import { OwnerTrainersScreen } from './src/screens/owner/OwnerTrainersScreen';
+import { OwnerFinancesScreen } from './src/screens/owner/OwnerFinancesScreen';
+import { OwnerMoreScreen } from './src/screens/owner/OwnerMoreScreen';
+
+// Trainer Screens
+import { TrainerDashboardScreen } from './src/screens/trainer/TrainerDashboardScreen';
+import { TrainerClientsScreen } from './src/screens/trainer/TrainerClientsScreen';
+import { TrainerScheduleScreen } from './src/screens/trainer/TrainerScheduleScreen';
+import { TrainerProgramsScreen } from './src/screens/trainer/TrainerProgramsScreen';
+import { TrainerMoreScreen } from './src/screens/trainer/TrainerMoreScreen';
+
+// Customer Screens
+import { CustomerHomeScreen } from './src/screens/customer/CustomerHomeScreen';
+import { CustomerTrainingScreen } from './src/screens/customer/CustomerTrainingScreen';
+import { CustomerDietScreen } from './src/screens/customer/CustomerDietScreen';
+import { CustomerProgressScreen } from './src/screens/customer/CustomerProgressScreen';
+import { CustomerFitnessScreen } from './src/screens/customer/CustomerFitnessScreen';
+import { CustomerStoreScreen } from './src/screens/customer/CustomerStoreScreen';
+import { CustomerMoreScreen } from './src/screens/customer/CustomerMoreScreen';
+
+const MainAppContent = () => {
+  const { isAuthenticated, activeRole, isLoading } = useAuth();
+  const [activeTab, setActiveTab] = useState('home');
+  const [activeSub, setActiveSub] = useState(null);
+  const [navHistory, setNavHistory] = useState([]);
+  const [customerQrVisible, setCustomerQrVisible] = useState(false);
+
+  // Set default tab based on authenticated role
+  useEffect(() => {
+    if (activeRole === 'GYM_OWNER') {
+      setActiveTab('overview');
+      setActiveSub(null);
+    } else if (activeRole === 'TRAINER') {
+      setActiveTab('home');
+      setActiveSub(null);
+    } else if (activeRole === 'CUSTOMER') {
+      setActiveTab('home');
+      setActiveSub(null);
+    }
+    setNavHistory([]);
+  }, [activeRole]);
+
+  // Navigate helper with history stack
+  const navigateTo = (newTab, newSub = null) => {
+    if (newTab === activeTab && newSub === activeSub) return;
+    setNavHistory(prev => [...prev.slice(-20), { tab: activeTab, sub: activeSub }]);
+    setActiveTab(newTab);
+    setActiveSub(newSub);
+  };
+
+  // Android hardware Back button handling
+  useEffect(() => {
+    const onBackPress = () => {
+      // 1. Close QR Pass modal if open
+      if (customerQrVisible) {
+        setCustomerQrVisible(false);
+        return true;
+      }
+
+      // 2. Clear sub-section if active
+      if (activeSub) {
+        setActiveSub(null);
+        return true;
+      }
+
+      // 3. Pop history stack if not empty
+      if (navHistory.length > 0) {
+        const last = navHistory[navHistory.length - 1];
+        setNavHistory(prev => prev.slice(0, -1));
+        setActiveTab(last.tab);
+        setActiveSub(last.sub || null);
+        return true;
+      }
+
+      // 4. Return to root tab if not already there
+      const defaultTab = activeRole === 'GYM_OWNER' ? 'overview' : 'home';
+      if (activeTab !== defaultTab) {
+        setActiveTab(defaultTab);
+        setActiveSub(null);
+        return true;
+      }
+
+      return false; // Exit app
+    };
+
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
+    return () => backHandler.remove();
+  }, [customerQrVisible, activeSub, navHistory, activeTab, activeRole]);
+
+  // Loading splash state
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={styles.loadingText}>Loading Gymora...</Text>
+      </View>
+    );
+  }
+
+  // If not authenticated, show role-based Auth Entry screen
+  if (!isAuthenticated) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <StatusBar style="dark" backgroundColor={COLORS.white} />
+        <AuthEntryScreen />
+      </SafeAreaView>
+    );
+  }
+
+  const handleCustomerNavigate = (tab, sub = null) => {
+    if (tab === 'today' || tab === 'home' || tab === 'dashboard') {
+      navigateTo('home', sub || 'dashboard');
+    } else if (tab === 'workouts' || tab === 'trainers' || tab === 'training') {
+      navigateTo('training', sub || (tab === 'workouts' ? 'workout_plan' : 'training'));
+    } else if (tab === 'fitness' || tab === 'diet' || tab === 'progress') {
+      navigateTo('fitness', sub || (tab === 'diet' ? 'diet' : tab === 'progress' ? 'progress' : 'workout'));
+    } else if (tab === 'store' || tab === 'cart' || tab === 'orders' || tab === 'payments') {
+      navigateTo('store', sub || (tab === 'cart' ? 'cart' : tab === 'orders' ? 'orders' : tab === 'payments' ? 'payments' : 'store'));
+    } else if (tab === 'referrals' || tab === 'rewards' || tab === 'reviews' || tab === 'membership' || tab === 'notifications') {
+      navigateTo('more', tab);
+    } else if (tab === 'profile' || tab === 'more') {
+      navigateTo('more', sub || 'none');
+    } else {
+      navigateTo(tab, sub);
+    }
+  };
+
+  const handleTrainerNavigate = (tab, sub = null) => {
+    if (tab === 'home' || tab === 'dashboard') {
+      navigateTo('home', null);
+    } else if (tab === 'clients') {
+      navigateTo('clients', null);
+    } else if (tab === 'schedule') {
+      navigateTo('schedule', null);
+    } else if (tab === 'programs' || tab === 'workouts') {
+      navigateTo('programs', sub || (tab === 'workouts' ? 'workout-plans' : 'none'));
+    } else if (tab === 'more' || tab === 'profile' || tab === 'earnings') {
+      navigateTo('more', sub || (tab === 'earnings' ? 'financials' : (tab === 'profile' ? 'profile' : 'none')));
+    } else {
+      navigateTo(tab, sub);
+    }
+  };
+
+  const handleOwnerNavigate = (tab, sub = null) => {
+    if (tab === 'overview' || tab === 'home' || tab === 'dashboard') {
+      navigateTo('overview', null);
+    } else if (tab === 'members') {
+      navigateTo('members', sub || 'members');
+    } else if (tab === 'enquiries') {
+      navigateTo('members', 'enquiries');
+    } else if (tab === 'trainers') {
+      navigateTo('trainers', sub || 'trainers');
+    } else if (tab === 'hiring' || tab === 'trainer_hiring' || tab === 'jobs') {
+      navigateTo('trainers', 'hiring');
+    } else if (tab === 'finances' || tab === 'revenue') {
+      navigateTo('finances', sub || 'analytics');
+    } else if (tab === 'payments') {
+      navigateTo('finances', 'payments');
+    } else if (
+      tab === 'equipment' || 
+      tab === 'session_bookings' || 
+      tab === 'bookings' || 
+      tab === 'attendance' || 
+      tab === 'notifications' || 
+      tab === 'store_history' || 
+      tab === 'store_orders' || 
+      tab === 'store_products' || 
+      tab === 'store_inventory' || 
+      tab === 'store_overview' || 
+      tab === 'reviews' || 
+      tab === 'plans' || 
+      tab === 'branches' || 
+      tab === 'gym_profile' || 
+      tab === 'reports' || 
+      tab === 'rewards' || 
+      tab === 'referrals'
+    ) {
+      const subTarget = tab === 'bookings' ? 'session_bookings' : tab;
+      navigateTo('more', sub || subTarget);
+    } else if (tab === 'more' || tab === 'settings' || tab === 'operations' || tab === 'store') {
+      navigateTo('more', sub || null);
+    } else {
+      navigateTo(tab, sub);
+    }
+  };
+
+  const handleBottomTabSelect = (tabKey) => {
+    if (tabKey === activeTab && !activeSub) return;
+    navigateTo(tabKey, null);
+  };
+
+  const handleGoMainPage = () => {
+    setCustomerQrVisible(false);
+    if (activeRole === 'GYM_OWNER') {
+      setActiveTab('overview');
+      setActiveSub(null);
+    } else if (activeRole === 'TRAINER') {
+      setActiveTab('home');
+      setActiveSub(null);
+    } else if (activeRole === 'CUSTOMER') {
+      setActiveTab('home');
+      setActiveSub('dashboard');
+    }
+  };
+
+  const getSmartAssistantPageTitle = () => {
+    const subLabel = activeSub && activeSub !== 'none' ? activeSub.replace(/[-_]/g, ' ') : '';
+    if (activeRole === 'GYM_OWNER') {
+      if (subLabel) return `Gym Owner · ${subLabel}`;
+      if (activeTab === 'members') return 'Gym Members';
+      if (activeTab === 'trainers') return 'Gym Trainers';
+      if (activeTab === 'finances') return 'Finances & Analytics';
+      if (activeTab === 'more') return 'Gym Operations & Store';
+      return 'Gym Admin Dashboard';
+    }
+    if (activeRole === 'TRAINER') {
+      if (subLabel) return `Trainer · ${subLabel}`;
+      if (activeTab === 'clients') return 'Assigned Clients';
+      if (activeTab === 'schedule') return 'Trainer Schedule';
+      if (activeTab === 'programs') return 'Workout & Diet Programs';
+      if (activeTab === 'more') return 'Trainer Hub';
+      return 'Trainer Dashboard';
+    }
+    if (subLabel) return `Member · ${subLabel}`;
+    if (activeTab === 'training') return 'Find Trainers & Bookings';
+    if (activeTab === 'fitness') return 'Fitness, Workouts & Diet';
+    if (activeTab === 'store') return 'Gym Store';
+    if (activeTab === 'more') return 'Member Account & More';
+    return 'Member Dashboard';
+  };
+
+  const handleSmartAssistantRoute = (rawRoute) => {
+    const route = (rawRoute || '').split('#')[0].split('?')[0].toLowerCase();
+    if (!route) return;
+
+    // Comprehensive route mappings for GYM_OWNER / SUPER_ADMIN
+    const ownerRoutes = {
+      // Overview & Dashboards
+      '/admin/dashboard': ['overview', null],
+      '/admin': ['overview', null],
+      '/super-admin/dashboard': ['overview', null],
+      '/super-admin': ['overview', null],
+      '/member/dashboard': ['members', 'members'],
+      '/trainer/dashboard': ['trainers', 'trainers'],
+
+      // Members & Customers
+      '/admin/members': ['members', 'members'],
+      '/admin/import-customers': ['members', 'members'],
+      '/super-admin/customers': ['members', 'members'],
+      '/admin/enquiries': ['members', 'enquiries'],
+      '/super-admin/enquiries': ['members', 'enquiries'],
+      '/super-admin/leads': ['members', 'enquiries'],
+
+      // Trainers & Hiring
+      '/admin/trainers': ['trainers', 'trainers'],
+      '/super-admin/gym-owners': ['trainers', 'trainers'],
+      '/admin/hiring/jobs': ['trainers', 'hiring'],
+      '/admin/hiring/jobs/new': ['trainers', 'hiring'],
+      '/admin/hiring/applications': ['trainers', 'hiring'],
+      '/admin/hiring/hired': ['trainers', 'trainers'],
+      '/admin/hiring/requests': ['trainers', 'hiring'],
+      '/admin/hiring/shortlisted': ['trainers', 'hiring'],
+      '/admin/hiring/interviews': ['trainers', 'hiring'],
+      '/super-admin/invitations': ['trainers', 'hiring'],
+
+      // Finances, Analytics, Payments & Earnings
+      '/admin/payments': ['finances', 'payments'],
+      '/member/payments': ['finances', 'payments'],
+      '/admin/revenue-analytics': ['finances', 'analytics'],
+      '/admin/reports': ['finances', 'analytics'],
+      '/super-admin/revenue-analytics': ['finances', 'analytics'],
+      '/super-admin/payouts': ['finances', 'payments'],
+      '/trainer/earnings': ['finances', 'payments'],
+      '/trainer/my-fee': ['finances', 'payments'],
+      '/admin/trainer-fees': ['finances', 'payments'],
+      '/admin/trainer-payments': ['finances', 'payments'],
+      '/admin/trainer-payments-history': ['finances', 'payments'],
+
+      // Operations: Equipment, Exercises, Videos, Plans
+      '/admin/equipment': ['more', 'equipment'],
+      '/trainer/equipments': ['more', 'equipment'],
+      '/admin/exercises': ['more', 'exercises'],
+      '/admin/exercise-videos': ['more', 'videos'],
+      '/admin/ai-plans': ['more', 'exercises'],
+      '/admin/membership-plans': ['more', 'plans'],
+      '/super-admin/subscriptions': ['more', 'plans'],
+      '/subscription-plans': ['more', 'plans'],
+      '/member/subscription': ['more', 'plans'],
+      '/member/upgrade': ['more', 'plans'],
+
+      // Store: Products, Orders, Inventory, Sales
+      '/admin/store': ['more', 'store_products'],
+      '/super-admin/store': ['more', 'store_products'],
+      '/member/store': ['more', 'store_products'],
+      '/admin/store/products': ['more', 'store_products'],
+      '/admin/store/inventory': ['more', 'store_inventory'],
+      '/admin/store/orders': ['more', 'store_orders'],
+      '/member/store/orders': ['more', 'store_orders'],
+      '/admin/store/offline-sales': ['more', 'store_offline'],
+      '/admin/store/sales': ['more', 'store_history'],
+      '/admin/store/settings': ['more', 'store_overview'],
+
+      // Scheduling: Bookings, Sessions, Schedule, Attendance
+      '/admin/session-bookings': ['more', 'session_bookings'],
+      '/admin/online-sessions': ['more', 'online_sessions'],
+      '/admin/video-bookings': ['more', 'video_bookings'],
+      '/admin/trainer-schedule': ['more', 'trainer_schedule'],
+      '/trainer/schedule': ['more', 'trainer_schedule'],
+      '/admin/attendance': ['more', 'attendance'],
+      '/member/attendance': ['more', 'attendance'],
+
+      // Rewards & Referrals
+      '/admin/rewards': ['more', 'rewards'],
+      '/admin/rewards-performance': ['more', 'rewards_performance'],
+      '/admin/referrals': ['more', 'referrals'],
+      '/member/rewards': ['more', 'rewards'],
+      '/member/referrals': ['more', 'referrals'],
+
+      // Gym Profile, Branches, Subscriptions, Reviews, Notifications, Deleted
+      '/admin/branches': ['more', 'branches'],
+      '/admin/gym-profile': ['more', 'gym_profile'],
+      '/admin/location': ['more', 'gym_profile'],
+      '/member/my-gym': ['more', 'gym_profile'],
+      '/super-admin/gyms/details': ['more', 'gym_profile'],
+      '/super-admin/gym-approvals': ['more', 'gym_profile'],
+      '/admin/subscription': ['more', 'subscription'],
+      '/admin/reviews': ['more', 'reviews'],
+      '/admin/notifications': ['more', 'notifications'],
+      '/super-admin/notifications': ['more', 'notifications'],
+      '/member/notifications': ['more', 'notifications'],
+      '/trainer/notifications': ['more', 'notifications'],
+      '/admin/deleted-details': ['more', 'deleted_details'],
+      '/super-admin/deleted': ['more', 'deleted_details'],
+      '/admin/profile': ['more', 'gym_profile'],
+      '/super-admin/profile': ['more', 'gym_profile'],
+      '/admin/settings': ['more', 'admin_settings'],
+      '/super-admin/settings': ['more', 'admin_settings'],
+    };
+
+    // Comprehensive route mappings for TRAINER
+    const trainerRoutes = {
+      // Dashboard & Schedule
+      '/trainer/dashboard': ['home', null],
+      '/trainer': ['home', null],
+      '/admin/dashboard': ['home', null],
+      '/member/dashboard': ['clients', null],
+      '/trainer/schedule': ['schedule', null],
+      '/admin/trainer-schedule': ['schedule', null],
+      '/admin/session-bookings': ['schedule', null],
+      '/admin/online-sessions': ['schedule', null],
+      '/admin/video-bookings': ['schedule', null],
+      '/member/bookings': ['schedule', null],
+      '/member/online-sessions': ['schedule', null],
+
+      // Clients / Members
+      '/trainer/members': ['clients', null],
+      '/admin/members': ['clients', null],
+      '/super-admin/customers': ['clients', null],
+
+      // Programs: Workouts, Diets, Exercises, Videos, Equipment, Completed
+      '/trainer/workout-plans': ['programs', 'workout-plans'],
+      '/trainer/diet-plans': ['programs', 'diet-plans'],
+      '/trainer/exercises': ['programs', 'exercises'],
+      '/admin/exercises': ['programs', 'exercises'],
+      '/trainer/exercise-videos': ['programs', 'videos'],
+      '/admin/exercise-videos': ['programs', 'videos'],
+      '/trainer/equipments': ['programs', 'equipments'],
+      '/trainer/equipment': ['programs', 'equipments'],
+      '/admin/equipment': ['programs', 'equipments'],
+      '/member/my-gym': ['programs', 'equipments'],
+      '/trainer/customer-workplan-completed': ['programs', 'customer-workplan-completed'],
+      '/member/workout': ['programs', 'workout-plans'],
+      '/member/workout-plan': ['programs', 'workout-plans'],
+      '/member/diet': ['programs', 'diet-plans'],
+      '/member/diet-plan': ['programs', 'diet-plans'],
+
+      // More: Financials, Earnings, Profile, Jobs, Feedback, Reviews, Messages, Notifications
+      '/trainer/earnings': ['more', 'financials'],
+      '/trainer/my-fee': ['more', 'financials'],
+      '/admin/payments': ['more', 'financials'],
+      '/admin/revenue-analytics': ['more', 'financials'],
+      '/trainer/profile': ['more', 'profile'],
+      '/trainer/ai-assistant': ['more', 'ai-assistant'],
+      '/trainer/ai-feedback': ['more', 'feedback'],
+      '/trainer/feedback': ['more', 'feedback'],
+      '/trainer/rewards': ['more', 'rewards'],
+      '/trainer/jobs': ['more', 'jobs'],
+      '/trainer/applications': ['more', 'applications'],
+      '/trainer/messages': ['more', 'messages'],
+      '/member/chat': ['more', 'messages'],
+      '/trainer/notifications': ['more', 'notifications'],
+      '/trainer/reviews': ['more', 'reviews'],
+    };
+
+    // Comprehensive route mappings for CUSTOMER
+    const customerRoutes = {
+      // Home & Dashboard
+      '/member/dashboard': ['home', 'dashboard'],
+      '/member': ['home', 'dashboard'],
+      '/member/my-gym': ['home', 'gym'],
+      '/admin/dashboard': ['home', 'dashboard'],
+      '/trainer/dashboard': ['training', 'trainer'],
+
+      // Training: Find Trainers, My Trainer, Bookings, Sessions, Messages
+      '/member/find-trainers': ['training', 'find_trainers'],
+      '/trainers': ['training', 'find_trainers'],
+      '/trainers/directory': ['training', 'find_trainers'],
+      '/explore-trainers': ['training', 'find_trainers'],
+      '/admin/trainers': ['training', 'find_trainers'],
+      '/member/trainer': ['training', 'trainer'],
+      '/member/book-session': ['training', 'find_trainers'],
+      '/member/bookings': ['training', 'bookings'],
+      '/trainer/schedule': ['training', 'bookings'],
+      '/member/online-sessions': ['training', 'online-sessions'],
+      '/member/chat': ['training', 'chat'],
+      '/trainer/messages': ['training', 'chat'],
+
+      // Fitness: Workouts, Diets, Progress, Attendance, AI
+      '/member/workout': ['fitness', 'workout'],
+      '/member/workout-plan': ['fitness', 'workout'],
+      '/member/workout-plans': ['fitness', 'workout'],
+      '/member/workout-videos': ['fitness', 'workout'],
+      '/member/exercises': ['fitness', 'workout'],
+      '/admin/exercises': ['fitness', 'workout'],
+      '/trainer/workout-plans': ['fitness', 'workout'],
+      '/member/diet': ['fitness', 'diet'],
+      '/member/diet-plan': ['fitness', 'diet'],
+      '/member/diet-plans': ['fitness', 'diet'],
+      '/trainer/diet-plans': ['fitness', 'diet'],
+      '/member/progress': ['fitness', 'progress'],
+      '/member/attendance': ['fitness', 'attendance'],
+      '/admin/attendance': ['fitness', 'attendance'],
+      '/member/ai-assistant': ['fitness', 'ai'],
+
+      // Store: Products, Cart, Orders, Payments
+      '/member/store': ['store', 'store'],
+      '/admin/store': ['store', 'store'],
+      '/member/store/cart': ['store', 'cart'],
+      '/member/store/orders': ['store', 'orders'],
+      '/member/payments': ['store', 'payments'],
+      '/admin/payments': ['store', 'payments'],
+
+      // More: Membership, Subscription, Profile, Notifications, Feedback, Reviews, Rewards, Referrals, Trainer Plan
+      '/member/subscription': ['more', 'membership'],
+      '/member/upgrade': ['more', 'membership'],
+      '/subscription-plans': ['more', 'membership'],
+      '/admin/membership-plans': ['more', 'membership'],
+      '/member/profile': ['more', 'profile'],
+      '/member/notifications': ['more', 'notifications'],
+      '/member/trainer-review': ['more', 'trainer-feedback'],
+      '/member/session-review': ['more', 'reviews'],
+      '/member/rewards': ['more', 'rewards'],
+      '/member/referrals': ['more', 'referrals'],
+      '/member/trainer-plan': ['more', 'trainer-plan'],
+      '/member/ai-fitness': ['more', 'ai-fitness'],
+    };
+
+    if (activeRole === 'GYM_OWNER') {
+      const target = ownerRoutes[route];
+      if (target) {
+        handleOwnerNavigate(target[0], target[1]);
+        return;
+      }
+    } else if (activeRole === 'TRAINER') {
+      const target = trainerRoutes[route];
+      if (target) {
+        handleTrainerNavigate(target[0], target[1]);
+        return;
+      }
+    } else if (activeRole === 'CUSTOMER') {
+      if (route.startsWith('/gyms')) {
+        handleCustomerNavigate('home', 'gym');
+        return;
+      }
+      const target = customerRoutes[route];
+      if (target) {
+        handleCustomerNavigate(target[0], target[1]);
+        return;
+      }
+    }
+
+    // For website-only features or external web routes, provide an option to open the correct website page
+    const getWebUrl = (targetRoute) => {
+      const cleanRoute = targetRoute.startsWith('/') ? targetRoute : `/${targetRoute}`;
+      if (typeof window !== 'undefined' && window.location && window.location.origin) {
+        return `${window.location.origin}${cleanRoute}`;
+      }
+      return `http://localhost:5173${cleanRoute}`;
+    };
+
+    Alert.alert(
+      'Open in Website',
+      `"${rawRoute}" is available on the Gymora website portal. Would you like to open this page in your browser?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Open in Browser',
+          onPress: async () => {
+            const webUrl = getWebUrl(rawRoute);
+            try {
+              const supported = await Linking.canOpenURL(webUrl);
+              if (supported) {
+                await Linking.openURL(webUrl);
+              } else {
+                await Linking.openURL(webUrl);
+              }
+            } catch (err) {
+              console.warn('[Gymora Mobile] Failed to open website page:', err);
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const renderActiveScreen = () => {
+    if (activeRole === 'GYM_OWNER') {
+      switch (activeTab) {
+        case 'overview':
+        case 'dashboard':
+          return <OwnerDashboardScreen onNavigateTab={handleOwnerNavigate} />;
+        case 'members':
+        case 'enquiries':
+          return <OwnerMembersScreen initialSection={activeSub === 'enquiries' ? 'enquiries' : 'members'} />;
+        case 'trainers':
+        case 'hiring':
+        case 'trainer_hiring':
+          return <OwnerTrainersScreen initialTab={activeSub === 'hiring' || activeTab === 'trainer_hiring' ? 'hiring' : 'trainers'} />;
+        case 'finances':
+        case 'revenue':
+        case 'payments':
+          return <OwnerFinancesScreen initialTab={activeSub === 'payments' ? 'payments' : 'analytics'} />;
+        case 'more':
+        case 'settings':
+        case 'operations':
+        case 'store':
+        case 'equipment':
+        case 'session_bookings':
+        case 'attendance':
+        case 'notifications':
+        case 'store_history':
+        case 'store_orders':
+          return (
+            <OwnerMoreScreen 
+              initialSubPage={activeSub || (activeTab !== 'more' && activeTab !== 'settings' && activeTab !== 'operations' && activeTab !== 'store' ? activeTab : undefined)} 
+              onCloseSubPage={() => setActiveSub(null)} 
+              onNavigateTab={handleOwnerNavigate} 
+            />
+          );
+        default:
+          return <OwnerDashboardScreen onNavigateTab={handleOwnerNavigate} />;
+      }
+    }
+
+    if (activeRole === 'TRAINER') {
+      switch (activeTab) {
+        case 'home':
+        case 'dashboard':
+          return <TrainerDashboardScreen onNavigateTab={handleTrainerNavigate} />;
+        case 'clients':
+          return <TrainerClientsScreen onNavigateTab={handleTrainerNavigate} />;
+        case 'schedule':
+          return <TrainerScheduleScreen onNavigateTab={handleTrainerNavigate} />;
+        case 'programs':
+        case 'workouts':
+          return <TrainerProgramsScreen initialSection={activeSub || 'none'} />;
+        case 'more':
+        case 'profile':
+        case 'earnings':
+          return <TrainerMoreScreen initialSection={activeSub || (activeTab === 'profile' ? 'profile' : (activeTab === 'earnings' ? 'financials' : 'none'))} />;
+        default:
+          return <TrainerDashboardScreen onNavigateTab={handleTrainerNavigate} />;
+      }
+    }
+
+    if (activeRole === 'CUSTOMER') {
+      switch (activeTab) {
+        case 'home':
+        case 'today':
+          return (
+            <CustomerHomeScreen 
+              onNavigateTab={handleCustomerNavigate} 
+              externalQrVisible={customerQrVisible}
+              onCloseExternalQr={() => setCustomerQrVisible(false)}
+              initialSubTab={activeSub === 'gym' ? 'gym' : 'dashboard'}
+            />
+          );
+        case 'training':
+        case 'trainers':
+          if (activeSub === 'workout' || activeSub === 'workout_plan' || activeSub === 'workouts') {
+            return <CustomerFitnessScreen initialSubTab="workout" />;
+          }
+          return <CustomerTrainingScreen initialSubTab={activeSub || 'training'} />;
+        case 'workouts':
+        case 'workout':
+        case 'workout_plan':
+        case 'fitness':
+        case 'diet':
+        case 'progress':
+          return (
+            <CustomerFitnessScreen 
+              initialSubTab={
+                activeSub === 'workout' || activeSub === 'workout_plan' || activeSub === 'workouts' || activeTab === 'workouts' || activeTab === 'workout' || activeTab === 'workout_plan'
+                  ? 'workout'
+                  : (activeSub || (activeTab === 'diet' ? 'diet' : activeTab === 'progress' ? 'progress' : 'ai'))
+              } 
+            />
+          );
+        case 'store':
+        case 'cart':
+        case 'orders':
+          return (
+            <CustomerStoreScreen 
+              initialSubTab={activeSub || (activeTab === 'cart' ? 'cart' : activeTab === 'orders' ? 'orders' : 'store')} 
+            />
+          );
+        case 'more':
+        case 'profile':
+        case 'rewards':
+        case 'referrals':
+        case 'reviews':
+          return (
+            <CustomerMoreScreen 
+              initialSection={(activeTab === 'rewards' || activeTab === 'referrals' || activeTab === 'reviews') ? activeTab : (activeSub || 'none')} 
+              onNavigateTab={handleCustomerNavigate}
+            />
+          );
+        default:
+          return (
+            <CustomerHomeScreen 
+              onNavigateTab={handleCustomerNavigate} 
+              externalQrVisible={customerQrVisible}
+              onCloseExternalQr={() => setCustomerQrVisible(false)}
+              initialSubTab={activeSub === 'gym' ? 'gym' : 'dashboard'}
+            />
+          );
+      }
+    }
+
+    return null;
+  };
+
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar style="dark" backgroundColor={COLORS.white} />
+      <Header 
+        onPressBrand={handleGoMainPage}
+        onOpenNotifications={() => {
+          if (activeRole === 'GYM_OWNER') handleOwnerNavigate('more', 'notifications');
+          else if (activeRole === 'TRAINER') handleTrainerNavigate('more', 'notifications');
+          else if (activeRole === 'CUSTOMER') handleCustomerNavigate('more', 'notifications');
+        }}
+      />
+      <View style={styles.body}>
+        {renderActiveScreen()}
+        <GymSmartAssistant
+          pageTitle={getSmartAssistantPageTitle()}
+          onNavigateRoute={handleSmartAssistantRoute}
+        />
+      </View>
+      <BottomTabBar activeTab={activeTab} onSelectTab={handleBottomTabSelect} />
+    </SafeAreaView>
+  );
+};
+
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <AuthProvider>
+        <MainAppContent />
+      </AuthProvider>
+    </SafeAreaProvider>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: COLORS.white,
+    paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 0,
+  },
+  body: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: COLORS.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textDark,
+  },
+});

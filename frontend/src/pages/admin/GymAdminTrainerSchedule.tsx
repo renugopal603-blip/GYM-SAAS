@@ -1,0 +1,580 @@
+import { useState, useEffect, useMemo } from 'react';
+import {
+  Calendar as CalendarIcon,
+  ChevronLeft,
+  ChevronRight,
+  User,
+  X,
+  Video,
+  MapPin,
+  Filter,
+  Dumbbell
+} from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import api from '../../utils/api';
+
+const HOURS = [
+  '06:00', '07:00', '08:00', '09:00', '10:00',
+  '11:00', '12:00', '13:00', '14:00', '15:00',
+  '16:00', '17:00', '18:00', '19:00', '20:00'
+];
+
+interface ScheduleItem {
+  id: string;
+  title: string;
+  trainerName: string;
+  trainerPhoto?: string;
+  customerName?: string;
+  customerPhoto?: string;
+  customerEmail?: string;
+  day: string; // 'Monday', 'Tuesday', ...
+  date: string; // 'YYYY-MM-DD'
+  time: string; // 'HH:mm'
+  endTime?: string;
+  duration: number; // in minutes
+  durationHours: number;
+  type: string; // 'Personal Training', 'Online Session'
+  mode: 'Online' | 'Offline';
+  status: string;
+  color: string;
+  fee?: number;
+  meetingLink?: string;
+  bookingId?: string;
+}
+
+const GymAdminTrainerSchedule = () => {
+  const { user } = useAuth();
+  // Active week anchor (defaults to current date, or anchors to active session date)
+  const [currentDate, setCurrentDate] = useState(() => new Date());
+  const [dbSessions, setDbSessions] = useState<any[]>([]);
+  const [trainers, setTrainers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Filter by Trainer
+  const [selectedTrainerFilter, setSelectedTrainerFilter] = useState('ALL');
+
+  // Detail Modal
+  const [selectedDetail, setSelectedDetail] = useState<ScheduleItem | null>(null);
+
+  // Calculate Monday to Sunday of the active week
+  const weekDays = useMemo(() => {
+    const d = new Date(currentDate);
+    const dayOfWeek = d.getDay();
+    const distanceToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const monday = new Date(d);
+    monday.setDate(d.getDate() + distanceToMonday);
+
+    const days = [];
+    const todayIso = new Date().toISOString().split('T')[0];
+    for (let i = 0; i < 7; i++) {
+      const current = new Date(monday);
+      current.setDate(monday.getDate() + i);
+      const isoDate = current.toISOString().split('T')[0];
+      const dayName = current.toLocaleDateString('en-US', { weekday: 'long' });
+      const displayDate = current.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      days.push({
+        dayName,
+        displayDate,
+        isoDate,
+        isToday: isoDate === todayIso
+      });
+    }
+    return days;
+  }, [currentDate]);
+
+  const weekRangeLabel = useMemo(() => {
+    if (weekDays.length === 0) return '';
+    const start = weekDays[0];
+    const end = weekDays[6];
+    const yr = new Date(currentDate).getFullYear() || 2026;
+    return `${start.displayDate} - ${end.displayDate}, ${yr}`;
+  }, [weekDays, currentDate]);
+
+  // Fetch real customer sessions and trainers from backend
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const branchParam = user?.branchId ? `?branchId=${user.branchId}` : '';
+      const [sessionsRes, trainersRes] = await Promise.all([
+        api.get(`/trainer-sessions/gym${branchParam}`).catch(() => ({ data: { sessions: [] } })),
+        api.get(`/trainers${branchParam}`).catch(() => ({ data: { trainers: [] } })),
+      ]);
+
+      if (sessionsRes.data?.sessions) {
+        const rawSessions = sessionsRes.data.sessions;
+        setDbSessions(rawSessions);
+
+        // Auto-align calendar to the week containing sessions if available
+        const validSessions = rawSessions.filter((s: any) => s.date);
+        if (validSessions.length > 0) {
+          const todayIso = new Date().toISOString().split('T')[0];
+          const targetSession = validSessions.find((s: any) => s.date.split('T')[0] >= todayIso) || validSessions[0];
+          if (targetSession?.date) {
+            const cleanDate = targetSession.date.split('T')[0];
+            setCurrentDate(new Date(cleanDate + 'T12:00:00'));
+          }
+        }
+      }
+      if (trainersRes.data?.trainers) {
+        setTrainers(trainersRes.data.trainers);
+      }
+    } catch (err) {
+      console.error('Failed to load schedule data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, [user?.branchId]);
+
+  // Standardize time string into "HH:00" slot
+  const mapTimeToHourSlot = (timeStr: string): string => {
+    if (!timeStr) return '10:00';
+    let s = timeStr.trim().toUpperCase();
+    if (s.includes('-')) {
+      s = s.split('-')[0].trim();
+    }
+    const isPM = s.includes('PM');
+    const isAM = s.includes('AM');
+    s = s.replace(/AM|PM/g, '').trim();
+    const [hStr] = s.split(':');
+    let h = parseInt(hStr, 10);
+    if (isNaN(h)) return '10:00';
+    if (isPM && h < 12) h += 12;
+    if (isAM && h === 12) h = 0;
+    const hourFormatted = `${h.toString().padStart(2, '0')}:00`;
+    return HOURS.includes(hourFormatted) ? hourFormatted : '10:00';
+  };
+
+  // Customer session bookings with trainers (staff shifts removed completely)
+  const allScheduleItems = useMemo(() => {
+    const list: ScheduleItem[] = [];
+
+    dbSessions.forEach((s: any) => {
+      const trainerName = s.trainerId?.name || 'Assigned Trainer';
+      const custFirst = s.customerId?.firstName || '';
+      const custLast = s.customerId?.lastName || '';
+      const customerName = (custFirst + ' ' + custLast).trim() || 'Client';
+
+      let typeLabel = 'Personal Training';
+      let colorClass = 'bg-[#FFF7ED] border-[#FFEDD5] text-[#EA580C]';
+
+      if (s.mode === 'Online' || s.meetingLink) {
+        typeLabel = 'Online Session';
+        colorClass = 'bg-[#FFF7ED] border-[#E2E8F0]/40 text-[#EA580C]';
+      }
+
+      let dayName = '';
+      if (s.date) {
+        const dObj = new Date(s.date + 'T12:00:00');
+        dayName = dObj.toLocaleDateString('en-US', { weekday: 'long' });
+      }
+
+      const durationHours = Math.max(1, Math.round((s.duration || 60) / 60));
+      const slotHour = mapTimeToHourSlot(s.startTime);
+
+      list.push({
+        id: s._id || s.sessionId || `session-${Math.random()}`,
+        title: s.title || (s.mode === 'Online' ? 'Virtual 1-on-1' : 'Personal Training'),
+        trainerName,
+        trainerPhoto: s.trainerId?.profilePhoto,
+        customerName,
+        customerPhoto: s.customerId?.profilePhoto,
+        customerEmail: s.customerId?.email,
+        day: dayName,
+        date: s.date ? s.date.split('T')[0] : '',
+        time: slotHour,
+        endTime: s.endTime,
+        duration: s.duration || 60,
+        durationHours,
+        type: typeLabel,
+        mode: s.mode === 'Online' ? 'Online' : 'Offline',
+        status: s.status || 'Confirmed',
+        color: colorClass,
+        fee: s.fee,
+        meetingLink: s.meetingLink,
+        bookingId: s.bookingId || s.sessionId,
+      });
+    });
+
+    return list;
+  }, [dbSessions]);
+
+  // Filter items by trainer
+  const filteredScheduleItems = useMemo(() => {
+    return allScheduleItems.filter((item) => {
+      if (selectedTrainerFilter !== 'ALL' && item.trainerName.toLowerCase() !== selectedTrainerFilter.toLowerCase()) {
+        return false;
+      }
+      return true;
+    });
+  }, [allScheduleItems, selectedTrainerFilter]);
+
+  // Navigate Weeks
+  const handlePrevWeek = () => {
+    const next = new Date(currentDate);
+    next.setDate(next.getDate() - 7);
+    setCurrentDate(next);
+  };
+
+  const handleNextWeek = () => {
+    const next = new Date(currentDate);
+    next.setDate(next.getDate() + 7);
+    setCurrentDate(next);
+  };
+
+  const handleThisWeek = () => {
+    setCurrentDate(new Date());
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Page Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-[#111827] tracking-tight">Trainer Schedule</h1>
+          <p className="text-[#64748B] mt-1">
+            Live schedule showing customer bookings and trainer assignments.
+          </p>
+        </div>
+      </div>
+
+      {/* Main Grid Card */}
+      <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-6 shadow-lg">
+        {/* Navigation & Controls */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
+          {/* Week Navigation */}
+          <div className="flex items-center space-x-3">
+            <div className="flex space-x-1 bg-[#F8FAFC] p-1 rounded-xl border border-[#E2E8F0]">
+              <button
+                onClick={handlePrevWeek}
+                title="Previous Week"
+                className="p-1.5 hover:bg-[#FFF7ED] rounded-lg transition-colors text-[#111827]"
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <button
+                onClick={handleThisWeek}
+                className="px-2.5 py-1 text-xs font-bold hover:bg-[#FFF7ED] rounded-lg transition-colors text-[#EA580C]"
+              >
+                This Week
+              </button>
+              <button
+                onClick={handleNextWeek}
+                title="Next Week"
+                className="p-1.5 hover:bg-[#FFF7ED] rounded-lg transition-colors text-[#111827]"
+              >
+                <ChevronRight size={18} />
+              </button>
+            </div>
+            <h2 className="text-lg font-bold text-[#111827] flex items-center">
+              <CalendarIcon size={18} className="mr-2 text-[#EA580C]" />
+              {weekRangeLabel}
+            </h2>
+          </div>
+
+          {/* Trainer Filter & Legend */}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Trainer Filter Dropdown */}
+            <div className="flex items-center space-x-2 bg-[#F8FAFC] px-3 py-1.5 rounded-xl border border-[#E2E8F0]">
+              <Filter size={14} className="text-[#64748B]" />
+              <select
+                value={selectedTrainerFilter}
+                onChange={(e) => setSelectedTrainerFilter(e.target.value)}
+                className="bg-transparent text-xs font-bold text-[#111827] outline-none cursor-pointer"
+              >
+                <option value="ALL">All Trainers ({trainers.length})</option>
+                {trainers.map((t) => (
+                  <option key={t._id} value={t.name}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Legend badges */}
+            <div className="hidden md:flex items-center space-x-3 text-xs font-semibold pl-2">
+              <span className="flex items-center"><div className="w-2.5 h-2.5 rounded-full bg-[#FFF7ED] mr-1.5"></div> Personal Training (In-Gym)</span>
+              <span className="flex items-center"><div className="w-2.5 h-2.5 rounded-full bg-[#C2410C] mr-1.5"></div> Online Session</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Schedule Grid Table */}
+        <div className="overflow-x-auto custom-scrollbar border border-[#E2E8F0] rounded-xl bg-[#F8FAFC]">
+          <div className="min-w-[1000px]">
+            {/* Header Columns */}
+            <div className="grid grid-cols-8 border-b border-[#E2E8F0] bg-[#F8FAFC]">
+              <div className="p-3.5 border-r border-[#E2E8F0] flex items-center justify-center text-[#64748B] font-bold text-xs uppercase tracking-wider">
+                Time
+              </div>
+              {weekDays.map((col) => (
+                <div
+                  key={col.dayName}
+                  className={`p-3 border-r border-[#E2E8F0] text-center last:border-0 ${
+                    col.isToday ? 'bg-[#FFF7ED] font-bold' : ''
+                  }`}
+                >
+                  <p className="font-bold text-sm text-[#111827]">{col.dayName}</p>
+                  <p className="text-xs text-[#64748B] font-medium">{col.displayDate}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Hourly Grid Rows */}
+            <div className="relative divide-y divide-[#E2E8F0]">
+              {HOURS.map((hour) => (
+                <div key={hour} className="grid grid-cols-8 min-h-[92px]">
+                  {/* Time label */}
+                  <div className="p-3 border-r border-[#E2E8F0] text-center text-xs text-[#64748B] font-semibold bg-[#F8FAFC] flex items-start justify-center pt-3">
+                    {hour}
+                  </div>
+
+                  {/* Day slots */}
+                  {weekDays.map((col) => {
+                    const matchingItems = filteredScheduleItems.filter((item) => {
+                      const matchesDay =
+                        (item.date && item.date === col.isoDate) ||
+                        (!item.date && item.day === col.dayName);
+                      const matchesHour = item.time === hour;
+                      return matchesDay && matchesHour;
+                    });
+
+                    return (
+                      <div
+                        key={`${col.dayName}-${hour}`}
+                        className={`p-1.5 border-r border-[#E2E8F0] last:border-0 relative hover:bg-[#FFF7ED]/50 transition-colors ${
+                          col.isToday ? 'bg-[#C2410C]/[0.02]' : ''
+                        }`}
+                      >
+                        {matchingItems.map((item) => (
+                          <div
+                            key={item.id}
+                            onClick={() => setSelectedDetail(item)}
+                            className={`p-2.5 rounded-xl border shadow-sm transition-all hover:scale-[1.02] hover:shadow-md cursor-pointer mb-1.5 ${item.color}`}
+                          >
+                            {/* Type tag */}
+                            <div className="flex items-center justify-between gap-1 mb-1">
+                              <span className="text-[10px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#FFFFFF]/70">
+                                {item.type}
+                              </span>
+                              <span className="text-[10px] font-semibold opacity-75">
+                                {item.durationHours}h
+                              </span>
+                            </div>
+
+                            {/* Trainer Name */}
+                            <div className="text-xs font-bold text-[#111827] flex items-center truncate">
+                              <User size={12} className="mr-1 text-[#EA580C] shrink-0" />
+                              <span className="truncate">{item.trainerName}</span>
+                            </div>
+
+                            {/* Customer Name */}
+                            {item.customerName && (
+                              <div className="text-[11px] font-semibold text-[#EA580C] mt-0.5 flex items-center truncate bg-[#FFFFFF]/50 px-1 py-0.5 rounded">
+                                <span className="font-bold mr-1">Client:</span>
+                                <span className="truncate">{item.customerName}</span>
+                              </div>
+                            )}
+
+                            {/* Mode badge */}
+                            <div className="mt-1 flex items-center gap-1 text-[10px]">
+                              {item.mode === 'Online' ? (
+                                <span className="inline-flex items-center text-[#EA580C] font-bold">
+                                  <Video size={10} className="mr-0.5" /> Online
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center text-[#111827] font-medium">
+                                  <MapPin size={10} className="mr-0.5" /> In-Gym
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Roster of Customer Training Sessions */}
+      {filteredScheduleItems.length > 0 && (
+        <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-6 shadow-lg space-y-4">
+          <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
+            <div>
+              <h3 className="text-base font-bold text-[#111827]">Scheduled Customer Bookings</h3>
+              <p className="text-xs text-[#64748B]">All active customer appointments with assigned trainers</p>
+            </div>
+            <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-[#F8FAFC] border border-[#F8FAFC] text-[#EA580C]">
+              {filteredScheduleItems.length} Booking{filteredScheduleItems.length === 1 ? '' : 's'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {filteredScheduleItems.map((item) => (
+              <div
+                key={item.id}
+                onClick={() => setSelectedDetail(item)}
+                className="p-4 bg-[#F8FAFC] border border-[#F8FAFC] hover:border-[#FDBA74] rounded-xl cursor-pointer transition-all hover:shadow-xs space-y-2.5"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-[#FFF7ED] text-[#EA580C] flex items-center justify-center font-bold text-xs shrink-0">
+                      {item.trainerName.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-[#111827]">{item.trainerName}</p>
+                      <p className="text-[11px] font-semibold text-[#EA580C]">Client: {item.customerName || 'Member'}</p>
+                    </div>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                    item.mode === 'Online' ? 'bg-[#F8FAFC] text-[#EA580C] border border-[#E2E8F0]' : 'bg-[#F8FAFC] text-[#EA580C] border border-[#E2E8F0]'
+                  }`}>
+                    {item.mode}
+                  </span>
+                </div>
+
+                <div className="text-xs text-[#64748B] flex items-center justify-between pt-1 border-t border-[#F8FAFC]/60">
+                  <span className="flex items-center gap-1 font-medium text-[#111827]">
+                    <CalendarIcon size={12} className="text-[#EA580C]" /> {item.date}
+                  </span>
+                  <span className="font-semibold text-[#111827]">{item.time} ({item.duration}m)</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Detail Modal */}
+      {selectedDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-[#FFFFFF] rounded-2xl max-w-lg w-full shadow-2xl border border-[#E2E8F0] overflow-hidden">
+            <div className="p-6 border-b border-[#E2E8F0] flex justify-between items-center bg-[#F8FAFC]">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-xl bg-[#C2410C] text-white font-bold flex items-center justify-center">
+                  <Dumbbell size={20} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-[#111827]">{selectedDetail.type}</h2>
+                  <p className="text-xs text-[#64748B]">
+                    {selectedDetail.bookingId ? `Booking #${selectedDetail.bookingId}` : 'Customer Session'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedDetail(null)}
+                className="p-2 text-[#64748B] hover:text-[#C2410C] hover:bg-[#FFF7ED] rounded-lg transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 text-sm">
+              {/* Trainer Info */}
+              <div className="p-3.5 bg-[#F8FAFC] rounded-xl border border-[#E2E8F0] flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-bold text-[#64748B] uppercase">Assigned Trainer</p>
+                  <p className="text-base font-bold text-[#111827] mt-0.5 flex items-center">
+                    <User size={16} className="mr-1.5 text-[#EA580C]" />
+                    {selectedDetail.trainerName}
+                  </p>
+                </div>
+                <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-[#FFFFFF] border border-[#E2E8F0] text-[#EA580C]">
+                  Trainer Staff
+                </span>
+              </div>
+
+              {/* Customer Info */}
+              {selectedDetail.customerName && (
+                <div className="p-3.5 bg-[#FFF7ED] rounded-xl border border-[#FFEDD5]">
+                  <p className="text-xs font-bold text-[#EA580C] uppercase">Booked Customer / Member</p>
+                  <p className="text-base font-bold text-[#111827] mt-0.5 flex items-center">
+                    <User size={16} className="mr-1.5 text-[#EA580C]" />
+                    {selectedDetail.customerName}
+                  </p>
+                  {selectedDetail.customerEmail && (
+                    <p className="text-xs text-[#64748B] mt-1">{selectedDetail.customerEmail}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Date, Time & Mode */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 bg-[#F8FAFC] rounded-xl border border-[#E2E8F0]">
+                  <p className="text-xs font-bold text-[#64748B] uppercase">Date & Day</p>
+                  <p className="font-semibold text-[#111827] mt-1">
+                    {selectedDetail.date || selectedDetail.day}
+                  </p>
+                </div>
+                <div className="p-3 bg-[#F8FAFC] rounded-xl border border-[#E2E8F0]">
+                  <p className="text-xs font-bold text-[#64748B] uppercase">Time & Duration</p>
+                  <p className="font-semibold text-[#111827] mt-1">
+                    {selectedDetail.time} ({selectedDetail.durationHours} Hrs)
+                  </p>
+                </div>
+              </div>
+
+              {/* Mode & Status */}
+              <div className="flex items-center justify-between p-3 bg-[#F8FAFC] rounded-xl border border-[#E2E8F0]">
+                <div>
+                  <p className="text-xs font-bold text-[#64748B] uppercase">Session Mode</p>
+                  <p className="font-semibold text-[#111827] mt-0.5 flex items-center gap-1.5">
+                    {selectedDetail.mode === 'Online' ? (
+                      <>
+                        <Video size={14} className="text-[#EA580C]" /> Virtual Video Coaching
+                      </>
+                    ) : (
+                      <>
+                        <MapPin size={14} className="text-[#EA580C]" /> In-Person Gym Floor
+                      </>
+                    )}
+                  </p>
+                </div>
+                <span className="text-xs font-bold px-2 py-1 rounded bg-green-100 text-green-800">
+                  {selectedDetail.status}
+                </span>
+              </div>
+
+              {/* Online Meeting Link */}
+              {selectedDetail.meetingLink && (
+                <div className="p-3 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl flex items-center justify-between">
+                  <div className="truncate mr-2">
+                    <p className="text-xs font-bold text-[#EA580C]">Online Meeting Link</p>
+                    <p className="text-xs text-[#EA580C] truncate">{selectedDetail.meetingLink}</p>
+                  </div>
+                  <a
+                    href={selectedDetail.meetingLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-3 py-1.5 bg-[#C2410C] text-white font-bold text-xs font-bold rounded-lg hover:bg-[#9A3412] transition-colors whitespace-nowrap"
+                  >
+                    Join Room
+                  </a>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 bg-[#F8FAFC] border-t border-[#E2E8F0] flex justify-end">
+              <button
+                type="button"
+                onClick={() => setSelectedDetail(null)}
+                className="px-6 py-2 bg-[#C2410C] text-white font-bold rounded-xl font-bold hover:bg-[#9A3412] transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default GymAdminTrainerSchedule;

@@ -1,0 +1,1209 @@
+import { useState, useEffect, useCallback } from 'react';
+import type { FormEvent } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import {
+  Activity, AlertCircle, Loader2, ChevronRight, ChevronLeft, Check,
+  Eye, EyeOff, ArrowLeft, Lock, Star, Dumbbell, Target, Zap, TrendingUp,
+  Crown, Leaf, Users, Cpu, Package, Sparkles, Gift
+} from 'lucide-react';
+import api from '../../utils/api';
+import { useAuth } from '../../contexts/AuthContext';
+
+const STEPS = ['Account', 'Personal', 'Fitness', 'Package', 'Terms'];
+
+const FITNESS_GOALS = [
+  'Weight Loss', 'Muscle Gain', 'Strength', 'General Fitness',
+  'Bodybuilding', 'Yoga', 'CrossFit', 'Personal Training', 'Online Coaching'
+];
+const EXPERIENCE_LEVELS = ['Beginner', 'Intermediate', 'Advanced'];
+const TRAINING_TYPES = ['Offline', 'Online', 'Hybrid'];
+const WORKOUT_TIMES = ['Early Morning (5-7am)', 'Morning (7-9am)', 'Mid Morning (9-11am)', 'Afternoon (12-3pm)', 'Evening (5-8pm)', 'Night (8-11pm)', 'Flexible'];
+const GENDERS = ['Male', 'Female', 'Other', 'Prefer not to say'];
+const WORKOUT_DAYS = ['1-2 days', '3-4 days', '5-6 days', 'Everyday'];
+
+const GOAL_ICONS: Record<string, any> = {
+  'Weight Loss': Target, 'Muscle Gain': Dumbbell, 'Strength': Zap,
+  'General Fitness': Activity, 'Bodybuilding': Crown, 'Yoga': Leaf,
+  'CrossFit': TrendingUp, 'Personal Training': Users, 'Online Coaching': Cpu,
+};
+const GOAL_COLORS: Record<string, string> = {
+  'Weight Loss': '#B91C1C', 'Muscle Gain': '#F97316', 'Strength': '#F97316',
+  'General Fitness': '#15803D', 'Bodybuilding': '#9A3412', 'Yoga': '#15803D',
+  'CrossFit': '#B45309', 'Personal Training': '#8B5CF6', 'Online Coaching': '#0EA5E9',
+};
+
+const initialForm = {
+  firstName: '', lastName: '', email: '', mobile: '', password: '', confirmPassword: '',
+  dateOfBirth: '', gender: '', city: '', pinCode: '', height: '', weight: '',
+  fitnessGoal: '', fitnessGoals: [] as string[], experienceLevel: '', preferredTraining: '', preferredWorkoutTime: '', preferredWorkoutDays: '',
+  emergencyContactName: '', emergencyContactMobile: '', emergencyContactRelation: '',
+  acceptTerms: false, acceptPrivacy: false,
+  // Package selection
+  selectedPackageId: '',
+  selectedBillingPlan: '' as 'monthly' | 'annual' | '',
+  // Referral
+  referralCode: '',
+};
+
+interface GymPackage {
+  _id: string;
+  gymId?: string;
+  name: string;
+  fitnessGoal: string;
+  description?: string;
+  features: string[];
+  benefits: string[];
+  trainingType: string;
+  duration: string;
+  monthlyPrice: number;
+  annualPrice: number;
+  availablePlans: string;
+  isPopular: boolean;
+}
+
+const CustomerRegisterPage = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { login } = useAuth();
+  const [step, setStep] = useState(() => {
+    const saved = sessionStorage.getItem('customer_reg_step');
+    return saved ? parseInt(saved, 10) : 0;
+  });
+  const [form, setForm] = useState(() => {
+    const saved = sessionStorage.getItem('customer_reg_form');
+    return saved ? JSON.parse(saved) : initialForm;
+  });
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [apiError, setApiError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [intentData, setIntentData] = useState<any>(null);
+
+  // Referral state
+  const [validatedReferral, setValidatedReferral] = useState<any>(null);
+  const [referralCheckLoading, setReferralCheckLoading] = useState<boolean>(false);
+  const [referralMessage, setReferralMessage] = useState<string>('');
+
+  const [otp, setOtp] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpVerified, setOtpVerified] = useState(() => {
+    return sessionStorage.getItem('customer_reg_otp') === 'true';
+  });
+
+  // Package state
+  const [packages, setPackages] = useState<GymPackage[]>([]);
+  const [packageFilter, setPackageFilter] = useState<string>('ALL');
+  const [pkgLoading, setPkgLoading] = useState(false);
+  const [pkgError, setPkgError] = useState('');
+
+  useEffect(() => { sessionStorage.setItem('customer_reg_step', step.toString()); }, [step]);
+  useEffect(() => { sessionStorage.setItem('customer_reg_form', JSON.stringify(form)); }, [form]);
+  useEffect(() => { sessionStorage.setItem('customer_reg_otp', otpVerified.toString()); }, [otpVerified]);
+
+  const handleValidateReferralCode = useCallback(async (codeToValidate: string, explicitGymId?: string) => {
+    if (!codeToValidate || !codeToValidate.trim()) return;
+    const clean = codeToValidate.trim().toUpperCase();
+    try {
+      setReferralCheckLoading(true);
+      setReferralMessage('');
+      const targetGym = explicitGymId || intentData?.gymId;
+      const res = await api.get(`/referrals/validate/${clean}`, {
+        params: targetGym ? { gymId: targetGym } : undefined
+      });
+      if (res.data?.valid) {
+        setValidatedReferral(res.data);
+        setReferralMessage(res.data.message || 'Valid referral code applied!');
+        sessionStorage.setItem('customer_referral_code', clean);
+      } else {
+        setValidatedReferral(null);
+        setReferralMessage(res.data?.message || 'Invalid referral code');
+      }
+    } catch (err: any) {
+      setValidatedReferral(null);
+      setReferralMessage(err.response?.data?.message || 'Referral code not found or inactive');
+    } finally {
+      setReferralCheckLoading(false);
+    }
+  }, [intentData?.gymId]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const refCode = params.get('ref') || params.get('referral') || sessionStorage.getItem('customer_referral_code');
+    if (refCode && !form.referralCode) {
+      setForm((prev: any) => ({ ...prev, referralCode: refCode.toUpperCase() }));
+      handleValidateReferralCode(refCode);
+    }
+  }, [location.search, handleValidateReferralCode]);
+
+  useEffect(() => {
+    const intentStr = sessionStorage.getItem('checkout_intent');
+    if (intentStr) {
+      try {
+        const parsed = JSON.parse(intentStr);
+        setIntentData(parsed);
+        if (parsed.gymId && form.referralCode && !validatedReferral) {
+          handleValidateReferralCode(form.referralCode, parsed.gymId);
+        }
+      } catch (e) { /* noop */ }
+    }
+  }, [form.referralCode, validatedReferral, handleValidateReferralCode]);
+
+  // Fetch all gym packages when entering step 3 (Package)
+  const fetchPackages = useCallback(async (gymId?: string) => {
+    setPkgLoading(true);
+    setPkgError('');
+    try {
+      const params: any = {};
+      // If registration came from a gym page, filter by that gym
+      const resolvedGymId = gymId || intentData?.gymId;
+      if (resolvedGymId) params.gymId = resolvedGymId;
+
+      const res = await api.get('/gym-packages/public', { params });
+      setPackages(res.data.packages || []);
+    } catch (e: any) {
+      setPkgError('Could not load packages. Please try again.');
+      setPackages([]);
+    } finally {
+      setPkgLoading(false);
+    }
+  }, [intentData?.gymId]);
+
+  // When step becomes 3 (Package step), fetch packages
+  useEffect(() => {
+    if (step === 3) {
+      fetchPackages(intentData?.gymId);
+    }
+  }, [step, fetchPackages, intentData?.gymId]);
+
+  const handleSendOtp = async () => {
+    if (!form.email || !/\S+@\S+\.\S+/.test(form.email)) {
+      setErrors(e => ({ ...e, email: 'Enter a valid email first' }));
+      return;
+    }
+    try {
+      const res = await api.post('/auth/send-otp', { email: form.email, checkExisting: true, purpose: 'registration' });
+      if (res.data.success) {
+        setOtpSent(true);
+        alert(`Verification code (OTP) sent to ${form.email}. Please check your inbox or spam folder!`);
+      } else {
+        alert(res.data.message || 'Failed to send OTP email.');
+      }
+    } catch (err: any) {
+      const msg = err.response?.data?.message || 'Failed to send OTP email.';
+      setErrors(e => ({ ...e, email: msg }));
+      alert(msg);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!otp || otp.length !== 6) { alert('Please enter the 6-digit OTP code'); return; }
+    try {
+      const res = await api.post('/auth/verify-otp', { email: form.email, otp });
+      if (res.data.success) {
+        setOtpVerified(true);
+        setErrors(e => { const n = { ...e }; delete n['email']; return n; });
+        alert('OTP Verified Successfully! You can now enter your mobile number.');
+      } else {
+        alert(res.data.message || 'Invalid OTP');
+      }
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Invalid or expired OTP');
+    }
+  };
+
+  const handleMobileClick = (e?: React.MouseEvent | React.FocusEvent) => {
+    if (!otpVerified) {
+      if (e) e.preventDefault();
+      alert('Please enter and verify your email ID first!');
+      const el = document.getElementById('reg-email');
+      if (el) el.focus();
+    }
+  };
+
+  const set = (field: string, value: string | boolean) => {
+    setForm((f: any) => ({ ...f, [field]: value }));
+    setErrors((e: any) => { const n = { ...e }; delete n[field]; return n; });
+  };
+
+  const handleLetterKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, fieldName: string) => {
+    if (
+      e.ctrlKey || e.metaKey || e.altKey ||
+      ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Tab', 'Enter', 'Home', 'End'].includes(e.key)
+    ) {
+      return;
+    }
+    if (!/^[A-Za-z\s]$/.test(e.key)) {
+      e.preventDefault();
+      setErrors(prev => ({ ...prev, [fieldName]: 'Only letters are allowed.' }));
+    }
+  };
+
+  const handleLetterChange = (e: React.ChangeEvent<HTMLInputElement>, fieldName: string) => {
+    const raw = e.target.value;
+    const sanitized = raw.replace(/[^A-Za-z\s]/g, '');
+    e.target.value = sanitized;
+    setForm((f: any) => ({ ...f, [fieldName]: sanitized }));
+    if (raw !== sanitized) {
+      setErrors(prev => ({ ...prev, [fieldName]: 'Only letters are allowed.' }));
+    } else {
+      setErrors(prev => {
+        if (!prev[fieldName]) return prev;
+        const n = { ...prev };
+        delete n[fieldName];
+        return n;
+      });
+    }
+  };
+
+  const handleLetterPaste = (e: React.ClipboardEvent<HTMLInputElement>, fieldName: string) => {
+    const pasted = e.clipboardData.getData('text');
+    if (/[^A-Za-z\s]/.test(pasted)) {
+      e.preventDefault();
+      const sanitized = pasted.replace(/[^A-Za-z\s]/g, '');
+      const input = e.currentTarget;
+      const start = input.selectionStart ?? input.value.length;
+      const end = input.selectionEnd ?? input.value.length;
+      const currentVal = input.value;
+      const newVal = currentVal.slice(0, start) + sanitized + currentVal.slice(end);
+      input.value = newVal;
+      setForm((f: any) => ({ ...f, [fieldName]: newVal }));
+      setErrors(prev => ({ ...prev, [fieldName]: 'Only letters are allowed.' }));
+    }
+  };
+
+  // When fitness goal changes on step 2: single-selection only
+  const selectFitnessGoal = (goal: string) => {
+    setForm((f: any) => ({
+      ...f,
+      fitnessGoal: goal,
+      fitnessGoals: [goal]
+    }));
+    setErrors((e: any) => { const n = { ...e }; delete n['fitnessGoal']; return n; });
+  };
+
+  // When package changes, reset billing plan
+  const selectPackage = (pkgId: string) => {
+    setForm((f: any) => ({ ...f, selectedPackageId: pkgId, selectedBillingPlan: '' }));
+    setErrors((e: any) => { const n = { ...e }; delete n['selectedPackageId']; delete n['selectedBillingPlan']; return n; });
+  };
+
+  const getStepErrors = (): Record<string, string> => {
+    const e: Record<string, string> = {};
+    if (step === 0) {
+      if (!form.firstName.trim()) {
+        e.firstName = 'First name is required';
+      } else if (!/^[A-Za-z\s]+$/.test(form.firstName)) {
+        e.firstName = 'Only letters are allowed.';
+      }
+
+      if (!form.lastName.trim()) {
+        e.lastName = 'Last name is required';
+      } else if (!/^[A-Za-z\s]+$/.test(form.lastName)) {
+        e.lastName = 'Only letters are allowed.';
+      }
+
+      if (!form.email.trim()) e.email = 'Email is required';
+      else if (!/\S+@\S+\.\S+/.test(form.email)) e.email = 'Enter a valid email';
+      else if (!otpVerified) e.email = 'Please verify your email with OTP';
+      
+      const cleanMobile = form.mobile.replace(/\D/g, '');
+      if (!cleanMobile) {
+        e.mobile = 'Mobile number is required';
+      } else if (!/^[6-9]\d{9}$/.test(cleanMobile)) {
+        e.mobile = 'Mobile number must be 10 digits and start with 6, 7, 8, or 9';
+      }
+      
+      if (!form.password) e.password = 'Password is required';
+      else if (form.password.length < 8) e.password = 'Password must be at least 8 characters';
+      if (form.password !== form.confirmPassword) e.confirmPassword = 'Passwords do not match';
+    }
+    if (step === 1) {
+      if (!form.city.trim()) {
+        e.city = 'City is required';
+      } else if (!/^[A-Za-z\s]+$/.test(form.city)) {
+        e.city = 'Only letters are allowed.';
+      }
+      if (form.pinCode.trim() && !/^\d{6}$/.test(form.pinCode.trim())) e.pinCode = 'Enter a valid 6-digit PIN code';
+      if (!form.gender) e.gender = 'Gender is required';
+      if (!form.height) e.height = 'Height is required';
+      else if (Number(form.height) <= 0 || Number(form.height) > 300) e.height = 'Enter a valid height (cm)';
+      if (!form.weight) e.weight = 'Weight is required';
+      else if (Number(form.weight) <= 0 || Number(form.weight) > 500) e.weight = 'Enter a valid weight (kg)';
+      
+      if (!form.emergencyContactName.trim()) {
+        e.emergencyContactName = 'Emergency contact name is required';
+      } else if (!/^[A-Za-z\s]+$/.test(form.emergencyContactName)) {
+        e.emergencyContactName = 'Only letters are allowed.';
+      }
+
+      const cleanEmerg = form.emergencyContactMobile.replace(/\D/g, '');
+      if (!cleanEmerg) {
+        e.emergencyContactMobile = 'Emergency contact mobile is required';
+      } else if (!/^[6-9]\d{9}$/.test(cleanEmerg)) {
+        e.emergencyContactMobile = 'Mobile number must be 10 digits and start with 6, 7, 8, or 9';
+      }
+
+      if (!form.emergencyContactRelation.trim()) {
+        e.emergencyContactRelation = 'Emergency contact relationship is required';
+      } else if (!/^[A-Za-z\s]+$/.test(form.emergencyContactRelation)) {
+        e.emergencyContactRelation = 'Only letters are allowed.';
+      }
+    }
+    if (step === 2) {
+      const hasGoal = form.fitnessGoal || (Array.isArray(form.fitnessGoals) && form.fitnessGoals.length > 0);
+      if (!hasGoal) e.fitnessGoal = 'Please select a fitness goal';
+      if (!form.experienceLevel) e.experienceLevel = 'Please select your experience level';
+      if (!form.preferredTraining) e.preferredTraining = 'Please select your preferred workout type';
+      if (!form.preferredWorkoutDays) e.preferredWorkoutDays = 'Please select your preferred workout days';
+      if (!form.preferredWorkoutTime) e.preferredWorkoutTime = 'Please select your preferred workout time';
+    }
+    if (step === 3) {
+      // Package selection is optional – skip validation if no packages available
+      if (packages.length > 0) {
+        if (!form.selectedPackageId) e.selectedPackageId = 'Please select a package';
+        else {
+          const pkg = packages.find(p => p._id === form.selectedPackageId);
+          if (pkg) {
+            if (!form.selectedBillingPlan) e.selectedBillingPlan = 'Please choose Monthly or Annual plan';
+          }
+        }
+      }
+    }
+    if (step === 4) {
+      if (!form.acceptTerms) e.acceptTerms = 'You must accept the Terms & Conditions';
+      if (!form.acceptPrivacy) e.acceptPrivacy = 'You must accept the Privacy Policy';
+    }
+    return e;
+  };
+
+  const validateStep = (): boolean => {
+    const e = getStepErrors();
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const next = () => {
+    const stepErrors = getStepErrors();
+    setErrors(stepErrors);
+    const isValid = Object.keys(stepErrors).length === 0;
+    if (isValid) {
+      setStep(s => s + 1);
+    } else {
+      setTimeout(() => {
+        const errorKey = Object.keys(stepErrors)[0];
+        if (errorKey) {
+          const el = document.getElementById(`reg-${errorKey}`);
+          if (el) {
+            el.focus();
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }
+      }, 50);
+    }
+  };
+  const prev = () => setStep(s => s - 1);
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!validateStep()) return;
+    setApiError('');
+    setIsLoading(true);
+    try {
+      const selectedPkg = packages.find(p => p._id === form.selectedPackageId);
+      const targetGymId = intentData?.gymId || validatedReferral?.referrer?.gymId || selectedPkg?.gymId;
+      const targetBranchId = intentData?.branchId;
+
+      const selectedGoalsList = Array.isArray(form.fitnessGoals) && form.fitnessGoals.length > 0 
+        ? form.fitnessGoals 
+        : (form.fitnessGoal ? [form.fitnessGoal] : []);
+
+      const res = await api.post('/auth/register', {
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
+        email: form.email.trim().toLowerCase(),
+        mobile: form.mobile.trim(),
+        password: form.password,
+        dateOfBirth: form.dateOfBirth || undefined,
+        gender: form.gender || undefined,
+        city: form.city || undefined,
+        pinCode: form.pinCode || undefined,
+        fitnessGoal: selectedGoalsList.join(', ') || form.fitnessGoal || undefined,
+        fitnessGoals: selectedGoalsList,
+        experienceLevel: form.experienceLevel || undefined,
+        preferredTraining: form.preferredTraining || undefined,
+        preferredWorkoutDays: form.preferredWorkoutDays || undefined,
+        preferredWorkoutTime: form.preferredWorkoutTime || undefined,
+        height: form.height ? Number(form.height) : undefined,
+        weight: form.weight ? Number(form.weight) : undefined,
+        emergencyContact: {
+          name: form.emergencyContactName,
+          mobile: form.emergencyContactMobile,
+          relationship: form.emergencyContactRelation
+        },
+        gymId: targetGymId,
+        branchId: targetBranchId,
+        packageId: form.selectedPackageId || undefined,
+        billingPlan: form.selectedBillingPlan || undefined,
+        planName: selectedPkg?.name || undefined,
+        price: form.selectedBillingPlan === 'annual' ? selectedPkg?.annualPrice : selectedPkg?.monthlyPrice,
+        referralCode: form.referralCode?.trim() || undefined,
+      });
+
+      if (res.data.token && res.data.user) {
+        sessionStorage.removeItem('customer_reg_step');
+        sessionStorage.removeItem('customer_reg_form');
+        sessionStorage.removeItem('customer_reg_otp');
+        await login(res.data.user, res.data.token, false);
+
+        // If a package was selected, join the gym with the package
+        if (form.selectedPackageId && form.selectedBillingPlan && targetGymId) {
+          try {
+            await api.post('/memberships/join', {
+              gymId: targetGymId,
+              branchId: targetBranchId,
+              packageId: form.selectedPackageId,
+              billingPlan: form.selectedBillingPlan,
+              fitnessGoal: selectedGoalsList.join(', ') || form.fitnessGoal,
+              fitnessGoals: selectedGoalsList,
+              planName: selectedPkg?.name || 'Standard',
+              price: form.selectedBillingPlan === 'annual' ? selectedPkg?.annualPrice : selectedPkg?.monthlyPrice,
+              paymentMethod: 'UPI',
+              referralCode: form.referralCode?.trim() || undefined,
+            });
+          } catch (joinErr) {
+            console.error('Failed to auto-join gym after registration:', joinErr);
+          }
+        }
+
+        const intentStr = sessionStorage.getItem('checkout_intent');
+        if (intentStr) {
+          try {
+            const intent = JSON.parse(intentStr);
+            sessionStorage.removeItem('checkout_intent');
+            const isTrial = intent.plan?.name?.toLowerCase().includes('trial') || Number(intent.plan?.price || 0) === 0;
+            if (!isTrial) {
+              navigate(`/gyms/${intent.gymId}/checkout`, { state: { plan: intent.plan, gym: intent.gym || { _id: intent.gymId } }, replace: true });
+              return;
+            }
+          } catch (e) {
+            sessionStorage.removeItem('checkout_intent');
+          }
+        }
+
+        // Direct user to membership details if pending approval, else dashboard
+        if (res.data.user.approvalStatus === 'PENDING') {
+          navigate('/member/subscription', { replace: true });
+        } else {
+          navigate('/member/dashboard', { replace: true });
+        }
+      } else {
+        sessionStorage.removeItem('customer_reg_step');
+        sessionStorage.removeItem('customer_reg_form');
+        sessionStorage.removeItem('customer_reg_otp');
+        navigate('/login', { replace: true });
+      }
+    } catch (err: any) {
+      setApiError(err.response?.data?.message || 'Registration failed. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const inputCls = (field: string) =>
+    `w-full bg-[#FFFFFF] border ${errors[field] ? 'border-[#F8FAFC]' : 'border-[#E2E8F0]'} text-[#111827] rounded-xl px-4 py-3 text-sm outline-none focus:border-[#FDBA74] transition-colors placeholder-[#94A3B8]`;
+
+  const selBtnCls = (active: boolean) =>
+    `px-3 py-2 rounded-lg text-sm border transition-colors cursor-pointer ${active ? 'bg-[#C2410C] text-white border-[#FDBA74] font-semibold' : 'bg-[#FFFFFF] border-[#E2E8F0] text-[#64748B] hover:border-[#FFEDD5]'}`;
+
+  // Helper: get selected package
+  const selectedPkg = packages.find(p => p._id === form.selectedPackageId);
+
+  return (
+    <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center px-4 py-12">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgba(212,255,0,0.04)_0%,_transparent_60%)] pointer-events-none" />
+
+
+      {/* Logo */}
+      <Link to="/portal/customer" className="flex items-center space-x-2 mb-8 group z-10">
+        <div className="w-9 h-9 bg-[#C2410C] rounded-md flex items-center justify-center">
+          <Activity className="text-black" size={22} />
+        </div>
+        <span className="text-2xl font-bold tracking-tight text-[#EA580C]">Gymora</span>
+      </Link>
+
+      <div className="w-full max-w-2xl lg:max-w-3xl bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl shadow-2xl overflow-hidden z-10">
+        {/* Progress Header */}
+        <div className="bg-[#FFFFFF] border-b border-[#E2E8F0] px-5 sm:px-8 py-4 sm:py-5 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <h1 className="text-lg sm:text-xl font-bold text-[#111827] shrink-0">Customer Registration</h1>
+          <div className="flex items-center space-x-1 sm:space-x-1.5 overflow-x-auto min-w-0 py-1">
+            {STEPS.map((s, i) => (
+              <div key={i} className="flex items-center space-x-1 sm:space-x-1.5 shrink-0" title={s}>
+                <div className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all shrink-0 ${i < step ? 'bg-[#C2410C] text-white' : i === step ? 'bg-[#C2410C] text-white ring-2 ring-[#B91C1C]/30 ring-offset-1 ring-offset-[#FFFFFF]' : 'bg-[#F8FAFC] text-[#64748B]'}`}>
+                  {i < step ? <Check size={13} /> : i + 1}
+                </div>
+                <span className={`text-[11px] sm:text-xs whitespace-nowrap ${i === step ? 'text-[#111827] font-semibold' : 'text-[#64748B]'}`}>{s}</span>
+                {i < STEPS.length - 1 && <div className={`h-px w-2.5 sm:w-4 ${i < step ? 'bg-[#C2410C]' : 'bg-[#E2E8F0]'} shrink-0`} />}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-8">
+          {apiError && (
+            <div className="flex items-center space-x-3 bg-[#FFF7ED] border border-[#F8FAFC]/30 text-[#EA580C] rounded-xl px-4 py-3 mb-6 text-sm">
+              <AlertCircle size={18} className="shrink-0" /><span>{apiError}</span>
+            </div>
+          )}
+
+          {/* STEP 0 — Account */}
+          {step === 0 && (
+            <div className="space-y-5">
+              <h2 className="text-lg font-semibold text-[#111827] mb-1">Account Details</h2>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-[#64748B] mb-2">First Name *</label>
+                  <input
+                    id="reg-firstName"
+                    value={form.firstName}
+                    onKeyDown={e => handleLetterKeyDown(e, 'firstName')}
+                    onChange={e => handleLetterChange(e, 'firstName')}
+                    onPaste={e => handleLetterPaste(e, 'firstName')}
+                    placeholder="John"
+                    className={inputCls('firstName')}
+                  />
+                  {errors.firstName && <p className="text-[#EF4444] text-xs mt-1">{errors.firstName}</p>}
+                </div>
+                <div>
+                  <label className="block text-sm text-[#64748B] mb-2">Last Name *</label>
+                  <input
+                    id="reg-lastName"
+                    value={form.lastName}
+                    onKeyDown={e => handleLetterKeyDown(e, 'lastName')}
+                    onChange={e => handleLetterChange(e, 'lastName')}
+                    onPaste={e => handleLetterPaste(e, 'lastName')}
+                    placeholder="Doe"
+                    className={inputCls('lastName')}
+                  />
+                  {errors.lastName && <p className="text-[#EF4444] text-xs mt-1">{errors.lastName}</p>}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm text-[#64748B] mb-2">Email Address *</label>
+                <div className="flex gap-2">
+                  <input id="reg-email" type="email" value={form.email} onChange={e => { set('email', e.target.value); setOtpVerified(false); setOtpSent(false); }} disabled={otpVerified} placeholder="you@example.com" className={inputCls('email') + ' flex-1'} />
+                  {!otpVerified && (
+                    <button type="button" onClick={handleSendOtp} className="px-4 py-2 bg-[#C2410C] text-white font-bold rounded-xl text-sm font-bold hover:bg-[#9A3412] transition-colors whitespace-nowrap">
+                      {otpSent ? 'Resend' : 'Send OTP'}
+                    </button>
+                  )}
+                  {otpVerified && (
+                    <button type="button" onClick={() => { setOtpVerified(false); setOtpSent(false); setOtp(''); }} className="px-4 py-2 bg-gray-200 text-[#111827] rounded-xl text-sm font-bold hover:bg-gray-300 transition-colors whitespace-nowrap">
+                      Change
+                    </button>
+                  )}
+                </div>
+                {errors.email && <p className="text-[#EF4444] text-xs mt-1">{errors.email}</p>}
+                {otpSent && !otpVerified && (
+                  <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-xl">
+                    <label className="block text-xs font-semibold text-[#EA580C] mb-2">Enter OTP sent to your email</label>
+                    <div className="flex gap-2">
+                      <input type="text" value={otp} onChange={e => setOtp(e.target.value)} placeholder="123456" className="w-full bg-[#FFFFFF] border border-green-200 text-[#111827] rounded-lg px-3 py-2 text-sm outline-none focus:border-[#FDBA74] transition-colors flex-1" maxLength={6} />
+                      <button type="button" onClick={handleVerifyOtp} className="px-5 py-2 bg-[#C2410C] hover:bg-[#9A3412] text-white rounded-lg text-sm font-bold transition-colors whitespace-nowrap shadow-sm cursor-pointer">Verify</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm text-[#64748B]">Mobile Number *</label>
+                  {!otpVerified ? (
+                    <span className="text-xs text-amber-600 font-medium flex items-center gap-1"><Lock size={12} /> Verify email first</span>
+                  ) : (
+                    <span className="text-xs text-[#EA580C] font-medium flex items-center gap-1"><Check size={12} /> Email verified</span>
+                  )}
+                </div>
+                <div onClick={() => { if (!otpVerified) handleMobileClick(); }} className={!otpVerified ? 'cursor-not-allowed' : ''}>
+                  <input id="reg-mobile" type="tel" maxLength={10} value={form.mobile}
+                    onChange={e => {
+                      if (!otpVerified) { handleMobileClick(); return; }
+                      const raw = e.target.value.replace(/\D/g, '');
+                      if (raw.length > 0 && !['6', '7', '8', '9'].includes(raw[0])) {
+                        setErrors(prev => ({ ...prev, mobile: 'Mobile number must start with 6, 7, 8, or 9' }));
+                        return;
+                      }
+                      if (raw.length <= 10) {
+                        set('mobile', raw);
+                        if (raw.length === 10) {
+                          setErrors(prev => { const n = { ...prev }; delete n['mobile']; return n; });
+                        }
+                      }
+                    }}
+                    onClick={e => { if (!otpVerified) { e.stopPropagation(); handleMobileClick(e); } }}
+                    onFocus={e => { if (!otpVerified) { e.target.blur(); handleMobileClick(e); } }}
+                    readOnly={!otpVerified}
+                    placeholder={otpVerified ? '10-digit number (starts with 6-9)' : 'Please verify email first'}
+                    className={inputCls('mobile') + (!otpVerified ? ' bg-[#F8FAFC]/70 cursor-not-allowed select-none' : '')} />
+                </div>
+                {errors.mobile && <p className="text-[#EF4444] text-xs mt-1">{errors.mobile}</p>}
+              </div>
+              <div>
+                <label className="block text-sm text-[#64748B] mb-2">Password *</label>
+                <div className="relative">
+                  <input id="reg-password" type={showPassword ? 'text' : 'password'} value={form.password} onChange={e => set('password', e.target.value)} placeholder="Minimum 8 characters" className={inputCls('password') + ' pr-12'} />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#C2410C]">
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+                {errors.password && <p className="text-[#EF4444] text-xs mt-1">{errors.password}</p>}
+              </div>
+              <div>
+                <label className="block text-sm text-[#64748B] mb-2">Confirm Password *</label>
+                <div className="relative">
+                  <input id="reg-confirmPassword" type={showConfirm ? 'text' : 'password'} value={form.confirmPassword} onChange={e => set('confirmPassword', e.target.value)} placeholder="Repeat your password" className={inputCls('confirmPassword') + ' pr-12'} />
+                  <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute right-4 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#C2410C]">
+                    {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+                {errors.confirmPassword && <p className="text-[#EF4444] text-xs mt-1">{errors.confirmPassword}</p>}
+              </div>
+
+              {/* Referral Code (Optional) */}
+              <div className="pt-3 border-t border-[#E2E8F0] space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-sm text-[#64748B] flex items-center gap-1.5 font-medium">
+                    <Gift size={16} className="text-[#EA580C]" />
+                    Referral Code (Optional)
+                  </label>
+                  <span className="text-[11px] text-[#EA580C] font-semibold">Special Joiner Perks</span>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    id="reg-referralCode"
+                    type="text"
+                    value={form.referralCode || ''}
+                    onChange={e => {
+                      const val = e.target.value.toUpperCase().replace(/\s+/g, '');
+                      set('referralCode', val);
+                      if (validatedReferral) {
+                        setValidatedReferral(null);
+                      }
+                      setReferralMessage('');
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (form.referralCode?.trim()) {
+                          handleValidateReferralCode(form.referralCode);
+                        }
+                      }
+                    }}
+                    placeholder="e.g. RENUG7557"
+                    className={inputCls('referralCode') + ' font-mono uppercase tracking-wider flex-1'}
+                  />
+                  <button
+                    type="button"
+                    disabled={!form.referralCode?.trim() || referralCheckLoading}
+                    onClick={() => handleValidateReferralCode(form.referralCode)}
+                    className={`px-4 py-2 text-xs font-bold rounded-xl transition-all whitespace-nowrap shadow-sm cursor-pointer ${validatedReferral
+                        ? 'bg-[#C2410C] hover:bg-[#9A3412] text-white'
+                        : 'bg-[#C2410C] hover:bg-[#9A3412] disabled:bg-[#F8FAFC] disabled:text-[#64748B] disabled:cursor-not-allowed text-white'
+                      }`}
+                  >
+                    {referralCheckLoading ? 'Validating...' : validatedReferral ? 'Applied ✓' : 'Apply Code'}
+                  </button>
+                </div>
+
+                {validatedReferral && (
+                  <div className="p-3 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-xs text-[#EA580C] space-y-1 animate-fadeIn">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 font-bold text-[#EA580C]">
+                        <Sparkles size={14} className="text-[#EA580C]" />
+                        Referral Offer Verified!
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          set('referralCode', '');
+                          setValidatedReferral(null);
+                          setReferralMessage('');
+                          sessionStorage.removeItem('customer_referral_code');
+                        }}
+                        className="text-[11px] text-red-600 hover:text-red-800 font-semibold underline cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <p>
+                      Referred by <strong>{validatedReferral.referrer?.name}</strong>. You'll receive{' '}
+                      <strong>
+                        {(validatedReferral.refereeReward?.discountType || validatedReferral.campaign?.refereeDiscountType) === 'Percentage'
+                          ? `${validatedReferral.refereeReward?.value || validatedReferral.campaign?.refereeRewardValue}% off`
+                          : `₹${validatedReferral.refereeReward?.value || validatedReferral.campaign?.refereeRewardValue || 200} off`}
+                      </strong>{' '}
+                      your first membership purchase at checkout!
+                    </p>
+                  </div>
+                )}
+
+                {referralMessage && !validatedReferral && (
+                  <p className="text-amber-600 text-xs flex items-center gap-1">
+                    <AlertCircle size={13} /> {referralMessage}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* STEP 1 — Personal */}
+          {step === 1 && (
+            <div className="space-y-5">
+              <h2 className="text-lg font-semibold text-[#111827] mb-1">Personal Details</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-[#64748B] mb-2">City *</label>
+                  <input
+                    id="reg-city"
+                    value={form.city}
+                    onKeyDown={e => handleLetterKeyDown(e, 'city')}
+                    onChange={e => handleLetterChange(e, 'city')}
+                    onPaste={e => handleLetterPaste(e, 'city')}
+                    placeholder="Your city"
+                    className={inputCls('city')}
+                  />
+                  {errors.city && <p className="text-[#EF4444] text-xs mt-1">{errors.city}</p>}
+                </div>
+                <div>
+                  <label className="block text-sm text-[#64748B] mb-2">PIN Code</label>
+                  <input id="reg-pinCode" type="text" inputMode="numeric" maxLength={6} pattern="\d{6}" value={form.pinCode} onChange={e => set('pinCode', e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="6-digit PIN code" className={inputCls('pinCode')} />
+                  {errors.pinCode && <p className="text-[#EF4444] text-xs mt-1">{errors.pinCode}</p>}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm text-[#64748B] mb-3">Gender *</label>
+                <div id="reg-gender" tabIndex={-1} className="flex flex-wrap gap-2 outline-none">
+                  {GENDERS.map(g => (
+                    <button key={g} type="button" onClick={() => { set('gender', g); setErrors(prev => { const n = { ...prev }; delete n['gender']; return n; }); }} className={selBtnCls(form.gender === g)}>{g}</button>
+                  ))}
+                </div>
+                {errors.gender && <p className="text-[#EF4444] text-xs mt-2">{errors.gender}</p>}
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-[#64748B] mb-2">Height (cm) *</label>
+                  <input id="reg-height" type="number" value={form.height} onChange={e => set('height', e.target.value)} placeholder="e.g. 175" className={inputCls('height')} />
+                  {errors.height && <p className="text-[#EF4444] text-xs mt-1">{errors.height}</p>}
+                </div>
+                <div>
+                  <label className="block text-sm text-[#64748B] mb-2">Weight (kg) *</label>
+                  <input id="reg-weight" type="number" value={form.weight} onChange={e => set('weight', e.target.value)} placeholder="e.g. 70" className={inputCls('weight')} />
+                  {errors.weight && <p className="text-[#EF4444] text-xs mt-1">{errors.weight}</p>}
+                </div>
+              </div>
+              <div className="pt-4 border-t border-[#E2E8F0]">
+                <h3 className="text-[#111827] font-bold mb-4">Emergency Contact *</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm text-[#64748B] mb-1.5">Contact Name *</label>
+                    <input
+                      id="reg-emergencyContactName"
+                      type="text"
+                      placeholder="Contact Name"
+                      value={form.emergencyContactName}
+                      onKeyDown={e => handleLetterKeyDown(e, 'emergencyContactName')}
+                      onChange={e => handleLetterChange(e, 'emergencyContactName')}
+                      onPaste={e => handleLetterPaste(e, 'emergencyContactName')}
+                      className={inputCls('emergencyContactName')}
+                    />
+                    {errors.emergencyContactName && <p className="text-[#EF4444] text-xs mt-1">{errors.emergencyContactName}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-sm text-[#64748B] mb-1.5">Contact Number *</label>
+                    <input
+                      id="reg-emergencyContactMobile"
+                      type="tel"
+                      maxLength={10}
+                      placeholder="10-digit number (starts with 6-9)"
+                      value={form.emergencyContactMobile}
+                      onChange={e => {
+                        const v = e.target.value.replace(/\D/g, '');
+                        if (v.length <= 10) set('emergencyContactMobile', v);
+                      }}
+                      className={inputCls('emergencyContactMobile')}
+                    />
+                    {errors.emergencyContactMobile && <p className="text-[#EF4444] text-xs mt-1">{errors.emergencyContactMobile}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-sm text-[#64748B] mb-1.5">Relationship *</label>
+                    <input
+                      id="reg-emergencyContactRelation"
+                      type="text"
+                      placeholder="Relationship (e.g., Parent, Spouse)"
+                      value={form.emergencyContactRelation}
+                      onKeyDown={e => handleLetterKeyDown(e, 'emergencyContactRelation')}
+                      onChange={e => handleLetterChange(e, 'emergencyContactRelation')}
+                      onPaste={e => handleLetterPaste(e, 'emergencyContactRelation')}
+                      className={inputCls('emergencyContactRelation')}
+                    />
+                    {errors.emergencyContactRelation && <p className="text-[#EF4444] text-xs mt-1">{errors.emergencyContactRelation}</p>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 2 — Fitness Preferences */}
+          {step === 2 && (
+            <div className="space-y-6">
+              <h2 className="text-lg font-semibold text-[#111827] mb-1">Fitness Preferences</h2>
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <label className="block text-sm text-[#64748B]">Fitness Goal *</label>
+                  {form.fitnessGoal && (
+                    <span className="text-xs text-[#EA580C] font-semibold">
+                      {form.fitnessGoal} selected
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {FITNESS_GOALS.map(g => {
+                    const Icon = GOAL_ICONS[g] || Activity;
+                    const isActive = form.fitnessGoal === g || (Array.isArray(form.fitnessGoals) && form.fitnessGoals.length === 1 && form.fitnessGoals[0] === g);
+                    return (
+                      <button key={g} type="button" onClick={() => selectFitnessGoal(g)}
+                        className={`px-3 py-2 rounded-lg text-sm border transition-all cursor-pointer flex items-center gap-1.5 ${
+                          isActive 
+                            ? 'bg-[#C2410C] text-white border-[#FDBA74] font-semibold shadow-sm' 
+                            : 'bg-[#FFFFFF] border-[#E2E8F0] text-[#64748B] hover:border-[#FFEDD5] hover:text-[#111827]'
+                        }`}>
+                        <Icon size={14} />
+                        <span>{g}</span>
+                        {isActive && <Check size={13} className="ml-0.5" />}
+                      </button>
+                    );
+                  })}
+                </div>
+                {errors.fitnessGoal && <p className="text-[#EF4444] text-xs mt-2">{errors.fitnessGoal}</p>}
+              </div>
+              <div>
+                <label className="block text-sm text-[#64748B] mb-3">Experience Level *</label>
+                <div className="flex gap-2">
+                  {EXPERIENCE_LEVELS.map(l => (
+                    <button key={l} type="button" onClick={() => set('experienceLevel', l)} className={selBtnCls(form.experienceLevel === l)}>{l}</button>
+                  ))}
+                </div>
+                {errors.experienceLevel && <p className="text-[#EF4444] text-xs mt-2">{errors.experienceLevel}</p>}
+              </div>
+              <div>
+                <label className="block text-sm text-[#64748B] mb-3">Preferred Workout Type *</label>
+                <div className="flex gap-2">
+                  {TRAINING_TYPES.map(t => (
+                    <button key={t} type="button" onClick={() => set('preferredTraining', t)} className={selBtnCls(form.preferredTraining === t)}>{t}</button>
+                  ))}
+                </div>
+                {errors.preferredTraining && <p className="text-[#EF4444] text-xs mt-2">{errors.preferredTraining}</p>}
+              </div>
+              <div>
+                <label className="block text-sm text-[#64748B] mb-3">Preferred Workout Days *</label>
+                <div className="flex gap-2">
+                  {WORKOUT_DAYS.map(d => (
+                    <button key={d} type="button" onClick={() => set('preferredWorkoutDays', d)} className={selBtnCls(form.preferredWorkoutDays === d)}>{d}</button>
+                  ))}
+                </div>
+                {errors.preferredWorkoutDays && <p className="text-[#EF4444] text-xs mt-2">{errors.preferredWorkoutDays}</p>}
+              </div>
+              <div>
+                <label className="block text-sm text-[#64748B] mb-3">Preferred Workout Time *</label>
+                <div className="flex flex-wrap gap-2">
+                  {WORKOUT_TIMES.map(t => (
+                    <button key={t} type="button" onClick={() => set('preferredWorkoutTime', t)} className={selBtnCls(form.preferredWorkoutTime === t)}>{t}</button>
+                  ))}
+                </div>
+                {errors.preferredWorkoutTime && <p className="text-[#EF4444] text-xs mt-2">{errors.preferredWorkoutTime}</p>}
+              </div>
+            </div>
+          )}
+
+          {/* STEP 3 — Package Selection */}
+          {step === 3 && (
+            <div className="space-y-5">
+              <div>
+                <h2 className="text-lg font-semibold text-[#111827] mb-1">Select Your Package</h2>
+                <p className="text-sm text-[#64748B]">
+                  Browse all available gym membership packages. Packages matching your goal are highlighted.
+                </p>
+              </div>
+
+              {/* Package Category Filter Tabs */}
+              {packages.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2 pt-1 pb-1">
+                  <button
+                    type="button"
+                    onClick={() => setPackageFilter('ALL')}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${packageFilter === 'ALL'
+                        ? 'bg-[#C2410C] text-white shadow-sm'
+                        : 'bg-[#FFFFFF] border border-[#E2E8F0] text-[#64748B] hover:border-[#FFEDD5]'
+                      }`}
+                  >
+                    All Packages ({packages.length})
+                  </button>
+                  {Array.from(new Set(packages.map(p => p.fitnessGoal).filter(Boolean))).map(goal => {
+                    const count = packages.filter(p => p.fitnessGoal === goal).length;
+                    const isGoalMatch = goal === form.fitnessGoal;
+                    return (
+                      <button
+                        key={goal}
+                        type="button"
+                        onClick={() => setPackageFilter(goal)}
+                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${packageFilter === goal
+                            ? 'bg-[#C2410C] text-white shadow-sm'
+                            : 'bg-[#FFFFFF] border border-[#E2E8F0] text-[#64748B] hover:border-[#FFEDD5]'
+                          }`}
+                      >
+                        {isGoalMatch && <span>🎯</span>}
+                        <span>{goal}</span>
+                        <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${packageFilter === goal ? 'bg-[#FFFFFF]/20 text-white' : 'bg-[#EBF3F2] text-[#EA580C]'}`}>
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {pkgLoading ? (
+                <div className="flex justify-center py-12">
+                  <div className="w-8 h-8 border-4 border-[#FDBA74] border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : pkgError ? (
+                <div className="text-center py-8 text-red-500 text-sm">{pkgError}</div>
+              ) : packages.length === 0 ? (
+                <div className="text-center py-12 space-y-3 bg-[#F8FAFC] rounded-2xl border border-[#E2E8F0]">
+                  <div className="w-14 h-14 mx-auto bg-[#F8FAFC] rounded-2xl flex items-center justify-center">
+                    <Package size={28} className="text-[#EA580C]" />
+                  </div>
+                  <p className="font-semibold text-[#111827]">No packages available</p>
+                  <p className="text-xs text-[#64748B]">No packages are currently published for this gym.</p>
+                  <p className="text-xs text-[#64748B]">You can continue your registration and join a package later.</p>
+                </div>
+              ) : (
+                <div className="space-y-4 max-h-[55vh] overflow-y-auto pr-1">
+                  {packages
+                    .filter(pkg => packageFilter === 'ALL' || pkg.fitnessGoal === packageFilter)
+                    .sort((a, b) => {
+                      if (form.fitnessGoal) {
+                        if (a.fitnessGoal === form.fitnessGoal && b.fitnessGoal !== form.fitnessGoal) return -1;
+                        if (b.fitnessGoal === form.fitnessGoal && a.fitnessGoal !== form.fitnessGoal) return 1;
+                      }
+                      return 0;
+                    })
+                    .map(pkg => {
+                      const Icon = GOAL_ICONS[pkg.fitnessGoal] || Activity;
+                      const color = GOAL_COLORS[pkg.fitnessGoal] || '#F97316';
+                      const isSelected = form.selectedPackageId === pkg._id;
+
+                      return (
+                        <div key={pkg._id}
+                          onClick={() => selectPackage(pkg._id)}
+                          className={`rounded-2xl p-5 border-2 cursor-pointer transition-all ${isSelected ? 'border-[#FDBA74] shadow-md' : 'border-[#E2E8F0] hover:border-[#FFEDD5]'}`}>
+                          {/* Package header */}
+                          <div className="flex items-start justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: `${color}15` }}>
+                                <Icon size={20} style={{ color }} />
+                              </div>
+                              <div>
+                                <div className="flex items-center flex-wrap gap-2">
+                                  <h3 className="font-bold text-[#111827] text-sm">{pkg.name}</h3>
+                                  {pkg.isPopular && (
+                                    <span className="text-[10px] bg-[#C2410C] text-white font-bold font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                                      <Star size={8} className="fill-white" /> Popular
+                                    </span>
+                                  )}
+                                  {pkg.fitnessGoal === form.fitnessGoal && (
+                                    <span className="text-[10px] bg-[#F8FAFC] text-[#EA580C] border border-[#E2E8F0] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                                      🎯 Recommended for your goal
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <span className="text-xs font-semibold text-[#EA580C]">{pkg.fitnessGoal}</span>
+                                  <span className="text-[#E2E8F0]">·</span>
+                                  <span className="text-xs text-[#64748B]">{pkg.trainingType}</span>
+                                  <span className="text-[#E2E8F0]">·</span>
+                                  <span className="text-xs text-[#64748B]">{pkg.duration}</span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 mt-1 transition-all ${isSelected ? 'border-[#FDBA74] bg-[#C2410C]' : 'border-[#E2E8F0]'}`}>
+                              {isSelected && <Check size={12} className="text-white" strokeWidth={3} />}
+                            </div>
+                          </div>
+
+                          {pkg.description && (
+                            <p className="text-xs text-[#64748B] mb-3 leading-relaxed">{pkg.description}</p>
+                          )}
+
+                          {/* Features */}
+                          {pkg.features.length > 0 && (
+                            <div className="mb-4">
+                              <p className="text-xs font-bold text-[#111827] mb-2 uppercase tracking-wider">Features:</p>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                                {pkg.features.slice(0, 6).map((f, i) => (
+                                  <div key={i} className="flex items-center gap-1.5 text-xs text-[#64748B]">
+                                    <Check size={10} style={{ color }} strokeWidth={3} className="shrink-0" />
+                                    {f}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Billing plan selection */}
+                          {isSelected && (
+                            <div className="border-t border-[#E2E8F0] pt-3 mt-1 space-y-2">
+                              <p className="text-xs font-bold text-[#111827] mb-2">Choose your billing plan:</p>
+                              <div className="grid grid-cols-2 gap-3">
+                                {(pkg.availablePlans === 'monthly' || pkg.availablePlans === 'both') && (
+                                  <button type="button"
+                                    onClick={e => { e.stopPropagation(); setForm((f: any) => ({ ...f, selectedBillingPlan: 'monthly' })); setErrors((e: any) => { const n = { ...e }; delete n['selectedBillingPlan']; return n; }); }}
+                                    className={`p-3 rounded-xl border-2 text-center transition-all ${form.selectedBillingPlan === 'monthly' ? 'border-[#FDBA74] bg-[#F8FAFC]' : 'border-[#E2E8F0] hover:border-[#FFEDD5]'}`}>
+                                    <span className="block text-xs font-semibold text-[#64748B]">Monthly</span>
+                                    <span className="block text-lg font-black text-[#EA580C]">₹{pkg.monthlyPrice.toLocaleString('en-IN')}</span>
+                                    <span className="block text-[10px] text-[#64748B]">per month</span>
+                                  </button>
+                                )}
+                                {(pkg.availablePlans === 'annual' || pkg.availablePlans === 'both') && (
+                                  <button type="button"
+                                    onClick={e => { e.stopPropagation(); setForm((f: any) => ({ ...f, selectedBillingPlan: 'annual' })); setErrors((e: any) => { const n = { ...e }; delete n['selectedBillingPlan']; return n; }); }}
+                                    className={`p-3 rounded-xl border-2 text-center transition-all ${form.selectedBillingPlan === 'annual' ? 'border-[#15803D] bg-[#F8FAFC]' : 'border-[#E2E8F0] hover:border-[#E2E8F0]'}`}>
+                                    <span className="block text-xs font-semibold text-[#64748B]">Annual</span>
+                                    <span className="block text-lg font-black text-[#15803D]">₹{pkg.annualPrice.toLocaleString('en-IN')}</span>
+                                    <span className="block text-[10px] text-[#EA580C] font-semibold">per year · Save more</span>
+                                  </button>
+                                )}
+                              </div>
+                              {errors.selectedBillingPlan && (
+                                <p className="text-[#EF4444] text-xs mt-1">{errors.selectedBillingPlan}</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+
+              {errors.selectedPackageId && (
+                <p className="text-[#EF4444] text-xs">{errors.selectedPackageId}</p>
+              )}
+
+              {/* Summary of selected */}
+              {selectedPkg && form.selectedBillingPlan && (
+                <div className="p-4 bg-[#F8FAFC] border border-[#FFEDD5] rounded-xl">
+                  <p className="text-xs font-bold text-[#111827] mb-2">Selected Plan Summary</p>
+                  <div className="space-y-1 text-xs text-[#64748B]">
+                    <div className="flex justify-between"><span>Package:</span><span className="font-semibold text-[#111827]">{selectedPkg.name}</span></div>
+                    <div className="flex justify-between"><span>Goal:</span><span className="font-semibold text-[#111827]">{selectedPkg.fitnessGoal}</span></div>
+                    <div className="flex justify-between"><span>Plan:</span><span className="font-semibold text-[#111827] capitalize">{form.selectedBillingPlan}</span></div>
+                    <div className="flex justify-between">
+                      <span>Price:</span>
+                      <span className="font-bold text-[#EA580C]">
+                        ₹{(form.selectedBillingPlan === 'annual' ? selectedPkg.annualPrice : selectedPkg.monthlyPrice).toLocaleString('en-IN')}
+                        {form.selectedBillingPlan === 'monthly' ? '/month' : '/year'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* STEP 4 — Terms */}
+          {step === 4 && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
+              <h2 className="text-lg font-semibold text-[#111827] mb-1">Terms &amp; Conditions</h2>
+              <p className="text-[#64748B] text-sm">Please read and accept the following before creating your account.</p>
+
+              {/* Selected plan summary */}
+              {selectedPkg && form.selectedBillingPlan && (
+                <div className="p-4 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl mb-4">
+                  <h3 className="font-bold text-[#111827] mb-3">Selected Membership Package</h3>
+                  <div className="space-y-2 text-sm text-[#64748B]">
+                    <div className="flex justify-between"><span>Package:</span><span className="font-semibold text-[#111827]">{selectedPkg.name}</span></div>
+                    <div className="flex justify-between"><span>Fitness Goal:</span><span className="font-semibold text-[#111827]">{selectedPkg.fitnessGoal}</span></div>
+                    <div className="flex justify-between"><span>Billing Plan:</span><span className="font-semibold text-[#111827] capitalize">{form.selectedBillingPlan}</span></div>
+                    <div className="flex justify-between">
+                      <span>Price:</span>
+                      <span className="font-semibold text-[#EA580C]">
+                        ₹{(form.selectedBillingPlan === 'annual' ? selectedPkg.annualPrice : selectedPkg.monthlyPrice).toLocaleString('en-IN')}
+                        {form.selectedBillingPlan === 'monthly' ? ' / month' : ' / year'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {intentData?.plan && !selectedPkg && (
+                <div className="p-4 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl mb-6">
+                  <h3 className="font-bold text-[#111827] mb-3">Selected Membership Plan</h3>
+                  <div className="space-y-2 text-sm text-[#64748B]">
+                    <div className="flex justify-between"><span>Plan:</span><span className="font-semibold text-[#111827]">{intentData.plan.name}</span></div>
+                    <div className="flex justify-between"><span>Duration:</span><span className="font-semibold text-[#111827]">{intentData.plan.duration}</span></div>
+                    <div className="flex justify-between"><span>Price:</span><span className="font-semibold text-[#EA580C]">₹{intentData.plan.price}</span></div>
+                  </div>
+                </div>
+              )}
+
+              <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl p-4 text-sm text-[#64748B] max-h-40 overflow-y-auto leading-relaxed">
+                <strong className="text-[#111827] block mb-2">Terms &amp; Conditions</strong>
+                By creating an account on Gymora, you agree to use the platform in compliance with all applicable laws. Your personal data will be used to provide fitness coaching and gym management services. AI-generated plans are for guidance only and not a substitute for professional medical advice. Subscriptions are billed according to your chosen plan. You may cancel at any time.
+              </div>
+              <div className="space-y-4">
+                <label className="flex items-start space-x-3 cursor-pointer">
+                  <button type="button" onClick={() => set('acceptTerms', !form.acceptTerms)} className={`w-5 h-5 mt-0.5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${form.acceptTerms ? 'bg-[#C2410C] border-[#FDBA74]' : 'border-[#E2E8F0]'}`}>
+                    {form.acceptTerms && <Check size={12} className="text-black" />}
+                  </button>
+                  <span className="text-sm text-[#64748B]">I accept the <Link to="/terms-of-service" className="text-[#EA580C] hover:underline">Terms &amp; Conditions</Link></span>
+                </label>
+                {errors.acceptTerms && <p className="text-[#EF4444] text-xs ml-8">{errors.acceptTerms}</p>}
+                <label className="flex items-start space-x-3 cursor-pointer">
+                  <button type="button" onClick={() => set('acceptPrivacy', !form.acceptPrivacy)} className={`w-5 h-5 mt-0.5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${form.acceptPrivacy ? 'bg-[#C2410C] border-[#FDBA74]' : 'border-[#E2E8F0]'}`}>
+                    {form.acceptPrivacy && <Check size={12} className="text-black" />}
+                  </button>
+                  <span className="text-sm text-[#64748B]">I accept the <Link to="/privacy-policy" className="text-[#EA580C] hover:underline">Privacy Policy</Link></span>
+                </label>
+                {errors.acceptPrivacy && <p className="text-[#EF4444] text-xs ml-8">{errors.acceptPrivacy}</p>}
+              </div>
+            </div>
+          )}
+
+          {/* Navigation Buttons */}
+          <div className="flex items-center justify-between mt-8 pt-6 border-t border-[#E2E8F0]">
+            {step > 0 ? (
+              <button type="button" onClick={prev} className="flex items-center space-x-2 px-5 py-2.5 bg-[#FFFFFF] border border-[#E2E8F0] text-[#111827] rounded-xl hover:bg-[#FFF7ED] transition-colors text-sm">
+                <ChevronLeft size={18} /><span>Back</span>
+              </button>
+            ) : (
+              <Link to="/login" className="flex items-center space-x-2 px-5 py-2.5 bg-[#FFFFFF] border border-[#E2E8F0] text-[#111827] rounded-xl hover:bg-[#FFF7ED] transition-colors text-sm">
+                <span>Back to Login</span>
+              </Link>
+            )}
+
+            {step < STEPS.length - 1 ? (
+              <button type="button" onClick={next} className="flex items-center space-x-2 px-6 py-2.5 bg-[#C2410C] text-white font-bold font-bold rounded-xl hover:bg-[#9A3412] transition-colors text-sm">
+                <span>Next</span><ChevronRight size={18} />
+              </button>
+            ) : (
+              <button id="reg-submit" type="submit" disabled={isLoading} className="flex items-center space-x-2 px-6 py-2.5 bg-[#C2410C] text-white font-bold font-bold rounded-xl hover:bg-[#9A3412] disabled:opacity-60 transition-colors text-sm">
+                {isLoading ? <><Loader2 size={18} className="animate-spin" /><span>Creating Profile...</span></> : <><span>Create Profile</span><Check size={18} /></>}
+              </button>
+            )}
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+export default CustomerRegisterPage;

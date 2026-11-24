@@ -1,0 +1,23 @@
+{
+  "name": "Gymora-platform",
+  "version": "1.0.0",
+  "description": "Gymora - AI-Powered Fitness, Trainer & Gym Management SaaS",
+  "scripts": {
+    "dev": "npx concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "install:all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+    "postinstall": "npm --prefix backend install",
+    "build": "npm --prefix backend run build",
+    "start": "node backend/dist/server.js",
+    "seed": "npm --prefix backend run seed",
+    "mongo": "start-mongodb.bat"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "cloudinary": "^1.41.3",
+    "multer-storage-cloudinary": "^4.0.0"
+  }
+}

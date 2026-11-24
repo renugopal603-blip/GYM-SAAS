@@ -1,0 +1,1778 @@
+import { useState, useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import CustomerPortalFooter from '../../components/customer/CustomerPortalFooter';
+import { TourSlide } from '../../components/Landing/TourSlide';
+import { 
+  Bot, 
+  ArrowLeft, 
+  ArrowRight,
+  Flame, 
+  Apple, 
+  Dumbbell, 
+  LineChart, 
+  Award, 
+  MapPin, 
+  Activity, 
+  ChevronRight, 
+  Sparkles, 
+  CheckCircle2, 
+  Calendar, 
+  Compass, 
+  Trophy, 
+  HeartPulse, 
+  Scale, 
+  Zap, 
+  Timer, 
+  Salad,
+  Star,
+  Loader2,
+  X,
+  GitBranch,
+  Check,
+  ChevronLeft,
+  Target,
+  Utensils,
+  Droplets,
+  Clock,
+  ShieldAlert,
+  Play,
+  PlayCircle,
+  CheckCircle,
+  User,
+  Crown
+} from 'lucide-react';
+import api from '../../utils/api';
+import { FeaturePreview } from '../../components/Landing/FeaturePreview';
+
+const CustomerPortalLanding = () => {
+  const location = useLocation();
+  const [featuredGyms, setFeaturedGyms] = useState<any[]>([]);
+  const [gymsLoading, setGymsLoading] = useState(true);
+  const [showAiWorkoutModal, setShowAiWorkoutModal] = useState(false);
+  const [activeWorkoutStep, setActiveWorkoutStep] = useState(1);
+  const [showDietFlowchartModal, setShowDietFlowchartModal] = useState(false);
+  const [isFeaturesOpen, setIsFeaturesOpen] = useState(false);
+  const [isTourOpen, setIsTourOpen] = useState(false);
+  const [tourStep, setTourStep] = useState(1);
+  const [activeFeatureTab, setActiveFeatureTab] = useState<'ai' | 'gym' | 'trainer'>('ai');
+  const [featureSlideIndex, setFeatureSlideIndex] = useState(0);
+  const [activeCoachingCard, setActiveCoachingCard] = useState(0);
+  const [activeTransformationIndex, setActiveTransformationIndex] = useState(0);
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 100);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  useEffect(() => {
+    if (location.state && (location.state as any).openTour) {
+      setIsTourOpen(true);
+      setTourStep(1);
+    }
+  }, [location.state]);
+
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval>;
+    if (isTourOpen) {
+      interval = setInterval(() => {
+        setTourStep(s => (s < 13 ? s + 1 : 1));
+      }, 4000);
+    }
+    return () => clearInterval(interval);
+  }, [isTourOpen]);
+
+  useEffect(() => {
+    setFeatureSlideIndex(0);
+  }, [activeFeatureTab]);
+
+  useEffect(() => {
+    if (!isFeaturesOpen) return;
+    const interval = setInterval(() => {
+      let max = 5;
+      if (activeFeatureTab === 'ai') max = 5;
+      if (activeFeatureTab === 'gym') max = 7;
+      if (activeFeatureTab === 'trainer') max = 7;
+      if (featureSlideIndex < max - 1) {
+        setFeatureSlideIndex(featureSlideIndex + 1);
+      } else {
+        setFeatureSlideIndex(0);
+        if (activeFeatureTab === 'ai') setActiveFeatureTab('gym');
+        else if (activeFeatureTab === 'gym') setActiveFeatureTab('trainer');
+        else setActiveFeatureTab('ai');
+      }
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [isFeaturesOpen, activeFeatureTab, featureSlideIndex]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsFeaturesOpen(false);
+        setIsTourOpen(false);
+        setShowAiWorkoutModal(false);
+        setShowDietFlowchartModal(false);
+      }
+    };
+    if (isFeaturesOpen || isTourOpen || showAiWorkoutModal || showDietFlowchartModal) {
+      document.body.style.overflow = 'hidden';
+      window.addEventListener('keydown', handleKeyDown);
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isFeaturesOpen, isTourOpen, showAiWorkoutModal, showDietFlowchartModal]);
+
+  useEffect(() => {
+    if (window.location.hash === '#gyms') {
+      const el = document.getElementById('gyms');
+      if (el) {
+        setTimeout(() => {
+          el.scrollIntoView({ behavior: 'smooth' });
+        }, 150);
+      }
+    }
+
+    sessionStorage.setItem('last_portal', 'customer');
+
+    api.get('/gyms/public')
+      .then(res => setFeaturedGyms((res.data.gyms || []).slice(0, 3)))
+      .catch(() => setFeaturedGyms([]))
+      .finally(() => setGymsLoading(false));
+  }, []);
+
+  const transformationFeatures = [
+    {
+      badge: 'AI Generator',
+      icon: Bot,
+      title: 'Smart AI Workout Engine',
+      desc: 'Generate tailored weekly exercise programs based on your body type, fitness level, goals, available gym equipment, and past injuries.',
+      tags: ['Custom Splits', 'Video Demos', 'Rest Timers'],
+      img: 'https://images.unsplash.com/photo-1517836357463-d25dfeac3438?w=800&q=80',
+      alt: 'Smart AI Workout Engine',
+    },
+    {
+      badge: 'Macro Balanced',
+      icon: Apple,
+      title: 'Customized Diet & Nutrition',
+      desc: 'Macro-balanced daily meal plans with vegetarian, vegan, and protein-rich preferences crafted to fuel your workouts and fat loss.',
+      tags: ['Calorie Budgets', 'Veg / Non-Veg', 'Hydration Log'],
+      img: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=800&q=80',
+      alt: 'Customized Diet & Nutrition',
+    },
+    {
+      badge: 'Certified Mentors',
+      icon: Dumbbell,
+      title: 'Certified Personal Coaches',
+      desc: 'Discover elite trainers at your gym, book online or in-person 1-on-1 training slots, and receive professional form corrections.',
+      tags: ['1-on-1 Slots', 'Form Reviews', 'Direct Chat'],
+      img: 'https://images.unsplash.com/photo-1571019614242-c5c5dee9f50b?w=800&q=80',
+      alt: 'Certified Personal Coaches',
+    },
+    {
+      badge: 'Live Analytics',
+      icon: LineChart,
+      title: 'Progress & Milestone Tracking',
+      desc: 'Log body weight, BMI changes, workout completion streaks, and attendance records with interactive visual progression graphs.',
+      tags: ['Weight Charts', 'BMI Tracker', 'Session History'],
+      img: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=800&q=80',
+      alt: 'Progress & Milestone Tracking',
+    },
+    {
+      badge: 'Badges & Rewards',
+      icon: Award,
+      title: 'Fitness Challenges & Rewards',
+      desc: 'Join gym-wide endurance challenges, earn badges, unlock membership fee discounts, and redeem store vouchers for protein and merchandise.',
+      tags: ['Weekly Quests', 'Store Discounts', 'Leaderboards'],
+      img: 'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=800&q=80',
+      alt: 'Fitness Challenges & Rewards',
+    },
+    {
+      badge: 'Nearby Gyms',
+      icon: MapPin,
+      title: 'Gym Marketplace & Memberships',
+      desc: 'Explore nearby verified fitness clubs, compare day-passes and annual plans, and pay securely via integrated digital payment gateways.',
+      tags: ['Verified Clubs', 'Day Passes', 'Instant QR Entry'],
+      img: 'https://images.unsplash.com/photo-1570829460005-c840387bb1ca?w=800&q=80',
+      alt: 'Gym Marketplace & Memberships',
+    },
+  ];
+
+  const coachingCards = [
+    {
+      badge: '1-on-1 Mentorship',
+      icon: Dumbbell,
+      title: 'Book Certified Trainers',
+      desc: 'Browse trainer specializations, read real reviews, and schedule in-gym personal training or online form correction sessions.',
+      img: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?w=700&q=80',
+      alt: '1-on-1 Personal Trainer Coaching',
+    },
+    {
+      badge: 'Gym Finder',
+      icon: MapPin,
+      title: 'Verified Gym Marketplace',
+      desc: 'Discover partner gyms, compare amenities (steam bath, Olympic barbells, pools), and purchase flexible passes with instant QR check-in.',
+      img: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=700&q=80',
+      alt: 'Multi-Gym Verified Network',
+    },
+    {
+      badge: 'Streaks & Badges',
+      icon: Trophy,
+      title: 'Streaks & Reward Badges',
+      desc: 'Earn points for consecutive workout days, unlock discount coupons on gym store supplements, and claim your place on the leaderboard.',
+      img: 'https://images.unsplash.com/photo-1526506118085-60ce8714f8c5?w=700&q=80',
+      alt: 'Fitness Streaks & Achievements',
+    },
+  ];
+
+  return (
+    <div className="min-h-screen bg-[#FFFFFF] text-[#111827] selection:bg-[#C2410C] selection:text-[#FFFFFF] font-sans">
+      {/* Sticky Top Navigation (Appears smoothly when scrolled down past hero) */}
+      <nav
+        className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 border-b border-[#E2E8F0] bg-[#FFFFFF]/95 backdrop-blur-md shadow-sm pt-safe ${
+          isScrolled ? 'translate-y-0 opacity-100 pointer-events-auto' : '-translate-y-full opacity-0 pointer-events-none'
+        }`}
+      >
+        <div className="max-w-7xl mx-auto px-3.5 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between">
+          {/* Logo & Portal Badge */}
+          <div className="flex items-center space-x-2 sm:space-x-3 shrink-0">
+            <Link to="/" className="flex items-center space-x-2 sm:space-x-2.5 group">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-br from-[#EA580C] to-[#C2410C] rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/15 shrink-0">
+                <Activity className="text-[#FFFFFF]" size={20} strokeWidth={2.5} />
+              </div>
+              <span className="text-xl sm:text-2xl font-black tracking-tight text-[#111827] group-hover:text-[#EA580C] transition-colors">
+                Gymora
+              </span>
+            </Link>
+            <span className="hidden sm:inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#FFF7ED] text-[#EA580C] border border-[#FFEDD5]">
+              Customer Fitness
+            </span>
+          </div>
+
+          {/* Action Links */}
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsFeaturesOpen(true)}
+              className="px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-bold text-[#FFFFFF] bg-[#C2410C] hover:bg-[#9A3412] transition-all shadow-md shadow-orange-500/15 flex items-center gap-1 cursor-pointer shrink-0"
+            >
+              <Sparkles size={13} className="sm:w-3.5 sm:h-3.5 text-[#FFFFFF]" />
+              <span>Features</span>
+            </button>
+            <Link
+              to="/gyms"
+              state={{ from: '/portal/customer', fromLabel: 'Back to Customer' }}
+              className="hidden md:inline-flex px-4 py-2 rounded-xl text-xs sm:text-sm font-bold text-[#FFFFFF] bg-[#C2410C] hover:bg-[#9A3412] transition-all shadow-md shadow-orange-500/15 flex items-center gap-1.5"
+            >
+              <Compass size={14} className="text-[#FFFFFF]" />
+              <span>Find Gyms</span>
+            </Link>
+            <Link
+              to="/login?portal=customer"
+              className="px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-bold text-[#FFFFFF] bg-[#C2410C] hover:bg-[#9A3412] transition-all shadow-md shadow-orange-500/15 flex items-center gap-1 shrink-0"
+            >
+              <User size={13} className="sm:w-3.5 sm:h-3.5 text-[#FFFFFF]" />
+              <span><span className="hidden sm:inline">Customer </span>Login</span>
+            </Link>
+          </div>
+        </div>
+      </nav>
+
+      {/* Unified Master Hero Section — Matches Customer Fitness Reference Exactly */}
+      <section className="relative w-full bg-[#FFFFFF] overflow-hidden select-none">
+        <div className="w-full relative">
+          <img
+            src="/customer-hero-unified-2x.png"
+            alt="Gymora Customer Fitness - Train Smarter, Stay Healthier, Be Fitter"
+            className="w-full h-auto block object-cover select-none pointer-events-none"
+            loading="eager"
+          />
+
+          {/* 1. Top Navigation Bar — 100% Vector Sharp, Ultra-Clear Typography Matching Reference */}
+          <div
+            style={{ top: '3.29%', left: '4.69%', right: '4.69%', height: '5.67%' }}
+            className="absolute hidden sm:flex items-center justify-between z-20"
+          >
+            {/* Logo & Portal Badge */}
+            <div className="flex items-center gap-2.5 h-full">
+              <Link to="/" className="flex items-center gap-2 outline-none select-none h-full">
+                <div className="h-full aspect-square bg-gradient-to-br from-[#EA580C] to-[#F97316] rounded-[22%] flex items-center justify-center shadow-md shadow-orange-600/30">
+                  <Activity className="w-[60%] h-[60%] text-white stroke-[2.8]" />
+                </div>
+                <span className="font-extrabold text-[clamp(18px,2vw,32px)] tracking-tight text-[#0F172A]">
+                  Gymora
+                </span>
+              </Link>
+              <div className="h-4 w-px bg-slate-300 mx-0.5" />
+              <span className="px-3 py-1 rounded-full text-[clamp(10px,0.85vw,13px)] font-bold bg-[#FFF7ED] text-[#EA580C] border border-[#FFEDD5] tracking-wide shadow-xs">
+                Customer Fitness
+              </span>
+            </div>
+
+            {/* Navigation Action Buttons */}
+            <div className="flex items-center gap-[0.55vw] h-full">
+              <button
+                type="button"
+                onClick={() => setIsFeaturesOpen(true)}
+                style={{ WebkitTapHighlightColor: 'transparent' }}
+                className="h-full px-[1.2vw] rounded-full bg-[#EA580C] hover:bg-[#D94806] text-white font-extrabold text-[clamp(11px,1.02vw,15px)] flex items-center justify-center leading-none gap-1.5 shadow-sm active:scale-95 transition-all outline-none cursor-pointer"
+              >
+                <Sparkles className="w-[1.1vw] h-[1.1vw] min-w-[13px] min-h-[13px] stroke-[2.5]" />
+                <span>Features</span>
+              </button>
+
+              <Link
+                to="/gyms"
+                state={{ from: '/portal/customer', fromLabel: 'Back to Customer' }}
+                style={{ WebkitTapHighlightColor: 'transparent' }}
+                className="h-full px-[1.2vw] rounded-full bg-[#EA580C] hover:bg-[#D94806] text-white font-extrabold text-[clamp(11px,1.02vw,15px)] flex items-center justify-center leading-none gap-1.5 shadow-sm active:scale-95 transition-all outline-none"
+              >
+                <Compass className="w-[1.1vw] h-[1.1vw] min-w-[13px] min-h-[13px] stroke-[2.5]" />
+                <span>Find Gyms</span>
+              </Link>
+
+              <Link
+                to="/login?portal=customer"
+                style={{ WebkitTapHighlightColor: 'transparent' }}
+                className="h-full px-[1.3vw] rounded-full bg-[#EA580C] hover:bg-[#D94806] text-white font-extrabold text-[clamp(11px,1.02vw,15px)] flex items-center justify-center leading-none gap-1.5 shadow-sm active:scale-95 transition-all outline-none"
+              >
+                <User className="w-[1.1vw] h-[1.1vw] min-w-[13px] min-h-[13px] stroke-[2.5]" />
+                <span>Customer Login</span>
+              </Link>
+            </div>
+          </div>
+
+          {/* 2. Left Hero Typography & Feature Items — 100% Vector HTML Sharp */}
+          <div
+            style={{ top: '13.5%', left: '3.4%', width: '33.5%', bottom: '3%' }}
+            className="absolute hidden sm:flex flex-col justify-start z-10 select-text"
+          >
+            {/* Top Partner Badge */}
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FFF7ED] text-[#EA580C] border border-[#FFEDD5] text-[clamp(10px,0.85vw,13px)] font-bold tracking-wide shadow-xs w-fit mb-[1.2vw]">
+              <Crown className="w-[1vw] h-[1vw] min-w-[13px] min-h-[13px] text-[#EA580C] fill-[#EA580C]" />
+              <span>Your Personal Fitness Partner</span>
+            </div>
+
+            {/* 3-Line Headline */}
+            <h1 className="font-black text-[clamp(24px,3.3vw,54px)] leading-[1.08] text-[#0F172A] tracking-tight">
+              <span>Train Smarter</span><br />
+              <span className="relative inline-block text-[#EA580C]">
+                Stay Healthier
+                {/* Underline brush stroke */}
+                <svg className="absolute -bottom-1 left-0 w-full h-[0.35em] text-[#EA580C]" viewBox="0 0 240 16" fill="none" preserveAspectRatio="none">
+                  <path d="M2 12C60 4 180 4 238 12" stroke="currentColor" strokeWidth="4" strokeLinecap="round" />
+                </svg>
+              </span><br />
+              <span>Be Fitter</span>
+            </h1>
+
+            {/* Subtitle */}
+            <p className="mt-[1vw] text-[clamp(11px,0.95vw,15px)] text-[#475569] font-medium leading-relaxed max-w-[96%]">
+              AI-powered workouts, expert trainers and personalized nutrition to help you reach your fitness goals faster and stay consistent.
+            </p>
+
+            {/* 3 Feature Items */}
+            <div className="mt-[1.6vw] space-y-[0.9vw] max-w-[96%]">
+              {/* Item 1: AI Workout Plans */}
+              <div 
+                onClick={() => setShowAiWorkoutModal(true)}
+                className="flex items-center gap-[0.8vw] group cursor-pointer"
+              >
+                <div className="w-[2.6vw] h-[2.6vw] min-w-[34px] min-h-[34px] rounded-xl bg-[#FFF7ED] border border-[#FFEDD5] flex items-center justify-center text-[#EA580C] shadow-xs group-hover:scale-105 transition-transform shrink-0">
+                  <Dumbbell className="w-[50%] h-[50%] stroke-[2.4]" />
+                </div>
+                <div>
+                  <div className="font-extrabold text-[clamp(12px,0.98vw,15.5px)] text-[#0F172A] leading-tight">AI Workout Plans</div>
+                  <div className="text-[clamp(10px,0.8vw,12.5px)] text-[#64748B] font-medium leading-tight">Get personalized training plans for your goals</div>
+                </div>
+              </div>
+
+              {/* Item 2: Nutrition Guidance */}
+              <div 
+                onClick={() => setShowDietFlowchartModal(true)}
+                className="flex items-center gap-[0.8vw] group cursor-pointer"
+              >
+                <div className="w-[2.6vw] h-[2.6vw] min-w-[34px] min-h-[34px] rounded-xl bg-[#FFF7ED] border border-[#FFEDD5] flex items-center justify-center text-[#EA580C] shadow-xs group-hover:scale-105 transition-transform shrink-0">
+                  <Apple className="w-[50%] h-[50%] stroke-[2.4]" />
+                </div>
+                <div>
+                  <div className="font-extrabold text-[clamp(12px,0.98vw,15.5px)] text-[#0F172A] leading-tight">Nutrition Guidance</div>
+                  <div className="text-[clamp(10px,0.8vw,12.5px)] text-[#64748B] font-medium leading-tight">Balanced diet plans with calorie tracking</div>
+                </div>
+              </div>
+
+              {/* Item 3: 1-on-1 Elite Trainers */}
+              <Link 
+                to="/trainers" 
+                className="flex items-center gap-[0.8vw] group"
+              >
+                <div className="w-[2.6vw] h-[2.6vw] min-w-[34px] min-h-[34px] rounded-xl bg-[#FFF7ED] border border-[#FFEDD5] flex items-center justify-center text-[#EA580C] shadow-xs group-hover:scale-105 transition-transform shrink-0">
+                  <User className="w-[50%] h-[50%] stroke-[2.4]" />
+                </div>
+                <div>
+                  <div className="font-extrabold text-[clamp(12px,0.98vw,15.5px)] text-[#0F172A] leading-tight">1-on-1 Elite Trainers</div>
+                  <div className="text-[clamp(10px,0.8vw,12.5px)] text-[#64748B] font-medium leading-tight">Book certified trainers and get expert support</div>
+                </div>
+              </Link>
+            </div>
+          </div>
+
+          {/* 3. Interactive Clickable Hotspots for Right Floating Cards */}
+          {/* Card 1: AI Fitness Coach */}
+          <button
+            type="button"
+            onClick={() => setShowAiWorkoutModal(true)}
+            title="Launch AI Fitness Coach"
+            aria-label="Launch AI Fitness Coach"
+            style={{ left: '71.30%', top: '22.90%', width: '24.90%', height: '12.50%', WebkitTapHighlightColor: 'transparent' }}
+            className="absolute rounded-2xl cursor-pointer hover:bg-black/5 active:scale-98 transition-all outline-none focus:outline-none focus:ring-0 select-none z-10"
+          />
+
+          {/* Card 2: Your Progress */}
+          <button
+            type="button"
+            onClick={() => setIsFeaturesOpen(true)}
+            title="View Your Progress"
+            aria-label="View Your Progress"
+            style={{ left: '77.90%', top: '38.00%', width: '20.30%', height: '15.60%', WebkitTapHighlightColor: 'transparent' }}
+            className="absolute rounded-2xl cursor-pointer hover:bg-black/5 active:scale-98 transition-all outline-none focus:outline-none focus:ring-0 select-none z-10"
+          />
+
+          {/* Card 3: Calories Burned */}
+          <button
+            type="button"
+            onClick={() => setIsFeaturesOpen(true)}
+            title="Calories Burned & Nutrition"
+            aria-label="Calories Burned & Nutrition"
+            style={{ left: '81.40%', top: '57.30%', width: '16.80%', height: '10.80%', WebkitTapHighlightColor: 'transparent' }}
+            className="absolute rounded-2xl cursor-pointer hover:bg-black/5 active:scale-98 transition-all outline-none focus:outline-none focus:ring-0 select-none z-10"
+          />
+
+          {/* 4. Interactive Hotspots for Bottom Right Badges */}
+          {/* Badge 1: Workouts */}
+          <button
+            type="button"
+            onClick={() => setShowAiWorkoutModal(true)}
+            title="AI Workouts"
+            aria-label="AI Workouts"
+            style={{ left: '68.00%', top: '81.00%', width: '9.00%', height: '15.00%', WebkitTapHighlightColor: 'transparent' }}
+            className="absolute rounded-2xl cursor-pointer hover:bg-black/5 active:scale-95 transition-all outline-none focus:outline-none focus:ring-0 select-none z-10"
+          />
+
+          {/* Badge 2: Track Progress */}
+          <button
+            type="button"
+            onClick={() => setIsFeaturesOpen(true)}
+            title="Track Progress"
+            aria-label="Track Progress"
+            style={{ left: '78.50%', top: '81.00%', width: '10.00%', height: '15.00%', WebkitTapHighlightColor: 'transparent' }}
+            className="absolute rounded-2xl cursor-pointer hover:bg-black/5 active:scale-95 transition-all outline-none focus:outline-none focus:ring-0 select-none z-10"
+          />
+
+          {/* Badge 3: Join Challenges */}
+          <button
+            type="button"
+            onClick={() => setIsFeaturesOpen(true)}
+            title="Join Challenges"
+            aria-label="Join Challenges"
+            style={{ left: '90.00%', top: '81.00%', width: '9.00%', height: '15.00%', WebkitTapHighlightColor: 'transparent' }}
+            className="absolute rounded-2xl cursor-pointer hover:bg-black/5 active:scale-95 transition-all outline-none focus:outline-none focus:ring-0 select-none z-10"
+          />
+        </div>
+
+        {/* Mobile Quick Action Touch Bar */}
+        <div className="block sm:hidden px-3.5 py-3 bg-[#FFF7ED] border-y border-[#FFEDD5]">
+          <div className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => setIsFeaturesOpen(true)}
+              className="px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-[#EA580C] active:scale-95 flex items-center gap-1.5 shadow-sm"
+            >
+              <Sparkles size={13} />
+              <span>Features</span>
+            </button>
+
+            <Link
+              to="/gyms"
+              state={{ from: '/portal/customer', fromLabel: 'Back to Customer' }}
+              className="px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-[#EA580C] active:scale-95 flex items-center gap-1 shadow-sm"
+            >
+              <Compass size={13} />
+              <span>Gyms</span>
+            </Link>
+
+            <Link
+              to="/login?portal=customer"
+              className="px-3.5 py-2 rounded-xl text-xs font-bold text-white bg-[#EA580C] active:scale-95 shadow-sm"
+            >
+              Login
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Visual Showcase Section 1: AI Workout Engine & Real-Time Tracking */}
+      <section className="py-20 border-t border-[#E2E8F0] bg-[#F8FAFC]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+            {/* Copy Left */}
+            <div>
+
+              <h2 className="text-3xl sm:text-4xl font-black text-[#111827] tracking-tight mb-4 leading-snug">
+                Intelligent Workouts Adapted to Your Exact Goals & Equipment
+              </h2>
+              <p className="text-[#64748B] text-base leading-relaxed mb-6">
+                Never wonder what exercise to do next. Gymora’s AI trainer calculates your optimal muscle split, recommended weights, and rep ranges based on your current physical stats, gym machines, and energy levels.
+              </p>
+
+              <div className="space-y-4 mb-8">
+                <div className="flex items-start gap-3.5">
+                  <div className="w-6 h-6 rounded-lg bg-[#FFF7ED] text-[#EA580C] flex items-center justify-center shrink-0 mt-1">
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-[#111827] text-sm">Dynamic Rep & Set Adjustments</h4>
+                    <p className="text-xs text-[#64748B] mt-0.5">As you get stronger, the AI automatically increases progressive overload parameters to guarantee continuous muscle hypertrophy.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3.5">
+                  <div className="w-6 h-6 rounded-lg bg-[#FFF7ED] text-[#EA580C] flex items-center justify-center shrink-0 mt-1">
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-[#111827] text-sm">Interactive Rep Player & Rest Timers</h4>
+                    <p className="text-xs text-[#64748B] mt-0.5">Follow built-in countdown timers, audio cues between sets, and high-definition video form demos to prevent workout injuries.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3.5">
+                  <div className="w-6 h-6 rounded-lg bg-[#FFF7ED] text-[#EA580C] flex items-center justify-center shrink-0 mt-1">
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-[#111827] text-sm">Injury-Aware Exercise Substitutions</h4>
+                    <p className="text-xs text-[#64748B] mt-0.5">Have lower back pain or shoulder stiffness? The AI instantly swaps risky compound movements for safe, biomechanically isolated alternatives.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Visual Card Right */}
+            <div className="relative">
+              <div className="relative rounded-3xl overflow-hidden border border-[#E2E8F0] bg-[#FFFFFF] shadow-2xl shadow-black">
+                <img 
+                  src="/customer-landing-image-1.jpg" 
+                  alt="Intelligent Workout Training" 
+                  loading="eager"
+                  decoding="sync"
+                  className="w-full h-[400px] sm:h-[460px] object-cover object-center block select-none pointer-events-none"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Visual Showcase Section 2: Macro Nutrition & Diet Planner */}
+      <section className="py-20 border-t border-[#E2E8F0] bg-[#FFFFFF]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+            {/* Visual Card Left */}
+            <div className="relative order-2 lg:order-1">
+              <div className="relative rounded-3xl overflow-hidden border border-[#E2E8F0] bg-[#FFFFFF] shadow-2xl shadow-black">
+                <img 
+                  src="/customer-landing-image-3.jpg" 
+                  alt="Nutrition & Diet Meal Plan" 
+                  loading="eager"
+                  decoding="sync"
+                  className="w-full h-[400px] sm:h-[460px] object-cover object-center block select-none pointer-events-none"
+                />
+              </div>
+            </div>
+
+            {/* Copy Right */}
+            <div className="order-1 lg:order-2">
+
+              <h2 className="text-3xl sm:text-4xl font-black text-[#111827] tracking-tight mb-4 leading-snug">
+                Nutrition Engineered Around Your Metabolism
+              </h2>
+              <p className="text-[#64748B] text-base leading-relaxed mb-6">
+                Exercise is only half the battle. Our nutritional engine generates meal schedules that match your caloric deficit or surplus targets, complete with regional grocery recipes and dietary preferences.
+              </p>
+
+              <div className="space-y-4 mb-8">
+                <div className="flex items-start gap-3.5">
+                  <div className="w-6 h-6 rounded-lg bg-[#FFF7ED] text-[#EA580C] flex items-center justify-center shrink-0 mt-1">
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-[#111827] text-sm">Flexible Dietary Preferences (Veg, Non-Veg, Keto)</h4>
+                    <p className="text-xs text-[#64748B] mt-0.5">Easily switch between high-protein vegetarian, plant-based vegan, low-carb, and standard macro-balanced eating styles.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3.5">
+                  <div className="w-6 h-6 rounded-lg bg-[#FFF7ED] text-[#EA580C] flex items-center justify-center shrink-0 mt-1">
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-[#111827] text-sm">Pre & Post-Workout Nutrient Timing</h4>
+                    <p className="text-xs text-[#64748B] mt-0.5">Get timely alerts telling you what fast-acting carbs to eat 45 minutes before training and optimal whey protein recovery meals.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3.5">
+                  <div className="w-6 h-6 rounded-lg bg-[#FFF7ED] text-[#EA580C] flex items-center justify-center shrink-0 mt-1">
+                    <CheckCircle2 size={16} />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-[#111827] text-sm">Hydration & Water Intake Reminders</h4>
+                    <p className="text-xs text-[#64748B] mt-0.5">Stay optimally hydrated throughout the day with one-tap water logging and electrolyte balance guidance.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Visual Showcase Section 3: Trainer Coaching, Gym Marketplace & Streaks — Interactive Tab Switcher */}
+      <section className="py-20 border-t border-[#E2E8F0] bg-[#F8FAFC]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          {/* Section Header */}
+          <div className="text-center max-w-2xl mx-auto mb-10">
+            <h2 className="text-3xl sm:text-4xl font-black text-[#111827] tracking-tight">
+              Work With Elite Coaches &amp; Stay Accountable
+            </h2>
+            <p className="text-sm text-[#64748B] mt-2">
+              Transform alone or connect with certified mentors who push your boundaries and celebrate your wins.
+            </p>
+          </div>
+
+          {/* Tab Selectors */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mb-10">
+            {coachingCards.map((card, idx) => {
+              const Icon = card.icon;
+              const isActive = activeCoachingCard === idx;
+              return (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setActiveCoachingCard(idx)}
+                  className={`flex items-center gap-2.5 px-5 py-3 rounded-2xl border text-sm font-semibold transition-all duration-200 cursor-pointer ${
+                    isActive
+                      ? 'bg-[#C2410C] text-white border-[#FDBA74] shadow-lg shadow-orange-500/15'
+                      : 'bg-[#FFFFFF] text-[#64748B] border-[#E2E8F0] hover:border-[#FFEDD5] hover:text-[#111827]'
+                  }`}
+                >
+                  <Icon size={16} />
+                  <span>{card.title}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Content Panel — alternating image/text layout */}
+          {coachingCards.map((card, idx) => {
+            const Icon = card.icon;
+            const isActive = activeCoachingCard === idx;
+            const imageLeft = idx % 2 === 0; // 0 → image left, 1 → image right, 2 → image left
+
+            return (
+              <div
+                key={idx}
+                className={`transition-all duration-300 ${isActive ? 'block' : 'hidden'}`}
+              >
+                <div className={`grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-center`}>
+                  {/* Image */}
+                  <div className={`relative ${imageLeft ? 'lg:order-1' : 'lg:order-2'}`}>
+                    <div className="relative rounded-3xl overflow-hidden border border-[#E2E8F0] shadow-2xl shadow-black bg-[#FFFFFF]">
+                      <img
+                        src={card.img}
+                        alt={card.alt}
+                        loading="eager"
+                        className="w-full h-[320px] sm:h-[400px] object-cover block select-none pointer-events-none"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#FFFFFF]/60 via-transparent to-transparent pointer-events-none" />
+                    </div>
+                  </div>
+
+                  {/* Content */}
+                  <div className={`${imageLeft ? 'lg:order-2' : 'lg:order-1'}`}>
+                    <h3 className="text-2xl sm:text-3xl font-black text-[#111827] tracking-tight mb-4 leading-snug">
+                      {card.title}
+                    </h3>
+                    <p className="text-[#64748B] text-base leading-relaxed">
+                      {card.desc}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Everything Designed for Your Transformation — Interactive Auto-Scrolling Showcase */}
+      <section className="py-20 border-t border-[#E2E8F0] bg-[#FFFFFF]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center max-w-2xl mx-auto mb-12">
+            <h2 className="text-3xl sm:text-4xl font-black text-[#111827] tracking-tight">
+              Everything Designed for Your Transformation
+            </h2>
+            <p className="text-sm text-[#64748B] mt-2">
+              From day 1 check-in to your milestone PRs, enjoy intelligent tools that keep you consistent, safe, and motivated.
+            </p>
+          </div>
+
+          {/* Navigation Tabs Header */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-8">
+            <div className="flex items-center gap-2 overflow-x-auto max-w-full pb-2 sm:pb-0 scrollbar-none w-full sm:w-auto">
+              {transformationFeatures.map((feat, idx) => {
+                const Icon = feat.icon;
+                const isActive = activeTransformationIndex === idx;
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setActiveTransformationIndex(idx)}
+                    className={`flex items-center gap-2 px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl border text-xs sm:text-sm font-semibold transition-all duration-200 shrink-0 cursor-pointer ${
+                      isActive
+                        ? 'bg-[#C2410C] text-white border-[#FDBA74] shadow-lg shadow-orange-500/15 font-bold'
+                        : 'bg-[#FFFFFF] text-[#64748B] border-[#E2E8F0] hover:border-[#FFEDD5] hover:text-[#111827]'
+                    }`}
+                  >
+                    <Icon size={14} />
+                    <span>{feat.title}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Prev / Next controls */}
+            <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+              <button
+                type="button"
+                onClick={() =>
+                  setActiveTransformationIndex((prev) =>
+                    prev === 0 ? transformationFeatures.length - 1 : prev - 1
+                  )
+                }
+                aria-label="Previous feature"
+                className="w-10 h-10 rounded-xl bg-[#FFFFFF] border border-[#E2E8F0] hover:border-[#FDBA74] text-[#111827] flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <ArrowLeft size={16} />
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setActiveTransformationIndex((prev) => (prev + 1) % transformationFeatures.length)
+                }
+                aria-label="Next feature"
+                className="w-10 h-10 rounded-xl bg-[#FFFFFF] border border-[#E2E8F0] hover:border-[#FDBA74] text-[#111827] flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <ArrowRight size={16} />
+              </button>
+            </div>
+          </div>
+
+          {/* Active Item Showcase with consistent, properly arranged layout */}
+          <div className="relative">
+            {transformationFeatures.map((feat, idx) => {
+              const Icon = feat.icon;
+              const isActive = activeTransformationIndex === idx;
+
+              return (
+                <div
+                  key={idx}
+                  className={isActive ? 'block' : 'hidden'}
+                >
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-14 items-center bg-[#FFFFFF] border border-[#E2E8F0] rounded-3xl p-6 sm:p-10 shadow-xl">
+                    {/* Image Block - Consistently arranged on the left */}
+                    <div className="relative order-1">
+                      <div className="relative rounded-2xl overflow-hidden border border-[#E2E8F0] shadow-md bg-[#F8FAFC]">
+                        <img
+                          src={feat.img}
+                          alt={feat.alt}
+                          loading="eager"
+                          draggable={false}
+                          className="w-full h-[280px] sm:h-[380px] object-cover block select-none pointer-events-none"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Content Block - Consistently arranged on the right */}
+                    <div className="order-2">
+                      <h3 className="text-2xl sm:text-3xl font-black text-[#111827] tracking-tight mb-4 leading-snug">
+                        {feat.title}
+                      </h3>
+                      <p className="text-[#64748B] text-base leading-relaxed mb-6">
+                        {feat.desc}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {feat.tags.map((tag, tIdx) => (
+                          <span
+                            key={tIdx}
+                            className="text-xs font-semibold px-3 py-1 rounded-lg bg-[#FFFFFF] text-[#111827] border border-[#E2E8F0]"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+
+                      {/* Indicator Dots */}
+                      <div className="flex items-center gap-2 mt-8 pt-6 border-t border-[#E2E8F0]/60">
+                        {transformationFeatures.map((_, dotIdx) => (
+                          <button
+                            key={dotIdx}
+                            type="button"
+                            onClick={() => setActiveTransformationIndex(dotIdx)}
+                            aria-label={`Go to slide ${dotIdx + 1}`}
+                            className={`h-2 rounded-full transition-all duration-300 cursor-pointer ${
+                              activeTransformationIndex === dotIdx
+                                ? 'w-8 bg-[#C2410C]'
+                                : 'w-2 bg-[#E2E8F0] hover:bg-[#64748B]'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* Discover Premium Gyms (Matches Image 2 & Image 3) */}
+      <section className="py-24 relative overflow-hidden bg-[#FFFFFF] border-t border-[#E2E8F0]" id="gyms">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row justify-between items-end mb-12">
+            <div>
+              <h2 className="text-3xl md:text-4xl font-bold mb-4 text-[#111827]">
+                Discover Premium <span className="text-[#EA580C]">Gyms</span>
+              </h2>
+              <p className="text-[#64748B] max-w-xl">
+                Find and join the best fitness centers in your area. Use your Gymora membership to access state-of-the-art facilities.
+              </p>
+            </div>
+            <Link
+              to="/gyms"
+              state={{ from: '/portal/customer', fromLabel: 'Back to Customer' }}
+              className="hidden md:flex items-center space-x-2 text-[#EA580C] hover:text-[#9A3412] transition-colors font-semibold mt-4 md:mt-0"
+            >
+              <span>View All Gyms</span>
+              <ArrowRight size={20} />
+            </Link>
+          </div>
+
+          {gymsLoading ? (
+            <div className="flex justify-center py-16">
+              <Loader2 className="animate-spin text-[#EA580C]" size={40} />
+            </div>
+          ) : featuredGyms.length === 0 ? (
+            <div className="grid md:grid-cols-3 gap-8">
+              {[
+                { name: 'Iron Forge Barbell', location: 'Downtown Metro', rating: 4.9, image: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?q=80&w=1470&auto=format&fit=crop', tags: ['24/7 Access', 'Free Weights'] },
+                { name: 'Apex Athletics', location: 'Westside District', rating: 4.8, image: 'https://images.unsplash.com/photo-1540497077202-7c8a3999166f?q=80&w=1470&auto=format&fit=crop', tags: ['CrossFit', 'Sauna'] },
+                { name: 'Velocity Fitness Studio', location: 'North Hills', rating: 4.7, image: 'https://images.unsplash.com/photo-1571902943202-507ec2618e8f?q=80&w=1375&auto=format&fit=crop', tags: ['Cardio', 'Pool'] }
+              ].map((gym, idx) => (
+                <div key={idx} className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl overflow-hidden group cursor-pointer hover:border-[#FFEDD5] transition-colors">
+                  <div className="h-48 overflow-hidden relative">
+                    <img src={gym.image} alt={gym.name} draggable={false} className="w-full h-full object-cover select-none pointer-events-none" />
+                    <div className="absolute top-4 right-4 bg-black/75 backdrop-blur-md px-2 py-1 rounded-lg flex items-center space-x-1 border border-[#E2E8F0]">
+                      <Star size={14} className="text-[#EA580C]" fill="currentColor" />
+                      <span className="text-xs font-bold text-white">{gym.rating}</span>
+                    </div>
+                  </div>
+                  <div className="p-6">
+                    <h3 className="text-xl font-bold mb-1 text-[#111827]">{gym.name}</h3>
+                    <div className="flex items-center space-x-1 text-[#64748B] text-sm mb-4">
+                      <MapPin size={14} className="text-[#EA580C]" />
+                      <span>{gym.location}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {gym.tags.map((tag, tIdx) => (
+                        <span key={tIdx} className="text-xs font-medium px-2 py-1 bg-[#F8FAFC] rounded-md text-[#64748B] border border-[#E2E8F0]">{tag}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-3 gap-8">
+              {featuredGyms.map((gym) => (
+                <Link
+                  key={gym._id}
+                  to={`/gyms/${gym._id}`}
+                  className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl overflow-hidden group hover:border-[#FFEDD5] hover:shadow-[0_0_25px_rgba(183,110,121,0.2)] transition-all duration-300 block"
+                >
+                  <div className="h-48 overflow-hidden relative">
+                    {gym.logo ? (
+                      <img src={gym.logo} alt={gym.name} draggable={false} className="w-full h-full object-cover select-none pointer-events-none" />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-[#F8FAFC] to-[#F8FAFC] flex items-center justify-center">
+                        <Activity size={48} className="text-[#EA580C]" />
+                      </div>
+                    )}
+                    <div className="absolute top-4 right-4 bg-black/75 backdrop-blur-md px-2.5 py-1 rounded-lg flex items-center space-x-1 border border-[#E2E8F0]">
+                      <Star size={14} className="text-[#EA580C]" fill="currentColor" />
+                      <span className="text-white text-xs font-bold">{gym.rating || 5}</span>
+                    </div>
+                    {gym.gymType && (
+                      <div className="absolute top-4 left-4 bg-[#C2410C] text-white font-bold text-xs px-2.5 py-1 rounded-full shadow-sm">
+                        {gym.gymType}
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-6">
+                    <h3 className="text-xl font-bold mb-1 text-[#111827] group-hover:text-[#EA580C] transition-colors">{gym.name}</h3>
+                    <div className="flex items-start space-x-1.5 text-[#64748B] text-sm mb-4">
+                      <MapPin size={15} className="text-[#EA580C] shrink-0 mt-0.5" />
+                      <div className="line-clamp-2 text-xs font-medium text-[#64748B]">
+                        {[
+                          gym.location?.address,
+                          gym.location?.area,
+                          gym.location?.city,
+                          gym.location?.pinCode
+                        ].filter(Boolean).join(', ') || 'Address not specified'}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 mb-6">
+                      {(gym.facilities || []).slice(0, 2).map((tag: string, tIdx: number) => (
+                        <span key={tIdx} className="text-xs font-medium px-2.5 py-1 bg-[#F8FAFC] rounded-md text-[#64748B] border border-[#E2E8F0]">{tag}</span>
+                      ))}
+                      {gym.facilities?.length > 2 && (
+                        <span className="text-xs font-medium px-2.5 py-1 bg-[#FFF7ED] text-[#EA580C] rounded-md border border-[#FFEDD5]">
+                          +{gym.facilities.length - 2}
+                        </span>
+                      )}
+                    </div>
+                    <div className="pt-4 border-t border-[#E2E8F0] flex items-center justify-end">
+                      <div className="px-5 py-2 bg-[#C2410C] text-white font-bold rounded-xl text-sm font-bold transition-colors shadow-md shadow-orange-500/15 group-hover:bg-[#9A3412]">
+                        View Details
+                      </div>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+
+          {/* Mobile View All link */}
+          <div className="mt-8 text-center md:hidden">
+            <Link
+              to="/gyms"
+              state={{ from: '/portal/customer', fromLabel: 'Back to Customer' }}
+              className="inline-flex items-center gap-2 text-[#EA580C] hover:text-[#9A3412] font-semibold"
+            >
+              View All Gyms <ArrowRight size={18} />
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Member CTA Section */}
+      <section className="py-16 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="bg-gradient-to-r from-[#FFFFFF] to-[#F8FAFC] border border-[#E2E8F0] rounded-3xl p-8 sm:p-12 text-center relative overflow-hidden">
+          <div className="w-14 h-14 bg-[#FFF7ED] text-[#EA580C] rounded-2xl flex items-center justify-center mx-auto mb-5 border border-[#FFEDD5]">
+            <Flame size={28} />
+          </div>
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-[#111827] mb-3">
+            Start Your Fitness Journey Today
+          </h2>
+          <p className="text-sm sm:text-base text-[#64748B] max-w-xl mx-auto mb-8">
+            Create an account in minutes or log in to view today’s workout, check your diet macro targets, and book your next trainer session.
+          </p>
+
+          <div className="flex flex-wrap items-center justify-center gap-6 text-xs text-[#64748B] mb-8">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 size={16} className="text-[#EA580C]" />
+              <span>Free AI Fitness Assessment</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <CheckCircle2 size={16} className="text-[#EA580C]" />
+              <span>Certified Trainer Network</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <CheckCircle2 size={16} className="text-[#EA580C]" />
+              <span>Instant QR Check-ins</span>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <Link
+              to="/gyms"
+              state={{ from: '/portal/customer', fromLabel: 'Back to Customer' }}
+              className="w-full sm:w-auto px-8 py-3.5 bg-[#C2410C] hover:bg-[#9A3412] text-white font-bold rounded-xl transition-all shadow-lg shadow-orange-500/15"
+            >
+              <span>Explore All Gyms</span>
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <CustomerPortalFooter />
+
+      {/* ── Modal 1: Step-by-Step AI Workout Plan Modal ── */}
+      {showAiWorkoutModal && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setShowAiWorkoutModal(false)}
+        >
+          <div 
+            className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl p-6 sm:p-8 relative text-[#111827] scrollbar-thin scrollbar-thumb-[#E2E8F0]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close Button */}
+            <button
+              onClick={() => setShowAiWorkoutModal(false)}
+              className="absolute top-5 right-5 w-8 h-8 rounded-lg bg-[#FFFFFF] hover:bg-[#FFF7ED] border border-[#E2E8F0] flex items-center justify-center text-[#64748B] hover:text-[#C2410C] transition-colors"
+              aria-label="Close modal"
+            >
+              <X size={18} />
+            </button>
+
+            {/* Header */}
+            <div className="flex items-center space-x-3 mb-2">
+              <div className="w-10 h-10 rounded-xl bg-[#FFF7ED] border border-[#FFEDD5] flex items-center justify-center text-[#EA580C]">
+                <Bot size={22} />
+              </div>
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-[#EA580C]">AI Fitness Engine</span>
+                <h3 className="text-xl font-bold text-[#111827]">AI Workout Plan Generation &amp; Execution</h3>
+              </div>
+            </div>
+            <p className="text-sm text-[#64748B] mb-6">
+              A 6-step guided walkthrough of how Gymora AI designs, adapts, and executes your personalized training program.
+            </p>
+
+            {/* Step Navigation Tabs */}
+            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-6">
+              {[
+                { step: 1, label: '1. Goal & Level' },
+                { step: 2, label: '2. Biometrics' },
+                { step: 3, label: '3. Equipment' },
+                { step: 4, label: '4. AI Volume' },
+                { step: 5, label: '5. Rep Player' },
+                { step: 6, label: '6. Auto-Adapt' },
+              ].map((item) => (
+                <button
+                  key={item.step}
+                  onClick={() => setActiveWorkoutStep(item.step)}
+                  className={`py-2 px-2 rounded-xl text-xs font-bold transition-all text-center border cursor-pointer ${
+                    activeWorkoutStep === item.step
+                      ? 'bg-[#C2410C] text-white border-[#FDBA74] shadow-md shadow-orange-500/15'
+                      : 'bg-[#FFFFFF] text-[#64748B] border-[#E2E8F0] hover:border-[#FFEDD5]'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Step Content Container */}
+            <div className="p-5 rounded-2xl bg-[#FFFFFF] border border-[#E2E8F0] mb-6 min-h-[290px] flex flex-col justify-between">
+              
+              {/* Step 1 */}
+              {activeWorkoutStep === 1 && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  <div className="flex items-center gap-2">
+                    <span className="w-7 h-7 rounded-lg bg-[#FFF7ED] text-[#EA580C] font-black text-xs flex items-center justify-center">1</span>
+                    <h4 className="font-bold text-[#111827] text-base">Goal Calibration &amp; Training Experience</h4>
+                  </div>
+                  <p className="text-xs text-[#64748B] leading-relaxed">
+                    The engine begins by establishing your primary fitness aspiration and evaluating your neuromuscular baseline.
+                  </p>
+                  
+                  <div className="grid sm:grid-cols-2 gap-3 pt-1">
+                    <div className="p-3.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0]">
+                      <div className="text-xs font-bold text-white mb-1">Target Objectives</div>
+                      <p className="text-[11px] text-[#64748B]">Hypertrophy (Muscle Gain), Fat Loss &amp; Definition, Maximal Strength, or Athletic Conditioning.</p>
+                    </div>
+                    <div className="p-3.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0]">
+                      <div className="text-xs font-bold text-white mb-1">Experience Baseline</div>
+                      <p className="text-[11px] text-[#64748B]">Beginner (&lt;6 mos), Intermediate (1-3 yrs), or Advanced lifter (3+ yrs) to calibrate volume thresholds.</p>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-[#FFF7ED] border border-[#FFEDD5] text-xs text-[#CBD5E1]">
+                    <strong className="text-[#EA580C]">AI Algorithmic Rule:</strong> Beginners receive 10-12 weekly sets per muscle group for neural adaptation; advanced lifters scale to 16-22 sets for continued hypertrophy.
+                  </div>
+                </div>
+              )}
+
+              {/* Step 2 */}
+              {activeWorkoutStep === 2 && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  <div className="flex items-center gap-2">
+                    <span className="w-7 h-7 rounded-lg bg-[#FFF7ED] text-[#EA580C] font-black text-xs flex items-center justify-center">2</span>
+                    <h4 className="font-bold text-[#111827] text-base">Biometric Profile &amp; Injury Screening</h4>
+                  </div>
+                  <p className="text-xs text-[#64748B] leading-relaxed">
+                    Gymora cross-checks your anatomical height, body weight, past orthopedic history, and joint limitations before generating movements.
+                  </p>
+
+                  <div className="grid sm:grid-cols-2 gap-3 pt-1">
+                    <div className="p-3.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0]">
+                      <div className="text-xs font-bold text-white mb-1">Orthopedic Limitation Tagging</div>
+                      <p className="text-[11px] text-[#64748B]">Screening for lower-back pain, rotator cuff impingement, patellar tracking, or wrist stiffness.</p>
+                    </div>
+                    <div className="p-3.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0]">
+                      <div className="text-xs font-bold text-white mb-1">Real-time Biomechanical Swaps</div>
+                      <p className="text-[11px] text-[#64748B]">Replaces heavy axial loading with chest-supported rows, dumbbell presses, and belt squats.</p>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300">
+                    <strong>Zero-Injury Guarantee:</strong> Every exercise selected maintains optimal joint alignment without aggravating documented chronic strains.
+                  </div>
+                </div>
+              )}
+
+              {/* Step 3 */}
+              {activeWorkoutStep === 3 && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  <div className="flex items-center gap-2">
+                    <span className="w-7 h-7 rounded-lg bg-[#FFF7ED] text-[#EA580C] font-black text-xs flex items-center justify-center">3</span>
+                    <h4 className="font-bold text-[#111827] text-base">Equipment Availability &amp; Split Selection</h4>
+                  </div>
+                  <p className="text-xs text-[#64748B] leading-relaxed">
+                    Customizes the program to your real gym environment and weekly time commitments.
+                  </p>
+
+                  <div className="grid sm:grid-cols-3 gap-2.5 pt-1">
+                    <div className="p-3 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-center">
+                      <Dumbbell size={20} className="text-[#EA580C] mx-auto mb-1" />
+                      <div className="text-xs font-bold text-white">Full Gym</div>
+                      <p className="text-[10px] text-[#64748B] mt-0.5">Barbells, Cables &amp; Machines</p>
+                    </div>
+                    <div className="p-3 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-center">
+                      <Target size={20} className="text-[#EA580C] mx-auto mb-1" />
+                      <div className="text-xs font-bold text-white">Home Setup</div>
+                      <p className="text-[10px] text-[#64748B] mt-0.5">Dumbbells &amp; Bands</p>
+                    </div>
+                    <div className="p-3 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-center">
+                      <Activity size={20} className="text-[#EA580C] mx-auto mb-1" />
+                      <div className="text-xs font-bold text-white">Bodyweight</div>
+                      <p className="text-[10px] text-[#64748B] mt-0.5">Calisthenics &amp; Mobility</p>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-[#CBD5E1]">
+                    Splits generated: <span className="text-[#EA580C] font-semibold">3-Day Full Body</span>, <span className="text-[#EA580C] font-semibold">4-Day Upper/Lower</span>, or <span className="text-[#EA580C] font-semibold">5-Day Push/Pull/Legs</span>.
+                  </p>
+                </div>
+              )}
+
+              {/* Step 4 */}
+              {activeWorkoutStep === 4 && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  <div className="flex items-center gap-2">
+                    <span className="w-7 h-7 rounded-lg bg-[#FFF7ED] text-[#EA580C] font-black text-xs flex items-center justify-center">4</span>
+                    <h4 className="font-bold text-[#111827] text-base">AI Volume Synthesis &amp; Progressive Overload</h4>
+                  </div>
+                  <p className="text-xs text-[#64748B] leading-relaxed">
+                    Gymora calculates exact working sets, rep schemes, rest durations, and RPE (Rate of Perceived Exertion) targets.
+                  </p>
+
+                  <div className="grid sm:grid-cols-2 gap-3 pt-1">
+                    <div className="p-3.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0]">
+                      <div className="text-xs font-bold text-white mb-1">Rep-in-Reserve (RIR 1-2)</div>
+                      <p className="text-[11px] text-[#64748B]">Ensures sets are taken close to muscular failure for maximum stimulus without systemic nervous fatigue.</p>
+                    </div>
+                    <div className="p-3.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0]">
+                      <div className="text-xs font-bold text-white mb-1">Ramping Warm-Up Protocol</div>
+                      <p className="text-[11px] text-[#64748B]">Generates dynamic joint warm-ups followed by 3 specific ramping sets before working loads.</p>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-[#FFF7ED] border border-[#FFEDD5] text-xs text-[#CBD5E1]">
+                    <strong className="text-[#EA580C]">Dynamic Overload:</strong> When target reps are achieved with good form, the engine schedules a 2.5% weight increment for the next session.
+                  </div>
+                </div>
+              )}
+
+              {/* Step 5 */}
+              {activeWorkoutStep === 5 && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  <div className="flex items-center gap-2">
+                    <span className="w-7 h-7 rounded-lg bg-[#FFF7ED] text-[#EA580C] font-black text-xs flex items-center justify-center">5</span>
+                    <h4 className="font-bold text-[#111827] text-base">Interactive Rep Player &amp; Rest Timers</h4>
+                  </div>
+                  <p className="text-xs text-[#64748B] leading-relaxed">
+                    During the workout, the app guides you rep-by-rep with built-in timers, cues, and live weight logging.
+                  </p>
+
+                  <div className="p-3.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-[#EA580C] flex items-center gap-1.5"><Timer size={14} /> Built-in Rest Intervals</span>
+                      <span className="text-[#64748B]">90s countdown with audio chime</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-white flex items-center gap-1.5"><Play size={14} className="text-[#EA580C]" /> 4K Form Coaching Videos</span>
+                      <span className="text-[#64748B]">Cues: "Shoulders pinned, elbows tucked"</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-white flex items-center gap-1.5"><Check size={14} className="text-[#15803D]" /> 1-Tap Metric Logging</span>
+                      <span className="text-[#64748B]">Logs completed weight and reps seamlessly</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 6 */}
+              {activeWorkoutStep === 6 && (
+                <div className="space-y-4 animate-in fade-in duration-150">
+                  <div className="flex items-center gap-2">
+                    <span className="w-7 h-7 rounded-lg bg-[#FFF7ED] text-[#EA580C] font-black text-xs flex items-center justify-center">6</span>
+                    <h4 className="font-bold text-[#111827] text-base">Fatigue Rating &amp; Dynamic Adaptation</h4>
+                  </div>
+                  <p className="text-xs text-[#64748B] leading-relaxed">
+                    After completing the session, you rate muscle soreness and overall exertion to train smarter, not just harder.
+                  </p>
+
+                  <div className="grid sm:grid-cols-2 gap-3 pt-1">
+                    <div className="p-3.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0]">
+                      <div className="text-xs font-bold text-white mb-1">Auto-Regulated Recovery</div>
+                      <p className="text-[11px] text-[#64748B]">If post-workout fatigue exceeds recovery thresholds, volume is reduced by 15% to avoid overtraining.</p>
+                    </div>
+                    <div className="p-3.5 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0]">
+                      <div className="text-xs font-bold text-white mb-1">Deload Week Scheduling</div>
+                      <p className="text-[11px] text-[#64748B]">Every 5th or 6th week is structured with active recovery sets to reset joint readiness and central nervous fatigue.</p>
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300">
+                    <strong>Complete Program Lifecycle:</strong> You're always progressing on an intelligent, self-correcting fitness trajectory.
+                  </div>
+                </div>
+              )}
+
+              {/* Step Navigation Controls */}
+              <div className="flex items-center justify-between pt-4 border-t border-[#E2E8F0] mt-4">
+                <button
+                  type="button"
+                  disabled={activeWorkoutStep === 1}
+                  onClick={() => setActiveWorkoutStep(prev => Math.max(1, prev - 1))}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors ${
+                    activeWorkoutStep === 1 
+                      ? 'opacity-40 cursor-not-allowed text-[#64748B] bg-[#F8FAFC]' 
+                      : 'bg-[#F8FAFC] text-[#111827] hover:bg-[#F8FAFC] cursor-pointer'
+                  }`}
+                >
+                  <ChevronLeft size={16} />
+                  <span>Previous</span>
+                </button>
+
+                <span className="text-xs text-[#64748B] font-medium">
+                  Step {activeWorkoutStep} of 6
+                </span>
+
+                {activeWorkoutStep < 6 ? (
+                  <button
+                    type="button"
+                    onClick={() => setActiveWorkoutStep(prev => Math.min(6, prev + 1))}
+                    className="px-5 py-2 rounded-xl text-xs font-bold bg-[#C2410C] text-white hover:bg-[#9A3412] flex items-center gap-1.5 transition-all shadow-md shadow-orange-500/15 cursor-pointer"
+                  >
+                    <span>Next Step</span>
+                    <ChevronRight size={16} />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowAiWorkoutModal(false)}
+                    className="px-5 py-2 rounded-xl text-xs font-bold bg-[#C2410C] text-white hover:bg-[#9A3412] transition-all cursor-pointer"
+                  >
+                    Close Walkthrough
+                  </button>
+                )}
+              </div>
+
+            </div>
+
+            {/* Bottom Actions */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-[#E2E8F0]">
+              <span className="text-xs text-[#64748B]">Ready to experience the interactive workout player?</span>
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <Link
+                  to="/register/customer"
+                  onClick={() => setShowAiWorkoutModal(false)}
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-[#C2410C] hover:bg-[#9A3412] text-white font-bold text-xs transition-all text-center"
+                >
+                  Create Account &amp; Start
+                </Link>
+                <button
+                  onClick={() => setShowAiWorkoutModal(false)}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-[#FFFFFF] hover:bg-[#FFF7ED] text-[#64748B] hover:text-[#C2410C] text-xs border border-[#E2E8F0] transition-all text-center"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal 2: Diet & Meal Plan Flowchart Modal ── */}
+      {showDietFlowchartModal && (
+        <div 
+          className="fixed inset-0 z-[999] flex items-center justify-center bg-black/80 backdrop-blur-sm px-2 py-6 animate-in fade-in duration-200"
+          onClick={() => setShowDietFlowchartModal(false)}
+        >
+          <div
+            className="relative w-full max-w-4xl max-h-[92vh] overflow-y-auto bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl shadow-2xl shadow-black/70 scrollbar-thin scrollbar-thumb-[#E2E8F0]"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="sticky top-0 z-20 flex items-center justify-between px-6 py-4 bg-[#FFFFFF]/95 backdrop-blur-md border-b border-[#E2E8F0]">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-[#FFF7ED] border border-[#FFEDD5] rounded-xl flex items-center justify-center text-[#EA580C]">
+                  <GitBranch size={20} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-[#EA580C] bg-[#FFF7ED] border border-[#FFEDD5] px-2 py-0.5 rounded-full">Nutrition Engine</span>
+                    <span className="text-[10px] text-[#64748B]">7-Stage Flowchart</span>
+                  </div>
+                  <h2 className="text-lg font-bold text-[#111827]">AI Diet &amp; Meal Planning Architecture</h2>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowDietFlowchartModal(false)} 
+                className="w-8 h-8 flex items-center justify-center rounded-lg bg-[#F8FAFC] hover:bg-[#E2E8F0] text-[#64748B] hover:text-[#111827] transition-all"
+                aria-label="Close modal"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Introduction Banner */}
+            <div className="px-6 pt-5 pb-2">
+              <p className="text-xs text-[#64748B] leading-relaxed">
+                This flowchart visualizes the science-based nutritional pipeline: from BMR &amp; metabolic calculation and caloric target sizing to macronutrient optimization, 5-meal daily distribution, hydration reminders, and weekly auto-recalibration.
+              </p>
+            </div>
+
+            {/* SVG Flowchart Container */}
+            <div className="p-4 sm:p-6 overflow-x-auto flex justify-center bg-[#F8FAFC]">
+              <svg 
+                viewBox="0 0 760 980" 
+                xmlns="http://www.w3.org/2000/svg" 
+                style={{ width: '100%', maxWidth: '760px', minWidth: '640px', display: 'block' }}
+              >
+                <defs>
+                  <marker id="dt-arr" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+                    <polygon points="0 0, 9 3.5, 0 7" fill="#F97316" />
+                  </marker>
+                  <marker id="dt-arrG" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+                    <polygon points="0 0, 9 3.5, 0 7" fill="#15803D" />
+                  </marker>
+                  <marker id="dt-arrR" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+                    <polygon points="0 0, 9 3.5, 0 7" fill="#B91C1C" />
+                  </marker>
+                </defs>
+
+                {/* ── START ── */}
+                <ellipse cx="380" cy="30" rx="100" ry="20" fill="#F8FAFC" stroke="#F97316" strokeWidth="2" />
+                <text x="380" y="35" textAnchor="middle" fill="#F97316" fontSize="12" fontWeight="800" fontFamily="ui-sans-serif,sans-serif">START: NUTRITION &amp; MEAL PLAN</text>
+
+                {/* Arrow down to Stage 1 */}
+                <line x1="380" y1="50" x2="380" y2="70" stroke="#F97316" strokeWidth="1.5" markerEnd="url(#dt-arr)" />
+
+                {/* ── Stage 1: BMR & TDEE ── */}
+                <rect x="200" y="70" width="360" height="48" rx="8" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="1.5" />
+                <text x="380" y="89" textAnchor="middle" fill="#111827" fontSize="12" fontWeight="700" fontFamily="ui-sans-serif,sans-serif">1. BMR &amp; Total Daily Energy Expenditure (TDEE)</text>
+                <text x="380" y="105" textAnchor="middle" fill="#64748B" fontSize="10" fontFamily="ui-sans-serif,sans-serif">Calculated using Mifflin-St Jeor formula &amp; activity multiplier</text>
+
+                {/* Arrow down to Stage 2 */}
+                <line x1="380" y1="118" x2="380" y2="138" stroke="#F97316" strokeWidth="1.5" markerEnd="url(#dt-arr)" />
+
+                {/* ── Stage 2: Caloric Goal Target ── */}
+                <rect x="200" y="138" width="360" height="48" rx="8" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="1.5" />
+                <text x="380" y="157" textAnchor="middle" fill="#111827" fontSize="12" fontWeight="700" fontFamily="ui-sans-serif,sans-serif">2. Caloric Goal Target Formulation</text>
+                <text x="380" y="173" textAnchor="middle" fill="#64748B" fontSize="10" fontFamily="ui-sans-serif,sans-serif">Deficit (-500 kcal for cutting) or Surplus (+300 kcal for lean bulk)</text>
+
+                {/* Arrow down to Stage 3 */}
+                <line x1="380" y1="186" x2="380" y2="206" stroke="#F97316" strokeWidth="1.5" markerEnd="url(#dt-arr)" />
+
+                {/* ── Stage 3: Macronutrient Split ── */}
+                <rect x="200" y="206" width="360" height="48" rx="8" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="1.5" />
+                <text x="380" y="225" textAnchor="middle" fill="#111827" fontSize="12" fontWeight="700" fontFamily="ui-sans-serif,sans-serif">3. Precision Macronutrient Split Ratio</text>
+                <text x="380" y="241" textAnchor="middle" fill="#64748B" fontSize="10" fontFamily="ui-sans-serif,sans-serif">Protein: 2.0g/kg • Carbohydrates: 45-55% • Essential Healthy Fats: 25%</text>
+
+                {/* Arrow down to Stage 4 */}
+                <line x1="380" y1="254" x2="380" y2="274" stroke="#F97316" strokeWidth="1.5" markerEnd="url(#dt-arr)" />
+
+                {/* ── Stage 4: Dietary Preferences & Allergies ── */}
+                <rect x="200" y="274" width="360" height="48" rx="8" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="1.5" />
+                <text x="380" y="293" textAnchor="middle" fill="#111827" fontSize="12" fontWeight="700" fontFamily="ui-sans-serif,sans-serif">4. Dietary Preference &amp; Allergy Filtering</text>
+                <text x="380" y="309" textAnchor="middle" fill="#64748B" fontSize="10" fontFamily="ui-sans-serif,sans-serif">Vegetarian, Vegan, High-Protein Non-Veg, Keto, Gluten/Dairy-Free, Jain</text>
+
+                {/* Arrow down to Decision */}
+                <line x1="380" y1="322" x2="380" y2="342" stroke="#F97316" strokeWidth="1.5" markerEnd="url(#dt-arr)" />
+
+                {/* ── Decision Diamond: Balanced & Feasible? ── */}
+                <polygon points="380,342 510,388 380,434 250,388" fill="#F8FAFC" stroke="#F97316" strokeWidth="2" />
+                <text x="380" y="383" textAnchor="middle" fill="#F97316" fontSize="11" fontWeight="700" fontFamily="ui-sans-serif,sans-serif">Macros &amp; Fiber</text>
+                <text x="380" y="399" textAnchor="middle" fill="#F97316" fontSize="11" fontWeight="700" fontFamily="ui-sans-serif,sans-serif">Balanced?</text>
+
+                {/* NO — right branch */}
+                <line x1="510" y1="388" x2="580" y2="388" stroke="#B91C1C" strokeWidth="1.5" markerEnd="url(#dt-arrR)" />
+                <text x="535" y="380" fill="#B91C1C" fontSize="10" fontWeight="700" fontFamily="ui-sans-serif,sans-serif">NO</text>
+                <rect x="580" y="368" width="140" height="42" rx="8" fill="#FDF2F2" stroke="#B91C1C" strokeWidth="1.5" />
+                <text x="650" y="386" textAnchor="middle" fill="#B91C1C" fontSize="10" fontWeight="700" fontFamily="ui-sans-serif,sans-serif">Re-balance Calories</text>
+                <text x="650" y="400" textAnchor="middle" fill="#B91C1C" fontSize="9" fontFamily="ui-sans-serif,sans-serif">Auto-adjust macro splits</text>
+
+                {/* YES — down branch */}
+                <line x1="380" y1="434" x2="380" y2="464" stroke="#15803D" strokeWidth="1.5" markerEnd="url(#dt-arrG)" />
+                <text x="390" y="453" fill="#15803D" fontSize="10" fontWeight="700" fontFamily="ui-sans-serif,sans-serif">YES</text>
+
+                {/* ── Milestone: 5-Meal Daily Nutrition Architecture ── */}
+                <rect x="160" y="464" width="440" height="52" rx="10" fill="#F8FAFC" stroke="#F97316" strokeWidth="2.5" />
+                <text x="380" y="487" textAnchor="middle" fill="#F97316" fontSize="13" fontWeight="800" fontFamily="ui-sans-serif,sans-serif">5-Meal Daily Nutrition Architecture</text>
+                <text x="380" y="505" textAnchor="middle" fill="#64748B" fontSize="10" fontFamily="ui-sans-serif,sans-serif">Synchronized with your training schedule for optimal nutrient timing</text>
+
+                {/* ── Branching to 3 Parallel Meal Distribution Tracks ── */}
+                <line x1="380" y1="516" x2="380" y2="540" stroke="#F97316" strokeWidth="1.5" />
+                {/* Horizontal Bus Line */}
+                <line x1="130" y1="540" x2="630" y2="540" stroke="#F97316" strokeWidth="1.5" />
+                {/* 3 verticals */}
+                <line x1="130" y1="540" x2="130" y2="564" stroke="#F97316" strokeWidth="1.5" markerEnd="url(#dt-arr)" />
+                <line x1="380" y1="540" x2="380" y2="564" stroke="#F97316" strokeWidth="1.5" markerEnd="url(#dt-arr)" />
+                <line x1="630" y1="540" x2="630" y2="564" stroke="#F97316" strokeWidth="1.5" markerEnd="url(#dt-arr)" />
+
+                {/* ── Track A: Pre-Workout & Breakfast ── */}
+                <rect x="25" y="564" width="210" height="48" rx="8" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="1.5" />
+                <text x="130" y="583" textAnchor="middle" fill="#111827" fontSize="11" fontWeight="700" fontFamily="ui-sans-serif,sans-serif">A. Breakfast &amp; Pre-Workout</text>
+                <text x="130" y="599" textAnchor="middle" fill="#64748B" fontSize="9" fontFamily="ui-sans-serif,sans-serif">Complex carbs (oats) + eggs/whey</text>
+
+                {/* Sub-step A2 */}
+                <line x1="130" y1="612" x2="130" y2="632" stroke="#F97316" strokeWidth="1.5" markerEnd="url(#dt-arr)" />
+                <rect x="25" y="632" width="210" height="46" rx="8" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="1.5" />
+                <text x="130" y="651" textAnchor="middle" fill="#CBD5E1" fontSize="10" fontWeight="600" fontFamily="ui-sans-serif,sans-serif">Pre-Workout Glycogen Top-up</text>
+                <text x="130" y="665" textAnchor="middle" fill="#64748B" fontSize="9" fontFamily="ui-sans-serif,sans-serif">Fast banana/dates 45m before</text>
+
+                {/* ── Track B: Post-Workout & Lunch ── */}
+                <rect x="275" y="564" width="210" height="48" rx="8" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="1.5" />
+                <text x="380" y="583" textAnchor="middle" fill="#111827" fontSize="11" fontWeight="700" fontFamily="ui-sans-serif,sans-serif">B. Post-Workout &amp; Lunch</text>
+                <text x="380" y="599" textAnchor="middle" fill="#64748B" fontSize="9" fontFamily="ui-sans-serif,sans-serif">Rapid whey recovery + electrolytes</text>
+
+                {/* Sub-step B2 */}
+                <line x1="380" y1="612" x2="380" y2="632" stroke="#F97316" strokeWidth="1.5" markerEnd="url(#dt-arr)" />
+                <rect x="275" y="632" width="210" height="46" rx="8" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="1.5" />
+                <text x="380" y="651" textAnchor="middle" fill="#CBD5E1" fontSize="10" fontWeight="600" fontFamily="ui-sans-serif,sans-serif">High-Protein Clean Lunch</text>
+                <text x="380" y="665" textAnchor="middle" fill="#64748B" fontSize="9" fontFamily="ui-sans-serif,sans-serif">Chicken/Paneer + Jasmine rice</text>
+
+                {/* ── Track C: Snacks & Dinner ── */}
+                <rect x="525" y="564" width="210" height="48" rx="8" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="1.5" />
+                <text x="630" y="583" textAnchor="middle" fill="#111827" fontSize="11" fontWeight="700" fontFamily="ui-sans-serif,sans-serif">C. Dinner &amp; Overnight Recovery</text>
+                <text x="630" y="599" textAnchor="middle" fill="#64748B" fontSize="9" fontFamily="ui-sans-serif,sans-serif">Lean protein + leafy vegetables</text>
+
+                {/* Sub-step C2 */}
+                <line x1="630" y1="612" x2="630" y2="632" stroke="#F97316" strokeWidth="1.5" markerEnd="url(#dt-arr)" />
+                <rect x="525" y="632" width="210" height="46" rx="8" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="1.5" />
+                <text x="630" y="651" textAnchor="middle" fill="#CBD5E1" fontSize="10" fontWeight="600" fontFamily="ui-sans-serif,sans-serif">Slow Casein &amp; Healthy Fats</text>
+                <text x="630" y="665" textAnchor="middle" fill="#64748B" fontSize="9" fontFamily="ui-sans-serif,sans-serif">Almonds/Greek yogurt before sleep</text>
+
+                {/* ── Convergence Lines from All 3 Tracks ── */}
+                <line x1="130" y1="678" x2="130" y2="710" stroke="#F97316" strokeWidth="1.5" />
+                <line x1="380" y1="678" x2="380" y2="710" stroke="#F97316" strokeWidth="1.5" />
+                <line x1="630" y1="678" x2="630" y2="710" stroke="#F97316" strokeWidth="1.5" />
+                <line x1="130" y1="710" x2="630" y2="710" stroke="#F97316" strokeWidth="1.5" />
+                <line x1="380" y1="710" x2="380" y2="736" stroke="#F97316" strokeWidth="1.5" markerEnd="url(#dt-arr)" />
+
+                {/* ── Operational Execution: Real-time Hydration & Water Logging ── */}
+                <rect x="180" y="736" width="400" height="50" rx="8" fill="#FFFFFF" stroke="#E2E8F0" strokeWidth="1.5" />
+                <text x="380" y="755" textAnchor="middle" fill="#111827" fontSize="12" fontWeight="700" fontFamily="ui-sans-serif,sans-serif">Real-Time Hydration &amp; Water Intake Logging</text>
+                <text x="380" y="771" textAnchor="middle" fill="#64748B" fontSize="10" fontFamily="ui-sans-serif,sans-serif">3.5L target • Hourly notifications • Electrolyte balance monitoring</text>
+
+                {/* Arrow down to Weekly Adaptation */}
+                <line x1="380" y1="786" x2="380" y2="812" stroke="#15803D" strokeWidth="1.5" markerEnd="url(#dt-arrG)" />
+
+                {/* ── Weekly Weigh-in & Metabolic Auto-Adjustment ── */}
+                <rect x="150" y="812" width="460" height="52" rx="10" fill="#F8FAFC" stroke="#15803D" strokeWidth="2" />
+                <text x="380" y="834" textAnchor="middle" fill="#15803D" fontSize="12" fontWeight="800" fontFamily="ui-sans-serif,sans-serif">Weekly Weigh-in &amp; Metabolic Auto-Adjustment</text>
+                <text x="380" y="852" textAnchor="middle" fill="#CBD5E1" fontSize="10" fontFamily="ui-sans-serif,sans-serif">Weekly scale trend analysis • Automatic +100/-100 kcal recalibration</text>
+
+                {/* Arrow down to Terminal */}
+                <line x1="380" y1="864" x2="380" y2="890" stroke="#15803D" strokeWidth="1.5" markerEnd="url(#dt-arrG)" />
+
+                {/* ── TERMINAL: OPTIMAL NUTRITION ── */}
+                <ellipse cx="380" cy="912" rx="130" ry="22" fill="#F8FAFC" stroke="#15803D" strokeWidth="2.5" />
+                <text x="380" y="917" textAnchor="middle" fill="#15803D" fontSize="12" fontWeight="900" fontFamily="ui-sans-serif,sans-serif">OPTIMAL NUTRITIONAL PROGRESSION</text>
+              </svg>
+            </div>
+
+            {/* Detailed 4-Stage Breakdown Cards */}
+            <div className="p-6 border-t border-[#E2E8F0] space-y-4 bg-[#F8FAFC]">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-[#EA580C] mb-2">Detailed Nutritional Phases:</h3>
+              
+              <div className="grid sm:grid-cols-2 gap-4">
+                <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E2E8F0]">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="w-6 h-6 rounded-md bg-[#FFF7ED] text-[#EA580C] text-xs font-bold flex items-center justify-center">1</span>
+                    <h4 className="font-bold text-[#111827] text-sm">Metabolic Profiling &amp; TDEE</h4>
+                  </div>
+                  <p className="text-xs text-[#64748B] leading-relaxed">
+                    Uses verified scientific formulas (Mifflin-St Jeor) incorporating age, sex, weight, height, and activity level to calculate exact Basal Metabolic Rate and Total Daily Energy Expenditure.
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E2E8F0]">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="w-6 h-6 rounded-md bg-[#FFF7ED] text-[#EA580C] text-xs font-bold flex items-center justify-center">2</span>
+                    <h4 className="font-bold text-[#111827] text-sm">Macronutrient Precision</h4>
+                  </div>
+                  <p className="text-xs text-[#64748B] leading-relaxed">
+                    Proteins are dialed in at 1.8-2.2g per kg of body weight to prevent catabolism. Clean complex carbohydrates fuel workouts, and healthy fats regulate hormone and testosterone production.
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E2E8F0]">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="w-6 h-6 rounded-md bg-[#FFF7ED] text-[#EA580C] text-xs font-bold flex items-center justify-center">3</span>
+                    <h4 className="font-bold text-[#111827] text-sm">Nutrient Timing &amp; 5 Meals</h4>
+                  </div>
+                  <p className="text-xs text-[#64748B] leading-relaxed">
+                    Food intake is distributed across breakfast, pre-workout, post-workout, lunch, and dinner to maximize muscle protein synthesis and maintain stable blood sugar levels without afternoon crashes.
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E2E8F0]">
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="w-6 h-6 rounded-md bg-[#FFF7ED] text-[#EA580C] text-xs font-bold flex items-center justify-center">4</span>
+                    <h4 className="font-bold text-[#111827] text-sm">Weekly Auto-Recalibration</h4>
+                  </div>
+                  <p className="text-xs text-[#64748B] leading-relaxed">
+                    Plateaus are broken automatically. If weight loss slows below target rates for two consecutive weigh-ins, the AI dynamically trims 100-150 daily calories or boosts step count guidance.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer Actions */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-6 py-4 bg-[#FFFFFF] border-t border-[#E2E8F0]">
+              <div className="text-xs text-[#64748B]">
+                Ready to track your daily macros and calories?
+              </div>
+              <div className="flex items-center gap-3 w-full sm:w-auto">
+                <Link
+                  to="/register/customer"
+                  onClick={() => setShowDietFlowchartModal(false)}
+                  className="w-full sm:w-auto px-5 py-2 rounded-xl bg-[#C2410C] hover:bg-[#9A3412] text-white font-bold text-xs transition-all text-center"
+                >
+                  Create Account &amp; Start Diet
+                </Link>
+                <button
+                  onClick={() => setShowDietFlowchartModal(false)}
+                  className="w-full sm:w-auto px-5 py-2 rounded-xl bg-[#FFFFFF] hover:bg-[#F8FAFC] text-[#111827] font-bold text-xs transition-all text-center border border-[#E2E8F0]"
+                >
+                  Close Flowchart
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Features Modal */}
+      {isFeaturesOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-[#FFFFFF]/80 backdrop-blur-sm animate-in fade-in duration-300"
+          onClick={() => setIsFeaturesOpen(false)}
+        >
+          <div
+            className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-3xl w-full max-w-6xl max-h-[90vh] overflow-y-auto overflow-x-hidden shadow-2xl flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex justify-between items-center p-6 border-b border-[#E2E8F0] gap-4">
+              <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-[#111827]">
+                Everything You Need for a Smarter Fitness Journey
+              </h2>
+              <div className="flex items-center gap-2.5 shrink-0">
+                <button
+                  onClick={() => setIsFeaturesOpen(false)}
+                  className="p-2 text-[#64748B] hover:text-[#C2410C] hover:bg-[#FFF7ED] rounded-full transition-colors cursor-pointer"
+                  title="Close"
+                  aria-label="Close"
+                >
+                  <X size={22} />
+                </button>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="flex flex-col lg:flex-row p-6 gap-8 h-full">
+              {/* Sidebar Tabs */}
+              <div className="w-full lg:w-1/3 flex flex-col space-y-4">
+                {[
+                  {
+                    id: 'ai',
+                    title: 'AI Coach',
+                    icon: Bot,
+                    items: [
+                      'AI Fitness Analysis',
+                      'Personalized Workout Recommendations',
+                      'AI Diet Recommendations',
+                      'Daily Fitness Routine',
+                      'Progress-Based Recommendations'
+                    ]
+                  },
+                  {
+                    id: 'gym',
+                    title: 'Gym Discovery',
+                    icon: MapPin,
+                    items: [
+                      'Discover available gyms',
+                      'View gym facilities',
+                      'Equipment information',
+                      'AC / Non-AC information',
+                      'Offers',
+                      'Ratings & Reviews',
+                      'Compare and choose suitable gyms'
+                    ]
+                  },
+                  {
+                    id: 'trainer',
+                    title: 'Human Trainers',
+                    icon: User,
+                    items: [
+                      'Online Trainers',
+                      'Offline Trainers',
+                      'Trainer Expertise',
+                      'Trainer Availability',
+                      'Personalized Workout Guidance',
+                      'Diet Guidance',
+                      'Trainer-based Progress Tracking'
+                    ]
+                  }
+                ].map((tab) => (
+                  <div
+                    key={tab.id}
+                    onClick={() => setActiveFeatureTab(tab.id as any)}
+                    className={`p-5 rounded-2xl cursor-pointer transition-all border-2 ${
+                      activeFeatureTab === tab.id
+                        ? 'border-[#FDBA74] bg-[#F8FAFC] shadow-lg shadow-orange-500/15'
+                        : 'border-transparent bg-[#F8FAFC] hover:border-[#E2E8F0]'
+                    }`}
+                  >
+                    <div className="flex items-center space-x-3 mb-3">
+                      <div className={`p-2 rounded-xl ${activeFeatureTab === tab.id ? 'bg-[#C2410C] text-white' : 'bg-[#F8FAFC] text-[#64748B]'}`}>
+                        <tab.icon size={24} />
+                      </div>
+                      <h3 className={`text-lg font-bold ${activeFeatureTab === tab.id ? 'text-[#EA580C]' : 'text-[#111827]'}`}>
+                        {tab.title}
+                      </h3>
+                    </div>
+                    {activeFeatureTab === tab.id && (
+                      <ul className="space-y-2 mt-4 animate-in slide-in-from-top-2 duration-300">
+                        {tab.items.map((item, idx) => (
+                          <li
+                            key={idx}
+                            className={`flex items-start space-x-2 text-sm transition-colors duration-300 ${
+                              featureSlideIndex === idx ? 'text-[#EA580C] font-bold' : 'text-[#64748B]'
+                            }`}
+                          >
+                            <CheckCircle
+                              size={16}
+                              className={`${featureSlideIndex === idx ? 'text-[#EA580C]' : 'text-[#64748B]'} shrink-0 mt-0.5 transition-colors`}
+                            />
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Preview Area */}
+              <div className="w-full lg:w-2/3 bg-[#F8FAFC] rounded-2xl border border-[#E2E8F0] flex items-center justify-center p-8 relative overflow-hidden">
+                <FeaturePreview
+                  tabId={activeFeatureTab}
+                  slideIndex={featureSlideIndex}
+                  items={
+                    activeFeatureTab === 'ai'
+                      ? ['AI Fitness Analysis', 'Personalized Workout Recommendations', 'AI Diet Recommendations', 'Daily Fitness Routine', 'Progress-Based Recommendations']
+                      : activeFeatureTab === 'gym'
+                      ? ['Discover available gyms', 'View gym facilities', 'Equipment information', 'AC / Non-AC information', 'Offers', 'Ratings & Reviews', 'Compare and choose suitable gyms']
+                      : ['Online Trainers', 'Offline Trainers', 'Trainer Expertise', 'Trainer Availability', 'Personalized Workout Guidance', 'Diet Guidance', 'Trainer-based Progress Tracking']
+                  }
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Customer Journey Interactive Tour Modal */}
+      {isTourOpen && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-[#FFFFFF]/90 backdrop-blur-md animate-in fade-in duration-300"
+          onClick={() => setIsTourOpen(false)}
+        >
+          <div
+            className="relative w-full max-w-6xl bg-[#F8FAFC] rounded-3xl overflow-hidden shadow-[0_0_50px_rgba(183,110,121,0.18)] flex flex-col h-[85vh] border border-[#E2E8F0]"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="relative flex items-center justify-center p-4 sm:p-5 border-b border-[#E2E8F0] bg-[#FFFFFF] shrink-0">
+              <div className="text-center flex flex-col items-center justify-center">
+                <span className="inline-block text-[11px] font-bold text-[#EA580C] bg-[#FFF7ED] px-3 py-1 rounded-full border border-[#FFEDD5] mb-1">
+                  Step {tourStep} of 13
+                </span>
+                <p className="text-xs text-[#64748B] font-medium hidden sm:block">
+                  Interactive walkthrough of workouts, AI nutrition, trainer bookings, and progress tracking
+                </p>
+              </div>
+              <button
+                onClick={() => setIsTourOpen(false)}
+                className="absolute right-4 sm:right-6 text-[#64748B] hover:text-[#C2410C] transition-colors cursor-pointer p-1.5 hover:bg-[#FFF7ED] rounded-full"
+                aria-label="Close Tour"
+                title="Close"
+              >
+                <X size={22} />
+              </button>
+            </div>
+
+            {/* Slide Area */}
+            <div className="flex-1 relative overflow-y-auto flex items-center justify-center p-6 sm:p-8 bg-gradient-to-br from-[#F8FAFC] to-[#FFFFFF]">
+              <TourSlide
+                journey="customer"
+                step={tourStep}
+                setJourney={() => setTourStep(1)}
+              />
+            </div>
+
+            {/* Step Controls Footer */}
+            <div className="p-4 border-t border-[#E2E8F0] bg-[#FFFFFF] flex items-center justify-center shrink-0">
+              {/* Progress Dots */}
+              <div className="flex items-center gap-1.5">
+                {Array.from({ length: 13 }).map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setTourStep(i + 1)}
+                    className={`h-2 rounded-full transition-all cursor-pointer ${
+                      tourStep === i + 1 ? 'w-6 bg-[#C2410C]' : 'w-2 bg-[#E2E8F0] hover:bg-[#64748B]'
+                    }`}
+                    title={`Step ${i + 1}`}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default CustomerPortalLanding;

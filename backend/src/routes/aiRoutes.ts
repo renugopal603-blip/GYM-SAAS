@@ -1,0 +1,64 @@
+import express from 'express';
+import { 
+  generateRecommendation, 
+  getLatestRecommendation, 
+  getAssignedCustomersWithAI, 
+  getCustomerRecommendation, 
+  reviewRecommendation,
+  getAdminRecommendations,
+  getAdminRecommendationDetails,
+  getTrainerRecommendations,
+  memberReplyToTrainer,
+  trainerReplyToMember,
+  memberChatbotQuery
+} from '../controllers/aiController';
+import { authenticate, authorize, optionalAuthenticate } from '../middlewares/auth';
+
+const router = express.Router();
+
+// General Recommendations Route (dispatches by role)
+router.get('/recommendations', authenticate, (req: any, res: any) => {
+  if (req.user?.role === 'MEMBER') return getLatestRecommendation(req, res);
+  if (req.user?.role === 'TRAINER') return getTrainerRecommendations(req, res);
+  return getAdminRecommendations(req, res);
+});
+
+// Member Routes
+router.post('/member/generate', authenticate, authorize(['MEMBER']), generateRecommendation);
+router.get('/member/latest', authenticate, authorize(['MEMBER']), getLatestRecommendation);
+router.post('/member/reply', authenticate, authorize(['MEMBER']), memberReplyToTrainer);
+router.post('/member/chat', optionalAuthenticate, memberChatbotQuery);
+router.post('/chat', optionalAuthenticate, memberChatbotQuery);
+router.post('/assistant/search', optionalAuthenticate, memberChatbotQuery);
+
+// Trainer Routes
+router.get('/trainer/customers', authenticate, authorize(['TRAINER']), getAssignedCustomersWithAI);
+router.get('/trainer/customer/:customerId', authenticate, authorize(['TRAINER']), getCustomerRecommendation);
+router.get('/trainer/recommendations', authenticate, authorize(['TRAINER']), getTrainerRecommendations);
+router.put('/trainer/recommendation/:id/review', authenticate, authorize(['TRAINER']), reviewRecommendation);
+router.post('/trainer/approve', authenticate, authorize(['TRAINER']), (req: any, res: any) => {
+  if (!req.params.id && req.body?.recommendationId) {
+    req.params.id = req.body.recommendationId;
+  }
+  req.body = { ...(req.body || {}), action: 'APPROVE_AS_IS' };
+  return reviewRecommendation(req, res);
+});
+router.post('/trainer/suggest-changes', authenticate, authorize(['TRAINER']), (req: any, res: any) => {
+  if (!req.params.id && req.body?.recommendationId) {
+    req.params.id = req.body.recommendationId;
+  }
+  const suggestions = req.body?.trainerSuggestions || req.body?.trainerNotes || '';
+  req.body = {
+    ...(req.body || {}),
+    action: 'EDIT_AND_APPROVE',
+    trainerNotes: suggestions,
+    trainerRecommendations: req.body?.trainerRecommendations || suggestions
+  };
+  return reviewRecommendation(req, res);
+});
+router.post('/trainer/reply', authenticate, authorize(['TRAINER']), trainerReplyToMember);
+// Admin Routes
+router.get('/admin/recommendations', authenticate, authorize(['GYM_OWNER', 'GYM_ADMIN', 'ADMIN']), getAdminRecommendations);
+router.get('/admin/recommendation/:id', authenticate, authorize(['GYM_OWNER', 'GYM_ADMIN', 'ADMIN']), getAdminRecommendationDetails);
+
+export default router;

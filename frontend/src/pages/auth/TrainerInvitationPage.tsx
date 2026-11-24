@@ -1,0 +1,194 @@
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Dumbbell, User, X } from 'lucide-react';
+import api from '../../utils/api';
+
+const TrainerInvitationPage = () => {
+  const { token } = useParams();
+  const navigate = useNavigate();
+  
+  const [invitation, setInvitation] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  
+  const [acceptMode, setAcceptMode] = useState(false);
+  const [formData, setFormData] = useState({ name: '', phone: '', password: '', confirmPassword: '' });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    const fetchInvitation = async () => {
+      try {
+        const res = await api.get(`/trainers/invitation/${token}`);
+        setInvitation(res.data.invitation);
+        setFormData(prev => ({ ...prev, name: res.data.invitation.trainerName }));
+      } catch (err: any) {
+        setError(err.response?.data?.message || 'Invalid or expired invitation link.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchInvitation();
+  }, [token]);
+
+  const handleAccept = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (formData.password !== formData.confirmPassword) {
+      alert('Passwords do not match');
+      return;
+    }
+
+    if (!/^[6-9]\d{9}$/.test(formData.phone)) {
+      alert('Phone number must be exactly 10 digits and start with 6, 7, 8, or 9');
+      return;
+    }
+    
+    try {
+      setIsSubmitting(true);
+      const res = await api.post(`/trainers/invitation/${token}/accept`, {
+        name: formData.name,
+        phone: formData.phone,
+        password: formData.password
+      });
+      
+      alert('Account created! Let us complete your profile.');
+      
+      // Navigate to onboarding with userId passed in state (in a real app, you'd auto-login here and use auth context)
+      navigate('/invite/trainer/onboarding', { state: { userId: res.data.userId, trainingMode: invitation.trainingMode } });
+      
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to accept invitation');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (loading) {
+    return <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center font-outfit">Loading invitation details...</div>;
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-4 font-outfit">
+        <div className="bg-[#FFFFFF] p-8 rounded-2xl shadow-xl max-w-md w-full text-center border border-red-100">
+          <div className="w-16 h-16 bg-red-100 text-[#F8FAFC] rounded-full flex items-center justify-center mx-auto mb-4">
+            <X size={32} />
+          </div>
+          <h2 className="text-2xl font-bold text-[#111827] mb-2">Invitation Invalid</h2>
+          <p className="text-[#64748B]">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-4 font-outfit relative overflow-hidden">
+      {/* Decorative blobs */}
+      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-[#E2E8F0] rounded-full blur-[100px] opacity-60"></div>
+      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-[#C2410C] rounded-full blur-[120px] opacity-20"></div>
+
+      <div className="bg-[#FFFFFF] rounded-3xl shadow-2xl max-w-md w-full overflow-hidden border border-[#E2E8F0] z-10">
+        
+        {!acceptMode ? (
+          <>
+            <div className="bg-[#FFFFFF] p-8 text-center relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-[#FFFFFF]/10 rounded-full translate-x-16 -translate-y-16"></div>
+              <Dumbbell className="text-[#EA580C] mx-auto mb-4" size={48} />
+              <h1 className="text-2xl font-bold text-[#111827] mb-2">You've Been Invited!</h1>
+              <p className="text-[#64748B]">To join {invitation.gymId?.name || 'a Gym'} as a Trainer</p>
+            </div>
+            
+            <div className="p-8">
+              <div className="bg-[#F8FAFC] p-4 rounded-xl border border-[#E2E8F0] mb-6">
+                {invitation.personalMessage && (
+                  <div className="mb-4 text-sm italic text-[#64748B]">
+                    "{invitation.personalMessage}"
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-y-3 text-sm">
+                  <div className="text-[#64748B]">Role</div>
+                  <div className="font-semibold text-[#111827]">Trainer</div>
+                  
+                  <div className="text-[#64748B]">Mode</div>
+                  <div className="font-semibold text-[#111827] capitalize">{invitation.trainingMode}</div>
+                  
+                  <div className="text-[#64748B]">Location</div>
+                  <div className="font-semibold text-[#111827]">{invitation.gymId?.location || 'N/A'}</div>
+                </div>
+              </div>
+              
+              <div className="space-y-3">
+                <button 
+                  onClick={() => setAcceptMode(true)}
+                  className="w-full py-3.5 bg-[#C2410C] text-white font-bold font-bold rounded-xl hover:bg-[#9A3412] transition-colors shadow-lg shadow-orange-500/15"
+                >
+                  Accept Invitation
+                </button>
+                <button 
+                  onClick={() => setError('You have declined the invitation. You can close this page.')}
+                  className="w-full py-3.5 bg-[#FFFFFF] text-[#64748B] font-bold rounded-xl border border-[#F8FAFC] hover:bg-[#FFF7ED] transition-colors"
+                >
+                  Decline
+                </button>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="p-8 border-b border-[#F8FAFC] bg-gradient-to-r from-[#F8FAFC] to-white">
+              <h2 className="text-2xl font-bold text-[#111827] flex items-center">
+                <User className="mr-2 text-[#EA580C]" /> Create Account
+              </h2>
+              <p className="text-[#64748B] mt-1 text-sm">Set up your trainer account details.</p>
+            </div>
+            
+            <form onSubmit={handleAccept} className="p-8 space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-[#64748B] mb-1">Full Name</label>
+                <input required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full border border-[#E2E8F0] rounded-lg px-4 py-2 outline-none focus:border-[#FDBA74]" />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-[#64748B] mb-1">Phone Number</label>
+                <input 
+                  required 
+                  type="tel" 
+                  maxLength={10} 
+                  value={formData.phone} 
+                  onChange={e => {
+                    const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                    if (val.length > 0 && !/^[6-9]/.test(val)) return;
+                    setFormData({...formData, phone: val});
+                  }} 
+                  placeholder="10-digit number (starts with 6-9)" 
+                  className="w-full border border-[#E2E8F0] rounded-lg px-4 py-2 outline-none focus:border-[#FDBA74]" 
+                />
+                {formData.phone && (!/^[6-9]\d{9}$/.test(formData.phone)) && (
+                  <p className="text-xs text-red-500 mt-1">
+                    {formData.phone.length < 10 ? `Enter 10 digits (${formData.phone.length}/10)` : 'Must start with 6, 7, 8, or 9'}
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-[#64748B] mb-1">Password</label>
+                <input type="password" required minLength={6} value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full border border-[#E2E8F0] rounded-lg px-4 py-2 outline-none focus:border-[#FDBA74]" />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-[#64748B] mb-1">Confirm Password</label>
+                <input type="password" required minLength={6} value={formData.confirmPassword} onChange={e => setFormData({...formData, confirmPassword: e.target.value})} className="w-full border border-[#E2E8F0] rounded-lg px-4 py-2 outline-none focus:border-[#FDBA74]" />
+              </div>
+              
+              <button 
+                type="submit" 
+                disabled={isSubmitting}
+                className="w-full py-3.5 mt-4 bg-[#FFFFFF] text-white font-bold rounded-xl hover:bg-black transition-colors disabled:opacity-70 flex items-center justify-center"
+              >
+                {isSubmitting ? 'Creating Account...' : 'Continue to Profile Setup'}
+              </button>
+            </form>
+          </>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default TrainerInvitationPage;

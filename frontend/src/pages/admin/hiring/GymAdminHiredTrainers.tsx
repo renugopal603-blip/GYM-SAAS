@@ -1,0 +1,386 @@
+import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import api from '../../../utils/api';
+import {
+  UserCheck,
+  Calendar,
+  DollarSign,
+  Briefcase,
+  Mail,
+  Phone,
+  Search,
+  ExternalLink,
+  Users,
+  Award,
+  Clock,
+  ShieldCheck,
+  Sparkles,
+  Building2
+} from 'lucide-react';
+
+interface HiredItem {
+  id: string;
+  sourceType: 'DIRECT_HIRE' | 'JOB_OFFER';
+  trainerName: string;
+  trainerEmail?: string;
+  trainerPhone?: string;
+  trainerPhoto?: string;
+  role: string;
+  employmentType: string;
+  confirmedSalary: number;
+  salaryPeriod?: string;
+  personalTrainingFee?: number;
+  joiningDate?: string;
+  status: string;
+  confirmedDate?: string;
+  notes?: string;
+}
+
+export default function GymAdminHiredTrainers() {
+  const [hiredList, setHiredList] = useState<HiredItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [sourceFilter, setSourceFilter] = useState<'ALL' | 'DIRECT_HIRE' | 'JOB_OFFER'>('ALL');
+
+  useEffect(() => {
+    fetchHired();
+  }, []);
+
+  const fetchHired = async () => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('aigym_token') || localStorage.getItem('token');
+      const headers = { Authorization: `Bearer ${token}` };
+
+      // 1. Fetch Job Offers that are Accepted
+      const offersPromise = api
+        .get('/hiring/owner/offers')
+        .catch(() => ({ data: { success: false, data: [] } }));
+
+      // 2. Fetch Direct Hiring Requests that are Confirmed
+      const directHiresPromise = api
+        .get('/hiring/owner/hiring-requests')
+        .catch(() => ({ data: { success: false, requests: [] } }));
+
+      const [offersRes, directRes] = await Promise.all([offersPromise, directHiresPromise]);
+
+      const items: HiredItem[] = [];
+
+      // Process direct hiring requests
+      if (directRes.data?.success) {
+        const directRequests = directRes.data.requests || directRes.data.data || [];
+        directRequests
+          .filter((r: any) => r.status === 'Confirmed')
+          .forEach((r: any) => {
+            items.push({
+              id: `direct_${r._id}`,
+              sourceType: 'DIRECT_HIRE',
+              trainerName: r.trainerName || 'Trainer',
+              trainerEmail: r.trainerEmail,
+              trainerPhone: r.trainerPhone,
+              trainerPhoto: r.trainerId?.profilePhoto,
+              role: r.role || 'Fitness Coach',
+              employmentType: r.employmentType || 'Full-time',
+              confirmedSalary: r.offeredCompensation || 0,
+              salaryPeriod: 'month',
+              personalTrainingFee: r.personalTrainingFee || 0,
+              joiningDate: r.expectedJoiningDate,
+              status: 'Hired & Active',
+              confirmedDate: r.confirmedAt || r.updatedAt,
+              notes: r.additionalTerms
+            });
+          });
+      }
+
+      // Process accepted job offers
+      if (offersRes.data?.success) {
+        const offers = offersRes.data.offers || offersRes.data.data || [];
+        offers
+          .filter((o: any) => o.status === 'Accepted')
+          .forEach((o: any) => {
+            const trainer = o.trainerId;
+            const app = o.applicationId;
+            const job = o.jobId;
+
+            items.push({
+              id: `offer_${o._id}`,
+              sourceType: 'JOB_OFFER',
+              trainerName: app?.name || app?.fullName || trainer?.name || 'Trainer',
+              trainerEmail: app?.email || trainer?.email,
+              trainerPhone: app?.phone || trainer?.phone,
+              trainerPhoto: trainer?.profilePhoto,
+              role: job?.title || 'Gym Trainer',
+              employmentType: o.employmentType || job?.employmentType || 'Full-time',
+              confirmedSalary: o.offeredSalary || 0,
+              salaryPeriod: o.salaryPeriod || 'month',
+              personalTrainingFee: 0,
+              joiningDate: o.joiningDate,
+              status: 'Offer Accepted',
+              confirmedDate: o.updatedAt,
+              notes: o.termsAndConditions || o.terms
+            });
+          });
+      }
+
+      setHiredList(items);
+    } catch (err) {
+      console.error('Failed to load hired trainers:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filtered = hiredList.filter((item) => {
+    const matchesSource = sourceFilter === 'ALL' || item.sourceType === sourceFilter;
+    const term = search.toLowerCase();
+    const matchesSearch =
+      item.trainerName.toLowerCase().includes(term) ||
+      item.role.toLowerCase().includes(term) ||
+      item.employmentType.toLowerCase().includes(term);
+    return matchesSource && matchesSearch;
+  });
+
+  return (
+    <div className="space-y-6">
+      {/* Top Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-[#111827] flex items-center gap-2">
+            <UserCheck className="w-7 h-7 text-[#EA580C]" />
+            Hired Trainers & Coaching Roster
+          </h1>
+          <p className="text-sm text-slate-400 mt-1">
+            Confirmed fitness trainers recruited via Direct Hiring and Vacancy Placements, connected to your active gym roster
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Link
+            to="/admin/trainers"
+            className="px-4 py-2 bg-[#C2410C] hover:bg-[#9A3412] text-white font-semibold rounded-xl text-sm transition-all flex items-center gap-2"
+          >
+            <Users className="w-4 h-4" />
+            Gym Trainer Roster
+          </Link>
+        </div>
+      </div>
+
+      {/* Summary KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="bg-[#FFFFFF] border border-[#E2E8F0] p-4 rounded-xl shadow-sm">
+          <span className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider block">
+            Total Confirmed Hires
+          </span>
+          <span className="text-2xl font-bold mt-1 text-[#111827] font-mono block">
+            {hiredList.length}
+          </span>
+        </div>
+        <div className="bg-[#FFFFFF] border border-[#E2E8F0] p-4 rounded-xl shadow-sm">
+          <span className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider block">
+            Direct Hiring Method
+          </span>
+          <span className="text-2xl font-bold mt-1 text-[#EA580C] font-mono block">
+            {hiredList.filter((h) => h.sourceType === 'DIRECT_HIRE').length}
+          </span>
+        </div>
+        <div className="bg-[#FFFFFF] border border-[#E2E8F0] p-4 rounded-xl shadow-sm">
+          <span className="text-[11px] font-bold text-[#64748B] uppercase tracking-wider block">
+            Job Vacancy Placements
+          </span>
+          <span className="text-2xl font-bold mt-1 text-teal-700 font-mono block">
+            {hiredList.filter((h) => h.sourceType === 'JOB_OFFER').length}
+          </span>
+        </div>
+      </div>
+
+      {/* Search & Filter Controls */}
+      <div className="bg-[#F8FAFC] p-4 rounded-2xl border border-[#E2E8F0] flex flex-col md:flex-row gap-3 items-center justify-between">
+        <div className="relative w-full md:w-80">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            placeholder="Search by trainer or role..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl text-[#111827] placeholder-slate-400 text-sm focus:outline-none focus:border-[#FDBA74]"
+          />
+        </div>
+
+        <div className="flex items-center gap-2 w-full md:w-auto">
+          <button
+            onClick={() => setSourceFilter('ALL')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+              sourceFilter === 'ALL'
+                ? 'bg-[#C2410C] text-white shadow-md shadow-orange-500/15'
+                : 'bg-[#FFFFFF] text-[#64748B] hover:text-[#C2410C] border border-[#E2E8F0]'
+            }`}
+          >
+            All Recruitment Streams
+          </button>
+          <button
+            onClick={() => setSourceFilter('DIRECT_HIRE')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+              sourceFilter === 'DIRECT_HIRE'
+                ? 'bg-[#C2410C] text-white shadow-md shadow-orange-500/15'
+                : 'bg-[#FFFFFF] text-[#64748B] hover:text-[#C2410C] border border-[#E2E8F0]'
+            }`}
+          >
+            Direct Hires
+          </button>
+          <button
+            onClick={() => setSourceFilter('JOB_OFFER')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+              sourceFilter === 'JOB_OFFER'
+                ? 'bg-[#C2410C] text-white shadow-md shadow-orange-500/15'
+                : 'bg-[#FFFFFF] text-[#64748B] hover:text-[#C2410C] border border-[#E2E8F0]'
+            }`}
+          >
+            Job Vacancy Offers
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="p-16 text-center text-slate-400 bg-[#F8FAFC] rounded-2xl border border-[#E2E8F0]">
+          <div className="inline-block animate-spin w-8 h-8 border-4 border-[#FDBA74] border-t-transparent rounded-full mb-3" />
+          <p className="text-sm">Loading hired trainers...</p>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="p-16 text-center bg-[#F8FAFC] rounded-2xl border border-[#E2E8F0]">
+          <UserCheck className="w-12 h-12 text-[#EA580C]/40 mx-auto mb-3" />
+          <h3 className="text-lg font-semibold text-[#111827] mb-1">No confirmed hires found</h3>
+          <p className="text-sm text-slate-400 max-w-md mx-auto mb-5">
+            When you confirm accepted hiring requests or when candidates accept your published job offers, they are automatically placed here and added to your gym roster.
+          </p>
+          <div className="flex items-center justify-center gap-3">
+            <Link
+              to="/admin/hiring/trainers"
+              className="px-4 py-2 bg-[#C2410C] text-white font-semibold rounded-xl text-xs hover:bg-[#9A3412] transition-all"
+            >
+              Browse Trainers
+            </Link>
+            <Link
+              to="/admin/hiring/applications"
+              className="px-4 py-2 bg-[#FFFFFF] hover:bg-[#FFF7ED] text-[#111827] border border-[#E2E8F0] rounded-xl text-xs font-semibold transition-all"
+            >
+              Review Applications
+            </Link>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {filtered.map((item) => {
+            return (
+              <div
+                key={item.id}
+                className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-5 hover:border-[#FDBA74] transition-all flex flex-col justify-between space-y-4 shadow-sm"
+              >
+                <div>
+                  <div className="flex items-start justify-between gap-2 mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-11 h-11 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] flex items-center justify-center text-base font-bold text-[#EA580C] overflow-hidden shrink-0">
+                        {item.trainerPhoto ? (
+                          <img
+                            src={item.trainerPhoto}
+                            alt={item.trainerName}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          item.trainerName[0]?.toUpperCase() || 'T'
+                        )}
+                      </div>
+                      <div>
+                        <h3 className="text-base font-bold text-[#111827] flex items-center gap-1.5">
+                          {item.trainerName}
+                          <ShieldCheck className="w-4 h-4 text-[#EA580C]" />
+                        </h3>
+                        <span className="text-xs text-[#EA580C] font-medium block">
+                          {item.role}
+                        </span>
+                      </div>
+                    </div>
+
+                    <span
+                      className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                        item.sourceType === 'DIRECT_HIRE'
+                          ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                          : 'bg-teal-50 text-teal-700 border border-teal-200'
+                      }`}
+                    >
+                      {item.sourceType === 'DIRECT_HIRE' ? 'Direct Hire' : 'Vacancy Offer'}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 text-xs text-[#475569] bg-[#F8FAFC] p-3.5 rounded-xl border border-[#E2E8F0] mt-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[#64748B]">Confirmed Salary:</span>
+                      <span className="font-bold text-[#EA580C] font-mono">
+                        ₹{item.confirmedSalary?.toLocaleString()} / {item.salaryPeriod || 'month'}
+                      </span>
+                    </div>
+
+                    {item.personalTrainingFee ? (
+                      <div className="flex items-center justify-between">
+                        <span className="text-[#64748B]">PT Session Fee:</span>
+                        <span className="font-bold text-teal-700 font-mono">
+                          ₹{item.personalTrainingFee.toLocaleString()} / session
+                        </span>
+                      </div>
+                    ) : null}
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-[#64748B]">Employment Type:</span>
+                      <span className="text-[#111827] font-semibold">{item.employmentType}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-[#64748B]">Joining Date:</span>
+                      <span className="text-[#111827] font-semibold">
+                        {item.joiningDate
+                          ? new Date(item.joiningDate).toLocaleDateString()
+                          : 'Immediate'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 text-xs text-[#475569] space-y-1">
+                    {item.trainerEmail && (
+                      <div className="flex items-center gap-1.5">
+                        <Mail className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                        <span className="truncate">{item.trainerEmail}</span>
+                      </div>
+                    )}
+                    {item.trainerPhone && (
+                      <div className="flex items-center gap-1.5">
+                        <Phone className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                        <span>{item.trainerPhone}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {item.notes && (
+                    <div className="mt-3 text-[11px] text-[#475569] bg-[#F8FAFC] p-2.5 rounded-lg border border-[#E2E8F0]">
+                      <span className="text-slate-500 uppercase font-semibold text-[10px] block mb-0.5">
+                        Agreed Terms
+                      </span>
+                      {item.notes}
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-3 border-t border-[#E2E8F0]">
+                  <Link
+                    to="/admin/trainers"
+                    className="w-full py-2 bg-[#FFFFFF] hover:bg-[#FFF7ED] text-[#111827] hover:text-[#C2410C] text-xs font-semibold rounded-xl border border-[#E2E8F0] flex items-center justify-center gap-1.5 transition-all"
+                  >
+                    Manage in Gym Trainer Roster
+                    <ExternalLink className="w-3.5 h-3.5 text-[#EA580C]" />
+                  </Link>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}

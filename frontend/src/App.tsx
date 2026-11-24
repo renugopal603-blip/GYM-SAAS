@@ -1,0 +1,613 @@
+import { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
+import NavigationGuard, { markAuthorizedNavigation } from './components/NavigationGuard';
+import {
+  resolveMemberRoute,
+  resolveTrainerRoute,
+  resolveAdminRoute,
+  resolveSuperAdminRoute,
+  resolveGlobalRoute
+} from './utils/smartUrlResolver';
+
+// Public
+import LandingPage from './pages/LandingPage';
+import LoginPage from './pages/auth/LoginPage';
+import CustomerRegisterPage from './pages/auth/CustomerRegisterPage';
+import GymOwnerRegisterPage from './pages/auth/GymOwnerRegisterPage';
+import RegisterChoicePage from './pages/auth/RegisterChoicePage';
+import GymOwnerIntroduction from './pages/auth/GymOwnerIntroduction';
+import ForgotPassword from './pages/auth/ForgotPassword';
+import StatusPage from './pages/auth/StatusPage';
+import TrainerInvitationPage from './pages/auth/TrainerInvitationPage';
+import TrainerOnboarding from './pages/auth/TrainerOnboarding';
+import TrainerRegisterPage from './pages/auth/TrainerRegisterPage';
+
+// Role-Based Public Portals
+import SuperAdminPortalLanding from './pages/portals/SuperAdminPortalLanding';
+import SuperAdminFeatureDetail from './pages/portals/SuperAdminFeatureDetail';
+import GymOwnerPortalLanding from './pages/portals/GymOwnerPortalLanding';
+import GymOwnerFeatureDetail from './pages/portals/GymOwnerFeatureDetail';
+import CustomerPortalLanding from './pages/portals/CustomerPortalLanding';
+import CustomerFeatureDetail from './pages/portals/CustomerFeatureDetail';
+
+// Trainer Landing & Informational Pages
+import { TrainerLandingPage } from './pages/trainer-landing/TrainerLandingPage';
+import { TrainerAboutPage } from './pages/trainer-landing/TrainerAboutPage';
+import { TrainerHowItWorksPage } from './pages/trainer-landing/TrainerHowItWorksPage';
+import { TrainerBenefitsPage } from './pages/trainer-landing/TrainerBenefitsPage';
+import { TrainerFaqsPage } from './pages/trainer-landing/TrainerFaqsPage';
+import { TrainerContactPage } from './pages/trainer-landing/TrainerContactPage';
+import { TrainerGuidelinesPage } from './pages/trainer-landing/TrainerGuidelinesPage';
+import { TrainerSupportPage } from './pages/trainer-landing/TrainerSupportPage';
+import { TrainerTermsPage } from './pages/trainer-landing/TrainerTermsPage';
+import { TrainerPrivacyPage } from './pages/trainer-landing/TrainerPrivacyPage';
+import { TrainerCookiePolicyPage } from './pages/trainer-landing/TrainerCookiePolicyPage';
+import { TrainerRefundPolicyPage } from './pages/trainer-landing/TrainerRefundPolicyPage';
+
+// Public Marketplace
+import GymMarketplace from './pages/marketplace/GymMarketplace';
+import GymDetails from './pages/marketplace/GymDetails';
+import GymCheckout from './pages/marketplace/GymCheckout';
+import MobileDummyPaymentPage from './pages/marketplace/MobileDummyPaymentPage';
+
+// Subscription
+import SubscriptionPlansPage from './pages/subscription/SubscriptionPlansPage';
+import PaymentPage from './pages/subscription/PaymentPage';
+
+// Company
+import AboutUs from './pages/company/AboutUs';
+import Careers from './pages/company/Careers';
+import Blog from './pages/company/Blog';
+import BlogPost from './pages/company/BlogPost';
+import Contact from './pages/company/Contact';
+
+// Legal
+import PrivacyPolicy from './pages/legal/PrivacyPolicy';
+import TermsOfService from './pages/legal/TermsOfService';
+import CancellationRefundPolicy from './pages/legal/CancellationRefundPolicy';
+
+// Gym Admin
+import GymAdminLayout from './layouts/GymAdminLayout';
+import GymAdminDashboard from './pages/admin/GymAdminDashboard';
+import GymAdminProfile from './pages/admin/GymAdminProfile';
+import GymAdminTrainers from './pages/admin/GymAdminTrainers';
+import GymAdminMembers from './pages/admin/GymAdminMembers';
+import GymAdminEquipment from './pages/admin/GymAdminEquipment';
+import GymAdminMembershipPlans from './pages/admin/GymAdminMembershipPlans';
+import { GymAdminEnquiries } from './pages/admin/GymAdminEnquiries';
+import GymAdminTrainerSchedule from './pages/admin/GymAdminTrainerSchedule';
+import GymAdminSessionBookings from './pages/admin/GymAdminSessionBookings';
+import GymAdminPayments from './pages/admin/GymAdminPayments';
+import GymAdminAttendance from './pages/admin/GymAdminAttendance';
+import GymAdminReports from './pages/admin/GymAdminReports';
+import GymAdminReviews from './pages/admin/GymAdminReviews';
+import GymAdminNotifications from './pages/admin/GymAdminNotifications';
+import GymAdminUserProfile from './pages/admin/GymAdminUserProfile';
+import GymAdminSettings from './pages/admin/GymAdminSettings';
+import GymAdminSubscription from './pages/admin/GymAdminSubscription';
+import GymAdminDeletedDetails from './pages/admin/GymAdminDeletedDetails';
+import GymAdminBranches from './pages/admin/GymAdminBranches';
+import GymAdminAddBranch from './pages/admin/GymAdminAddBranch';
+import GymAdminBranchProfile from './pages/admin/GymAdminBranchProfile';
+import GymAdminImportCustomers from './pages/admin/GymAdminImportCustomers';
+import GymAdminLocationSettings from './pages/admin/GymAdminLocationSettings';
+
+import GymAdminTrainerFees from './pages/admin/GymAdminTrainerFees';
+import GymAdminTrainerPayments from './pages/admin/GymAdminTrainerPayments';
+import GymAdminTrainerPaymentHistory from './pages/admin/GymAdminTrainerPaymentHistory';
+import GymAdminAIFitnessPlans from './pages/admin/GymAdminAIFitnessPlans';
+import GymAdminAIPlanDetails from './pages/admin/GymAdminAIPlanDetails';
+import GymAdminOnlineSessions from './pages/admin/GymAdminOnlineSessions';
+import GymAdminVideoBookings from './pages/admin/GymAdminVideoBookings';
+import GymAdminExerciseLibrary from './pages/admin/GymAdminExerciseLibrary';
+import GymExerciseVideos from './pages/common/GymExerciseVideos';
+import RevenueAnalytics from './pages/admin/RevenueAnalytics';
+import GymAdminChallenges from './pages/admin/GymAdminChallenges';
+import GymAdminRewards from './pages/admin/GymAdminRewards';
+import GymAdminRewardsPerformance from './pages/admin/GymAdminRewardsPerformance';
+import GymAdminReferrals from './pages/admin/GymAdminReferrals';
+
+// Trainer Recruitment & Hiring
+import TrainersDirectory from './pages/company/TrainersDirectory';
+import GymAdminBrowseTrainers from './pages/admin/hiring/GymAdminBrowseTrainers';
+import GymAdminManageJobs from './pages/admin/hiring/GymAdminManageJobs';
+import GymAdminPostJob from './pages/admin/hiring/GymAdminPostJob';
+import GymAdminApplications from './pages/admin/hiring/GymAdminApplications';
+import GymAdminHiringRequests from './pages/admin/hiring/GymAdminHiringRequests';
+import GymAdminShortlisted from './pages/admin/hiring/GymAdminShortlisted';
+import GymAdminInterviews from './pages/admin/hiring/GymAdminInterviews';
+import GymAdminHiredTrainers from './pages/admin/hiring/GymAdminHiredTrainers';
+
+// Trainer Hiring & Jobs
+import TrainerFindJobs from './pages/trainer/hiring/TrainerFindJobs';
+import TrainerMyApplications from './pages/trainer/hiring/TrainerMyApplications';
+import TrainerHiringRequests from './pages/trainer/hiring/TrainerHiringRequests';
+import TrainerInterviews from './pages/trainer/hiring/TrainerInterviews';
+import TrainerJobOffers from './pages/trainer/hiring/TrainerJobOffers';
+
+// Gym Store (Admin)
+import GymStoreDashboard from './pages/admin/store/GymStoreDashboard';
+import GymStoreProducts from './pages/admin/store/GymStoreProducts';
+import GymStoreCategories from './pages/admin/store/GymStoreCategories';
+import GymStoreInventory from './pages/admin/store/GymStoreInventory';
+import GymStoreOrders from './pages/admin/store/GymStoreOrders';
+import GymStoreOfflineSales from './pages/admin/store/GymStoreOfflineSales';
+import GymStoreSalesHistory from './pages/admin/store/GymStoreSalesHistory';
+import GymStoreSettings from './pages/admin/store/GymStoreSettings';
+
+import MemberStore from './pages/member/MemberStore';
+import MemberCart from './pages/member/MemberCart';
+import MemberCheckout from './pages/member/MemberCheckout';
+import MemberSessionCheckout from './pages/member/MemberSessionCheckout';
+import MemberOrders from './pages/member/MemberOrders';
+import MemberStorePayments from './pages/member/MemberStorePayments';
+
+// Gym Store (Super Admin)
+import SuperAdminGymStore from './pages/super-admin/SuperAdminGymStore';
+
+// Super Admin
+import SuperAdminLayout from './layouts/SuperAdminLayout';
+import SuperAdminDashboard from './pages/super-admin/SuperAdminDashboard';
+import SuperAdminLeads from './pages/super-admin/SuperAdminLeads';
+import SuperAdminAddGym from './pages/super-admin/SuperAdminAddGym';
+import SuperAdminGymApprovals from './pages/super-admin/SuperAdminGymApprovals';
+import SuperAdminInvitations from './pages/super-admin/SuperAdminInvitations';
+import { SuperAdminEnquiries } from './pages/super-admin/SuperAdminEnquiries';
+import SuperAdminProfile from './pages/super-admin/SuperAdminProfile';
+import SuperAdminSettings from './pages/super-admin/SuperAdminSettings';
+import SuperAdminGymsDetails from './pages/super-admin/SuperAdminGymsDetails';
+import SuperAdminGymsEdit from './pages/super-admin/SuperAdminGymsEdit';
+import SuperAdminCustomers from './pages/super-admin/SuperAdminCustomers';
+import SuperAdminGymOwners from './pages/super-admin/SuperAdminGymOwners';
+import SuperAdminSubscriptions from './pages/super-admin/SuperAdminSubscriptions';
+import SuperAdminDeletedDetails from './pages/super-admin/SuperAdminDeletedDetails';
+import SuperAdminPayouts from './pages/super-admin/SuperAdminPayouts';
+import SuperAdminNotifications from './pages/super-admin/SuperAdminNotifications';
+
+// Member
+import MemberLayout from './layouts/MemberLayout';
+import MemberDashboard from './pages/member/MemberDashboard';
+import { MemberEnquiries } from './pages/member/MemberEnquiries';
+import MemberProfile from './pages/member/MemberProfile';
+import MemberGymProfile from './pages/member/MemberGymProfile';
+import MemberFindTrainers from './pages/member/MemberFindTrainers';
+import MemberMyTrainer from './pages/member/MemberMyTrainer';
+import MemberBookSession from './pages/member/MemberBookSession';
+import MemberMyBookings from './pages/member/MemberMyBookings';
+import MemberWorkoutPlan from './pages/member/MemberWorkoutPlan';
+import MemberWorkoutVideos from './pages/member/MemberWorkoutVideos';
+import MemberOnlineSessions from './pages/member/MemberOnlineSessions';
+import MemberDietPlan from './pages/member/MemberDietPlan';
+import MemberTrainerPlan from './pages/member/MemberTrainerPlan';
+import MemberAIFitness from './pages/member/MemberAIFitness';
+import MemberAIAssistant from './pages/member/MemberAIAssistant';
+import MemberAIResults from './pages/member/MemberAIResults';
+import MemberTrainerReview from './pages/member/MemberTrainerReview';
+import MemberSessionReview from './pages/member/MemberSessionReview';
+import MemberProgress from './pages/member/MemberProgress';
+import MemberAttendance from './pages/member/MemberAttendance';
+import MemberSubscription from './pages/member/MemberSubscription';
+import MemberPayments from './pages/member/MemberPayments';
+import MemberMessages from './pages/member/MemberMessages';
+import MemberNotifications from './pages/member/MemberNotifications';
+import MemberUpgrade from './pages/member/MemberUpgrade';
+import MemberSettings from './pages/member/MemberSettings';
+import MemberChallenges from './pages/member/MemberChallenges';
+import MemberReferrals from './pages/member/MemberReferrals';
+
+// Trainer
+import TrainerLayout from './layouts/TrainerLayout';
+import TrainerDashboard from './pages/trainer/TrainerDashboard';
+import TrainerProfile from './pages/trainer/TrainerProfile';
+import TrainerMembers from './pages/trainer/TrainerMembers';
+import TrainerSchedule from './pages/trainer/TrainerSchedule';
+import TrainerSessionBookings from './pages/trainer/TrainerSessionBookings';
+import TrainerOnlineSessions from './pages/trainer/TrainerOnlineSessions';
+import TrainerExerciseLibrary from './pages/trainer/TrainerExerciseLibrary';
+import TrainerWorkoutPlans from './pages/trainer/TrainerWorkoutPlans';
+import TrainerWorkoutVideos from './pages/trainer/TrainerWorkoutVideos';
+import TrainerDietPlans from './pages/trainer/TrainerDietPlans';
+import TrainerGymEquipments from './pages/trainer/TrainerGymEquipments';
+import TrainerCustomerWorkplansCompleted from './pages/trainer/TrainerCustomerWorkplansCompleted';
+import TrainerMemberProgress from './pages/trainer/TrainerMemberProgress';
+import TrainerAttendance from './pages/trainer/TrainerAttendance';
+import TrainerMessages from './pages/trainer/TrainerMessages';
+import TrainerNotifications from './pages/trainer/TrainerNotifications';
+import TrainerEarnings from './pages/trainer/TrainerEarnings';
+import TrainerPaymentHistoryPage from './pages/trainer/TrainerPaymentHistoryPage';
+import TrainerMyAssignedFee from './pages/trainer/TrainerMyAssignedFee';
+import TrainerPaymentsReceived from './pages/trainer/TrainerPaymentsReceived';
+import TrainerSettings from './pages/trainer/TrainerSettings';
+import TrainerAIAssistant from './pages/trainer/TrainerAIAssistant';
+import TrainerAIReview from './pages/trainer/TrainerAIReview';
+import TrainerAIFeedback from './pages/trainer/TrainerAIFeedback';
+import TrainerReviewsRatings from './pages/trainer/TrainerReviewsRatings';
+import TrainerCustomerChallenges from './pages/trainer/TrainerCustomerChallenges';
+import TrainerRewards from './pages/trainer/TrainerRewards';
+
+// Stub dashboards
+import stubDashboard from './pages/StubDashboard';
+const ManagerDashboard = stubDashboard('Manager');
+const ReceptionistDashboard = stubDashboard('Receptionist');
+
+function ScrollToTop() {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+
+  return null;
+}
+
+function SmartTrainersRoute() {
+  const { user, isAuthenticated } = useAuth();
+  if (isAuthenticated && user?.role === 'MEMBER') {
+    return <Navigate to="/member/find-trainers" replace />;
+  }
+  if (isAuthenticated && user?.role === 'TRAINER') {
+    return <Navigate to="/trainer/dashboard" replace />;
+  }
+  return <TrainerLandingPage />;
+}
+
+function SmartMemberCatchAll() {
+  const location = useLocation();
+  const target = resolveMemberRoute(location.pathname);
+  markAuthorizedNavigation();
+  return <Navigate to={target} replace />;
+}
+
+function SmartTrainerCatchAll() {
+  const location = useLocation();
+  const target = resolveTrainerRoute(location.pathname);
+  markAuthorizedNavigation();
+  return <Navigate to={target} replace />;
+}
+
+function SmartAdminCatchAll() {
+  const location = useLocation();
+  const target = resolveAdminRoute(location.pathname);
+  markAuthorizedNavigation();
+  return <Navigate to={target} replace />;
+}
+
+function SmartSuperAdminCatchAll() {
+  const location = useLocation();
+  const target = resolveSuperAdminRoute(location.pathname);
+  markAuthorizedNavigation();
+  return <Navigate to={target} replace />;
+}
+
+function GlobalCatchAll() {
+  const location = useLocation();
+  const { user, isAuthenticated } = useAuth();
+  const target = resolveGlobalRoute(location.pathname, user, isAuthenticated);
+  markAuthorizedNavigation();
+  return <Navigate to={target} replace />;
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <Router>
+        <ScrollToTop />
+        <NavigationGuard />
+        <Routes>
+          {/* Public Routes */}
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterChoicePage />} />
+          <Route path="/register/customer" element={<CustomerRegisterPage />} />
+          <Route path="/register/trainer" element={<TrainerRegisterPage />} />
+          <Route path="/register/trainers" element={<Navigate to="/register/trainer" replace />} />
+          <Route path="/gym-owner-introduction" element={<GymOwnerIntroduction />} />
+          <Route path="/register/gym-owner" element={<GymOwnerRegisterPage />} />
+          <Route path="/invite/trainer/:token" element={<TrainerInvitationPage />} />
+          <Route path="/invite/trainer/onboarding" element={<TrainerOnboarding />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          
+          {/* Role-Based Public Portals */}
+          <Route path="/portal/super-admin" element={<SuperAdminPortalLanding />} />
+          <Route path="/portal/super-admin/:featureId" element={<SuperAdminFeatureDetail />} />
+          <Route path="/portal/gym-owner" element={<GymOwnerPortalLanding />} />
+          <Route path="/portal/gym-owner/:featureId" element={<GymOwnerFeatureDetail />} />
+          <Route path="/portal/customer" element={<CustomerPortalLanding />} />
+          <Route path="/portal/customer/:featureId" element={<CustomerFeatureDetail />} />
+          <Route path="/portal/trainer" element={<Navigate to="/trainers" replace />} />
+          <Route path="/portal/trainers" element={<Navigate to="/trainers" replace />} />
+          
+          {/* Gym Marketplace */}
+          <Route path="/gyms" element={<GymMarketplace />} />
+          <Route path="/gyms/:id" element={<GymDetails />} />
+          <Route path="/gyms/:id/checkout" element={
+            <ProtectedRoute><GymCheckout /></ProtectedRoute>
+          } />
+          {/* Mobile QR Dummy Payment Pages */}
+          <Route path="/pay" element={<MobileDummyPaymentPage />} />
+          <Route path="/qr-pay" element={<MobileDummyPaymentPage />} />
+
+          {/* Company Routes */}
+          <Route path="/about" element={<AboutUs />} />
+          <Route path="/careers" element={<Careers />} />
+          <Route path="/jobs" element={<Careers />} />
+          {/* Dedicated Trainer Landing & Subpages */}
+          <Route path="/trainers" element={<SmartTrainersRoute />} />
+          <Route path="/training" element={<Navigate to="/member/find-trainers" replace />} />
+          <Route path="/trainers/directory" element={<TrainersDirectory />} />
+          <Route path="/trainers/about" element={<TrainerAboutPage />} />
+          <Route path="/trainers/how-it-works" element={<TrainerHowItWorksPage />} />
+          <Route path="/trainers/benefits" element={<TrainerBenefitsPage />} />
+          <Route path="/trainers/faqs" element={<TrainerFaqsPage />} />
+          <Route path="/trainers/contact" element={<TrainerContactPage />} />
+          <Route path="/trainers/guidelines" element={<TrainerGuidelinesPage />} />
+          <Route path="/trainers/support" element={<TrainerSupportPage />} />
+          <Route path="/trainers/terms" element={<TrainerTermsPage />} />
+          <Route path="/trainers/privacy" element={<TrainerPrivacyPage />} />
+          <Route path="/trainers/cookies" element={<TrainerCookiePolicyPage />} />
+          <Route path="/trainers/refund-policy" element={<TrainerRefundPolicyPage />} />
+          <Route path="/explore-trainers" element={<TrainersDirectory />} />
+          <Route path="/blog" element={<Blog />} />
+          <Route path="/blog/:id" element={<BlogPost />} />
+          <Route path="/contact" element={<Contact />} />
+          
+          {/* Legal Routes */}
+          <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+          <Route path="/privacy" element={<PrivacyPolicy />} />
+          <Route path="/terms-of-service" element={<TermsOfService />} />
+          <Route path="/terms" element={<TermsOfService />} />
+          <Route path="/cancellation-refund-policy" element={<CancellationRefundPolicy />} />
+
+          {/* Post-Registration Routes (auth required) */}
+          <Route path="/pending" element={<Navigate to="/status?type=pending" replace />} />
+          <Route path="/status" element={
+            <ProtectedRoute><StatusPage /></ProtectedRoute>
+          } />
+          <Route path="/subscription-plans" element={
+            <ProtectedRoute><SubscriptionPlansPage /></ProtectedRoute>
+          } />
+          <Route path="/gym-owner/subscription" element={
+            <Navigate to="/subscription-plans" replace />
+          } />
+          <Route path="/gym-owner/payment" element={
+            <ProtectedRoute><PaymentPage /></ProtectedRoute>
+          } />
+
+          {/* Member Routes */}
+          <Route path="/member" element={
+            <ProtectedRoute allowedRoles={['MEMBER']} requireSubscription>
+              <MemberLayout />
+            </ProtectedRoute>
+          }>
+            <Route index element={<Navigate to="/member/dashboard" replace />} />
+            <Route path="dashboard" element={<MemberDashboard />} />
+            <Route path="dashboard/training" element={<Navigate to="/member/find-trainers" replace />} />
+            <Route path="dashboard/trainers" element={<Navigate to="/member/find-trainers" replace />} />
+            <Route path="dashboard/trainer" element={<Navigate to="/member/trainer" replace />} />
+            <Route path="profile" element={<MemberProfile />} />
+            <Route path="my-gym" element={<MemberGymProfile />} />
+            <Route path="training" element={<MemberFindTrainers />} />
+            <Route path="trainers" element={<Navigate to="/member/find-trainers" replace />} />
+            <Route path="find-trainers" element={<MemberFindTrainers />} />
+            <Route path="trainer" element={<MemberMyTrainer />} />
+            <Route path="book-session" element={<MemberBookSession />} />
+            <Route path="bookings" element={<MemberMyBookings />} />
+            <Route path="online-sessions" element={<MemberOnlineSessions />} />
+            <Route path="workout" element={<MemberWorkoutPlan />} />
+            <Route path="workout-plan" element={<MemberWorkoutPlan />} />
+            <Route path="workouts" element={<MemberWorkoutPlan />} />
+            <Route path="workout-plans" element={<MemberWorkoutPlan />} />
+            <Route path="trainer-plan" element={<MemberTrainerPlan />} />
+            <Route path="trainers-plan" element={<MemberTrainerPlan />} />
+            <Route path="workout-videos" element={<MemberWorkoutVideos />} />
+            <Route path="diet" element={<MemberDietPlan />} />
+            <Route path="ai-assistant" element={<MemberAIFitness />} />
+            <Route path="smart-assistant" element={<MemberAIAssistant />} />
+            <Route path="assistant" element={<MemberAIAssistant />} />
+            <Route path="ai-results" element={<Navigate to="/member/ai-assistant" replace />} />
+            <Route path="trainer-review" element={<MemberTrainerReview />} />
+            <Route path="session-review" element={<MemberSessionReview />} />
+            <Route path="progress" element={<MemberProgress />} />
+            <Route path="attendance" element={<MemberAttendance />} />
+            <Route path="subscription" element={<MemberSubscription />} />
+            <Route path="upgrade" element={<MemberUpgrade />} />
+            <Route path="payments" element={<MemberPayments />} />
+            <Route path="chat" element={<MemberMessages />} />
+            <Route path="notifications" element={<MemberNotifications />} />
+            <Route path="store" element={<MemberStore />} />
+            <Route path="store/cart" element={<MemberCart />} />
+            <Route path="store/checkout" element={<MemberCheckout />} />
+            <Route path="checkout/:id" element={<MemberSessionCheckout />} />
+            <Route path="store/orders" element={<MemberOrders />} />
+            <Route path="store/payments" element={<MemberStorePayments />} />
+            <Route path="enquiries" element={<MemberEnquiries />} />
+            <Route path="settings" element={<MemberSettings />} />
+            <Route path="challenges" element={<MemberChallenges />} />
+            <Route path="referrals" element={<MemberReferrals />} />
+            <Route path="refer-earn" element={<MemberReferrals />} />
+            <Route path="rewards" element={<MemberChallenges />} />
+            <Route path="my-rewards" element={<MemberChallenges />} />
+            <Route path="*" element={<SmartMemberCatchAll />} />
+          </Route>
+
+          {/* Trainer Routes */}
+          <Route path="/trainer" element={
+            <ProtectedRoute allowedRoles={['TRAINER']}>
+              <TrainerLayout />
+            </ProtectedRoute>
+          }>
+            <Route index element={<Navigate to="/trainer/dashboard" replace />} />
+            <Route path="dashboard" element={<TrainerDashboard />} />
+            <Route path="profile" element={<TrainerProfile />} />
+            <Route path="members" element={<TrainerMembers />} />
+            <Route path="schedule" element={<TrainerSchedule />} />
+            <Route path="session-bookings" element={<TrainerSessionBookings />} />
+            <Route path="online-sessions" element={<TrainerOnlineSessions />} />
+            <Route path="exercises" element={<TrainerExerciseLibrary />} />
+            <Route path="exercise-videos" element={<GymExerciseVideos />} />
+            <Route path="workout-plans" element={<TrainerWorkoutPlans />} />
+            <Route path="workout-videos" element={<TrainerWorkoutVideos />} />
+            <Route path="diet-plans" element={<TrainerDietPlans />} />
+            <Route path="equipments" element={<TrainerGymEquipments />} />
+            <Route path="customer-workplan-completed" element={<TrainerCustomerWorkplansCompleted />} />
+            <Route path="member-progress" element={<TrainerMemberProgress />} />
+            <Route path="customer-progress" element={<TrainerMemberProgress />} />
+            <Route path="attendance" element={<TrainerAttendance />} />
+            <Route path="messages" element={<TrainerMessages />} />
+            <Route path="earnings" element={<TrainerEarnings />} />
+            <Route path="payment-history" element={<TrainerPaymentHistoryPage />} />
+            <Route path="my-fee" element={<TrainerMyAssignedFee />} />
+            <Route path="payments-received" element={<TrainerPaymentsReceived />} />
+            <Route path="notifications" element={<TrainerNotifications />} />
+            <Route path="settings" element={<TrainerSettings />} />
+            <Route path="ai-assistant" element={<TrainerAIAssistant />} />
+            <Route path="ai-review/:customerId" element={<TrainerAIReview />} />
+            <Route path="ai-feedback" element={<TrainerAIFeedback />} />
+            <Route path="reviews" element={<TrainerReviewsRatings />} />
+            <Route path="challenges" element={<TrainerCustomerChallenges />} />
+            <Route path="rewards" element={<TrainerRewards />} />
+
+            {/* Route aliases for KPI cards and shortcuts */}
+            <Route path="sessions" element={<Navigate to="/trainer/session-bookings" replace />} />
+            <Route path="assigned-users" element={<Navigate to="/trainer/members" replace />} />
+            <Route path="ai-recommendations" element={<Navigate to="/trainer/ai-feedback" replace />} />
+
+            {/* Trainer Hiring & Job Opportunities */}
+            <Route path="jobs" element={<TrainerFindJobs />} />
+            <Route path="applications" element={<TrainerMyApplications />} />
+            <Route path="hiring-requests" element={<TrainerHiringRequests />} />
+            <Route path="interviews" element={<TrainerInterviews />} />
+            <Route path="job-offers" element={<TrainerJobOffers />} />
+            <Route path="*" element={<SmartTrainerCatchAll />} />
+          </Route>
+
+{/* Manager Dashboard */}
+          <Route path="/manager/dashboard" element={
+            <ProtectedRoute allowedRoles={['GYM_MANAGER']}>
+              <ManagerDashboard />
+            </ProtectedRoute>
+          } />
+
+          {/* Receptionist Dashboard */}
+          <Route path="/receptionist/dashboard" element={
+            <ProtectedRoute allowedRoles={['RECEPTIONIST']}>
+              <ReceptionistDashboard />
+            </ProtectedRoute>
+          } />
+
+          {/* Gym Admin Routes */}
+          <Route path="/admin" element={
+            <ProtectedRoute allowedRoles={['ADMIN', 'GYM_OWNER', 'GYM_MANAGER']}>
+              <GymAdminLayout />
+            </ProtectedRoute>
+          }>
+            <Route index element={<Navigate to="/admin/dashboard" replace />} />
+            <Route path="dashboard" element={<GymAdminDashboard />} />
+            <Route path="gym-profile" element={<GymAdminProfile />} />
+            <Route path="location" element={<GymAdminLocationSettings />} />
+            <Route path="branches" element={<GymAdminBranches />} />
+            <Route path="add-branch" element={<GymAdminAddBranch />} />
+            <Route path="branches/:id" element={<GymAdminBranchProfile />} />
+            <Route path="trainers" element={<GymAdminTrainers />} />
+
+            {/* Trainer Hiring & Vacancies */}
+            <Route path="hiring/trainers" element={<GymAdminBrowseTrainers />} />
+            <Route path="hiring/jobs" element={<GymAdminManageJobs />} />
+            <Route path="hiring/jobs/new" element={<GymAdminPostJob />} />
+            <Route path="hiring/jobs/edit/:id" element={<GymAdminPostJob />} />
+            <Route path="hiring/applications" element={<GymAdminApplications />} />
+            <Route path="hiring/requests" element={<GymAdminHiringRequests />} />
+            <Route path="hiring/shortlisted" element={<GymAdminShortlisted />} />
+            <Route path="hiring/interviews" element={<GymAdminInterviews />} />
+            <Route path="hiring/hired" element={<GymAdminHiredTrainers />} />
+
+            {/* Direct route aliases for Post a Job & Hiring shortcuts */}
+            <Route path="post-a-job" element={<Navigate to="/admin/hiring/jobs/new" replace />} />
+            <Route path="post-job" element={<Navigate to="/admin/hiring/jobs/new" replace />} />
+            <Route path="post" element={<Navigate to="/admin/hiring/jobs/new" replace />} />
+            <Route path="pos" element={<Navigate to="/admin/hiring/jobs/new" replace />} />
+            <Route path="jobs/new" element={<Navigate to="/admin/hiring/jobs/new" replace />} />
+            <Route path="jobs" element={<Navigate to="/admin/hiring/jobs" replace />} />
+            <Route path="manage-jobs" element={<Navigate to="/admin/hiring/jobs" replace />} />
+            <Route path="applications" element={<Navigate to="/admin/hiring/applications" replace />} />
+
+            <Route path="members" element={<GymAdminMembers />} />
+            <Route path="exercises" element={<GymAdminExerciseLibrary />} />
+            <Route path="exercise-videos" element={<GymExerciseVideos />} />
+            <Route path="equipment" element={<GymAdminEquipment />} />
+            <Route path="membership-plans" element={<GymAdminMembershipPlans />} />
+            <Route path="enquiries" element={<GymAdminEnquiries />} />
+            <Route path="ai-plans" element={<GymAdminAIFitnessPlans />} />
+            <Route path="ai-plans/:id" element={<GymAdminAIPlanDetails />} />
+            <Route path="trainer-schedule" element={<GymAdminTrainerSchedule />} />
+            <Route path="session-bookings" element={<GymAdminSessionBookings />} />
+            <Route path="online-sessions" element={<GymAdminOnlineSessions />} />
+            <Route path="video-bookings" element={<GymAdminVideoBookings />} />
+            <Route path="payments" element={<GymAdminPayments />} />
+            <Route path="attendance" element={<GymAdminAttendance />} />
+            <Route path="revenue-analytics" element={<RevenueAnalytics role="GYM_OWNER" />} />
+            <Route path="reports" element={<GymAdminReports />} />
+            <Route path="reviews" element={<GymAdminReviews />} />
+            <Route path="notifications" element={<GymAdminNotifications />} />
+            <Route path="profile" element={<GymAdminUserProfile />} />
+            <Route path="settings" element={<GymAdminSettings />} />
+            <Route path="subscription" element={<GymAdminSubscription />} />
+            <Route path="deleted-details" element={<GymAdminDeletedDetails />} />
+            <Route path="import-customers" element={<GymAdminImportCustomers />} />
+            <Route path="trainer-fees" element={<GymAdminTrainerFees />} />
+            <Route path="trainer-payments" element={<GymAdminTrainerPayments />} />
+            <Route path="trainer-payments-history" element={<GymAdminTrainerPaymentHistory />} />
+            <Route path="store" element={<GymStoreDashboard />} />
+            <Route path="store/products" element={<GymStoreProducts />} />
+            <Route path="store/categories" element={<GymStoreCategories />} />
+            <Route path="store/inventory" element={<GymStoreInventory />} />
+            <Route path="store/orders" element={<GymStoreOrders />} />
+            <Route path="store/offline-sales" element={<GymStoreOfflineSales />} />
+            <Route path="store/sales" element={<GymStoreSalesHistory />} />
+            <Route path="store/settings" element={<GymStoreSettings />} />
+            <Route path="challenges" element={<GymAdminChallenges />} />
+            <Route path="rewards" element={<GymAdminRewardsPerformance />} />
+            <Route path="rewards-performance" element={<GymAdminRewardsPerformance />} />
+            <Route path="referrals" element={<GymAdminReferrals />} />
+            <Route path="*" element={<SmartAdminCatchAll />} />
+          </Route>
+
+{/* Super Admin Routes */}
+          <Route path="/super-admin" element={
+            <ProtectedRoute allowedRoles={['SUPER_ADMIN']}>
+              <SuperAdminLayout />
+            </ProtectedRoute>
+          }>
+            <Route index element={<Navigate to="/super-admin/dashboard" replace />} />
+            <Route path="dashboard" element={<SuperAdminDashboard />} />
+            <Route path="revenue-analytics" element={<RevenueAnalytics role="SUPER_ADMIN" />} />
+            <Route path="leads" element={<SuperAdminLeads />} />
+            <Route path="gyms/add" element={<SuperAdminAddGym />} />
+            <Route path="gyms/details" element={<SuperAdminGymsDetails />} />
+            <Route path="gyms/edit/:id" element={<SuperAdminGymsEdit />} />
+            <Route path="customers" element={<SuperAdminCustomers />} />
+            <Route path="enquiries" element={<SuperAdminEnquiries />} />
+            <Route path="gym-owners" element={<SuperAdminGymOwners />} />
+            <Route path="gym-approvals" element={<SuperAdminGymApprovals />} />
+            <Route path="invitations" element={<SuperAdminInvitations />} />
+            <Route path="subscriptions" element={<SuperAdminSubscriptions />} />
+            <Route path="deleted" element={<SuperAdminDeletedDetails />} />
+            <Route path="payouts" element={<SuperAdminPayouts />} />
+            <Route path="notifications" element={<SuperAdminNotifications />} />
+            <Route path="profile" element={<SuperAdminProfile />} />
+            <Route path="settings" element={<SuperAdminSettings />} />
+            <Route path="store" element={<SuperAdminGymStore />} />
+            <Route path="*" element={<SmartSuperAdminCatchAll />} />
+          </Route>
+
+          {/* Smart Global Catch-all */}
+          <Route path="*" element={<GlobalCatchAll />} />
+        </Routes>
+      </Router>
+    </AuthProvider>
+  );
+}
+
+export default App;

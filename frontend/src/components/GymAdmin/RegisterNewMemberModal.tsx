@@ -1,0 +1,301 @@
+import React, { useState } from 'react';
+import { X, ChevronRight, ChevronLeft, Save, User, Activity, CheckCircle } from 'lucide-react';
+
+interface Props {
+  onClose: () => void;
+  onSubmit: (data: any) => void;
+  plans: any[];
+  initialData?: any;
+}
+
+export const RegisterNewMemberModal: React.FC<Props> = ({ onClose, onSubmit, plans, initialData }) => {
+  const [step, setStep] = useState(1);
+  const [formData, setFormData] = useState({
+    name: initialData?.firstName && initialData?.lastName ? `${initialData.firstName} ${initialData.lastName}` : (initialData?.name || ''),
+    email: initialData?.email || '',
+    phone: initialData?.mobile || '',
+    gender: 'Male',
+    dob: '',
+    plan: plans.length > 0 ? plans[0].name : 'Basic',
+    duration: '1 Month',
+    startDate: new Date().toISOString().split('T')[0],
+    assignedTrainer: '',
+    status: 'Active',
+    height: '',
+    weight: '',
+    fitnessGoal: 'General Fitness',
+    fitnessLevel: 'Beginner',
+    emergencyName: '',
+    emergencyPhone: '',
+    emergencyRelation: '',
+    createLogin: true,
+    sendEmail: true
+  });
+
+  const nextStep = () => setStep(s => Math.min(s + 1, 5));
+  const prevStep = () => setStep(s => Math.max(s - 1, 1));
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (step === 1) {
+      if (!/^[6-9]\d{9}$/.test(formData.phone)) {
+        alert('Phone number must be exactly 10 digits and start with 6, 7, 8, or 9');
+        return;
+      }
+    }
+    if (step === 4 && formData.emergencyPhone) {
+      if (!/^[6-9]\d{9}$/.test(formData.emergencyPhone)) {
+        alert('Emergency contact phone must be exactly 10 digits and start with 6, 7, 8, or 9');
+        return;
+      }
+    }
+    if (step < 5) {
+      nextStep();
+      return;
+    }
+    
+    // Auto calculate end date based on duration
+    const start = new Date(formData.startDate);
+    let end: Date;
+    if (formData.duration === '1 Day') {
+      end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+    } else {
+      const months = formData.duration === '1 Month' ? 1 : formData.duration === '3 Months' ? 3 : formData.duration === '6 Months' ? 6 : 12;
+      end = new Date(start.setMonth(start.getMonth() + months));
+    }
+    
+    onSubmit({ 
+      ...formData, 
+      customerType: 'NEW_CUSTOMER',
+      enquiryId: initialData?.enquiryId,
+      endDate: end.toISOString().split('T')[0]
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-[#FFFFFF] rounded-2xl max-w-3xl w-full shadow-2xl border border-[#E2E8F0] overflow-hidden flex flex-col max-h-[85vh] my-auto">
+        
+        <div className="p-6 border-b border-[#E2E8F0] flex justify-between items-center bg-[#F8FAFC] shrink-0">
+          <div>
+            <h2 className="text-xl font-bold text-[#111827]">Register New Customer</h2>
+            <p className="text-sm text-[#64748B] mt-1">Step {step} of 5</p>
+          </div>
+          <button onClick={onClose} type="button" className="text-[#64748B] hover:text-[#C2410C] transition-colors p-2 rounded-lg hover:bg-[#FFF7ED]">
+            <X size={24} />
+          </button>
+        </div>
+
+        {/* Progress Bar */}
+        <div className="w-full bg-gray-200 h-1.5 shrink-0">
+          <div className="bg-[#C2410C] h-1.5 transition-all duration-300" style={{ width: `${(step / 5) * 100}%` }}></div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+          <div className="p-6 space-y-6 overflow-y-auto flex-1">
+          
+          {step === 1 && (
+            <div className="space-y-6 animate-in fade-in">
+              <div className="flex items-center space-x-3 text-[#EA580C] mb-2 border-b border-[#E2E8F0] pb-2">
+                <User size={20} />
+                <h3 className="text-lg font-bold uppercase tracking-wider">Step 1: Personal Information</h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Full Name *</label>
+                  <input required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-2.5 outline-none focus:border-[#FDBA74] focus:bg-[#FFFFFF]" placeholder="e.g. John Doe" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Email Address *</label>
+                  <input required type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-2.5 outline-none focus:border-[#FDBA74] focus:bg-[#FFFFFF] invalid:[&:not(:placeholder-shown):not(:focus)]:border-red-500" placeholder="john@example.com" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Phone Number *</label>
+                  <input required type="tel" value={formData.phone} onChange={e => {
+                    const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                    if (val.length > 0 && !/^[6-9]/.test(val)) return;
+                    setFormData({...formData, phone: val});
+                  }} minLength={10} maxLength={10} pattern="[6-9]\d{9}" title="Please enter 10 digits starting with 6, 7, 8, or 9" className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-2.5 outline-none focus:border-[#FDBA74] focus:bg-[#FFFFFF]" placeholder="10-digit number (starts with 6-9)" />
+                  {formData.phone && (!/^[6-9]\d{9}$/.test(formData.phone)) && (
+                    <p className="text-xs text-red-500 mt-1">
+                      {formData.phone.length < 10 ? `Enter 10 digits (${formData.phone.length}/10)` : 'Must start with 6, 7, 8, or 9'}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Gender</label>
+                  <select value={formData.gender} onChange={e => setFormData({...formData, gender: e.target.value})} className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-2.5 outline-none focus:border-[#FDBA74] focus:bg-[#FFFFFF]">
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Date of Birth</label>
+                  <input type="date" value={formData.dob} onChange={e => setFormData({...formData, dob: e.target.value})} className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-2.5 outline-none focus:border-[#FDBA74] focus:bg-[#FFFFFF]" />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 2 && (
+            <div className="space-y-6 animate-in fade-in">
+              <div className="flex items-center space-x-3 text-[#EA580C] mb-2 border-b border-[#E2E8F0] pb-2">
+                <CheckCircle size={20} />
+                <h3 className="text-lg font-bold uppercase tracking-wider">Step 2: Membership</h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Membership Plan *</label>
+                  <select required value={formData.plan} onChange={e => setFormData({...formData, plan: e.target.value})} className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-2.5 outline-none focus:border-[#FDBA74] focus:bg-[#FFFFFF]">
+                    {plans.map(p => (
+                      <option key={p.id || p.name} value={p.name}>{p.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Status</label>
+                  <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-2.5 outline-none focus:border-[#FDBA74] focus:bg-[#FFFFFF]">
+                    <option value="Active">Active</option>
+                    <option value="Pending">Pending</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Membership Start Date *</label>
+                  <input required type="date" value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})} className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-2.5 outline-none focus:border-[#FDBA74] focus:bg-[#FFFFFF]" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Duration</label>
+                  <select value={formData.duration} onChange={e => setFormData({...formData, duration: e.target.value})} className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-2.5 outline-none focus:border-[#FDBA74] focus:bg-[#FFFFFF]">
+                    <option value="1 Day">1 Day</option>
+                    <option value="1 Month">1 Month</option>
+                    <option value="3 Months">3 Months</option>
+                    <option value="6 Months">6 Months</option>
+                    <option value="1 Year">1 Year</option>
+                  </select>
+                </div>
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Assigned Trainer (Optional)</label>
+                  <select value={formData.assignedTrainer} onChange={e => setFormData({...formData, assignedTrainer: e.target.value})} className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-2.5 outline-none focus:border-[#FDBA74] focus:bg-[#FFFFFF]">
+                    <option value="">No Trainer Assigned</option>
+                    <option value="trainer1">Mike Johnson</option>
+                    <option value="trainer2">Sarah Williams</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div className="space-y-6 animate-in fade-in">
+              <div className="flex items-center space-x-3 text-[#EA580C] mb-2 border-b border-[#E2E8F0] pb-2">
+                <Activity size={20} />
+                <h3 className="text-lg font-bold uppercase tracking-wider">Step 3: Fitness Information</h3>
+              </div>
+              <p className="text-sm text-[#64748B] mb-4">Provide basic metrics to initialize their AI Assessment.</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Height (cm)</label>
+                  <input type="number" value={formData.height} onChange={e => setFormData({...formData, height: e.target.value})} className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-2.5 outline-none focus:border-[#FDBA74] focus:bg-[#FFFFFF]" placeholder="e.g. 175" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Current Weight (kg)</label>
+                  <input type="number" value={formData.weight} onChange={e => setFormData({...formData, weight: e.target.value})} className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-2.5 outline-none focus:border-[#FDBA74] focus:bg-[#FFFFFF]" placeholder="e.g. 70" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Fitness Goal</label>
+                  <select value={formData.fitnessGoal} onChange={e => setFormData({...formData, fitnessGoal: e.target.value})} className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-2.5 outline-none focus:border-[#FDBA74] focus:bg-[#FFFFFF]">
+                    <option value="Weight Loss">Weight Loss</option>
+                    <option value="Weight Gain">Weight Gain</option>
+                    <option value="Muscle Building">Muscle Building</option>
+                    <option value="General Fitness">General Fitness</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Fitness Level</label>
+                  <select value={formData.fitnessLevel} onChange={e => setFormData({...formData, fitnessLevel: e.target.value})} className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-2.5 outline-none focus:border-[#FDBA74] focus:bg-[#FFFFFF]">
+                    <option value="Beginner">Beginner</option>
+                    <option value="Intermediate">Intermediate</option>
+                    <option value="Advanced">Advanced</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 4 && (
+            <div className="space-y-6 animate-in fade-in">
+              <div className="flex items-center space-x-3 text-[#EA580C] mb-2 border-b border-[#E2E8F0] pb-2">
+                <User size={20} />
+                <h3 className="text-lg font-bold uppercase tracking-wider">Step 4: Emergency Contact</h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Contact Name</label>
+                  <input value={formData.emergencyName} onChange={e => setFormData({...formData, emergencyName: e.target.value})} className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-2.5 outline-none focus:border-[#FDBA74] focus:bg-[#FFFFFF]" placeholder="Emergency Contact Name" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Contact Phone</label>
+                  <input type="tel" value={formData.emergencyPhone} onChange={e => {
+                    const val = e.target.value.replace(/\D/g, '');
+                    if (val.length > 0 && !/^[6-9]/.test(val)) return;
+                    if (val.length <= 10) setFormData({...formData, emergencyPhone: val});
+                  }} minLength={10} maxLength={10} pattern="[6-9]\d{9}" title="Please enter 10 digits starting with 6, 7, 8, or 9" className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-2.5 outline-none focus:border-[#FDBA74] focus:bg-[#FFFFFF]" placeholder="10-digit number (starts with 6-9)" />
+                  {formData.emergencyPhone && (!/^[6-9]\d{9}$/.test(formData.emergencyPhone)) && (
+                    <p className="text-xs text-red-500 mt-1">
+                      {formData.emergencyPhone.length < 10 ? `Enter 10 digits (${formData.emergencyPhone.length}/10)` : 'Must start with 6, 7, 8, or 9'}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Relationship</label>
+                  <input value={formData.emergencyRelation} onChange={e => setFormData({...formData, emergencyRelation: e.target.value})} className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-2.5 outline-none focus:border-[#FDBA74] focus:bg-[#FFFFFF]" placeholder="e.g. Parent" />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 5 && (
+            <div className="space-y-6 animate-in fade-in">
+              <div className="flex items-center space-x-3 text-[#EA580C] mb-2 border-b border-[#E2E8F0] pb-2">
+                <CheckCircle size={20} />
+                <h3 className="text-lg font-bold uppercase tracking-wider">Step 5: Account Creation</h3>
+              </div>
+              <div className="bg-[#F8FAFC] p-6 rounded-xl border border-[#E2E8F0]">
+                <p className="text-[#111827] font-medium mb-4">By completing this registration, a secure member account will be automatically generated and linked to this gym.</p>
+                <div className="flex flex-col space-y-4">
+                  <label className="flex items-center space-x-3 cursor-pointer">
+                    <input type="checkbox" checked={formData.createLogin} onChange={e => setFormData({...formData, createLogin: e.target.checked})} className="w-5 h-5 text-[#EA580C] rounded focus:ring-[#F97316]" />
+                    <span className="text-[#111827] font-medium">Create Member Login Account Now</span>
+                  </label>
+                  <label className="flex items-center space-x-3 cursor-pointer">
+                    <input type="checkbox" checked={formData.sendEmail} onChange={e => setFormData({...formData, sendEmail: e.target.checked})} className="w-5 h-5 text-[#EA580C] rounded focus:ring-[#F97316]" />
+                    <span className="text-[#111827] font-medium">Send Welcome Email & Setup Instructions</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
+          </div>
+
+          {/* Controls */}
+          <div className="flex justify-between items-center p-4 bg-[#F8FAFC] border-t border-[#E2E8F0] shrink-0">
+            <button 
+              type="button" 
+              onClick={step === 1 ? onClose : prevStep} 
+              className="px-6 py-2.5 text-[#64748B] font-bold hover:bg-[#FFF7ED] rounded-xl transition-colors flex items-center"
+            >
+              {step === 1 ? 'Cancel' : <><ChevronLeft size={18} className="mr-1" /> Back</>}
+            </button>
+            <button 
+              type="submit" 
+              className="px-8 py-2.5 bg-[#C2410C] text-white font-bold rounded-xl font-bold hover:bg-[#9A3412] transition-colors shadow-lg shadow-orange-500/15 flex items-center gap-2"
+            >
+              {step < 5 ? <>Next Step <ChevronRight size={18} /></> : <><Save size={18} /> Complete Registration</>}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};

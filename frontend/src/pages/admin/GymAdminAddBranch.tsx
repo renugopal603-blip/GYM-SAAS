@@ -1,0 +1,544 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Building2, MapPin, Clock, ArrowLeft, Loader2, Dumbbell, Activity, CheckCircle, Wifi, Users, Droplets, Plus, Edit, X } from 'lucide-react';
+import api from '../../utils/api';
+
+const commonFacilities = [
+  { id: 'changing_room', label: 'Changing Room', icon: Users },
+  { id: 'shower', label: 'Shower', icon: Droplets },
+  { id: 'locker', label: 'Locker', icon: CheckCircle },
+  { id: 'parking', label: 'Parking', icon: MapPin },
+  { id: 'wifi', label: 'Wi-Fi', icon: Wifi },
+  { id: 'drinking_water', label: 'Drinking Water', icon: Droplets },
+  { id: 'reception', label: 'Reception', icon: Building2 },
+  { id: 'cardio_area', label: 'Cardio Area', icon: Activity },
+  { id: 'strength_area', label: 'Strength Area', icon: Dumbbell },
+];
+
+const GymAdminAddBranch = () => {
+  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [showPlanModal, setShowPlanModal] = useState(false);
+  const [editingPlanIndex, setEditingPlanIndex] = useState<number | null>(null);
+  const [planForm, setPlanForm] = useState({ name: '', price: '', duration: 'Monthly', features: '' });
+
+  const [form, setForm] = useState({
+    branchName: '',
+    branchCode: '',
+    phone: '',
+    email: '',
+    address: '',
+    locality: '',
+    city: '',
+    state: '',
+    pinCode: '',
+    openingTime: '06:00 AM',
+    closingTime: '10:00 PM',
+    workingDays: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+    trainingMode: 'offline',
+    services: [] as string[],
+    facilities: [] as string[],
+    subscriptionPlans: [] as any[],
+  });
+
+  const handleOpenAddPlan = () => {
+    setEditingPlanIndex(null);
+    setPlanForm({ name: '', price: '', duration: 'Monthly', features: '' });
+    setShowPlanModal(true);
+  };
+
+  const handleEditPlan = (index: number) => {
+    const planToEdit = form.subscriptionPlans[index];
+    if (!planToEdit) return;
+    setPlanForm({
+      name: planToEdit.name || '',
+      price: planToEdit.price !== undefined ? String(planToEdit.price) : '',
+      duration: planToEdit.duration || 'Monthly',
+      features: planToEdit.features || ''
+    });
+    setEditingPlanIndex(index);
+    setShowPlanModal(true);
+  };
+
+  const handleSavePlan = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingPlanIndex !== null) {
+      setForm(prev => {
+        const plans = [...prev.subscriptionPlans];
+        plans[editingPlanIndex] = { ...plans[editingPlanIndex], ...planForm };
+        return { ...prev, subscriptionPlans: plans };
+      });
+    } else {
+      setForm(prev => ({ ...prev, subscriptionPlans: [...prev.subscriptionPlans, planForm] }));
+    }
+    setShowPlanModal(false);
+    setEditingPlanIndex(null);
+    setPlanForm({ name: '', price: '', duration: 'Monthly', features: '' });
+  };
+
+  const handleRemovePlan = (index: number) => {
+    setForm(prev => {
+      const plans = [...prev.subscriptionPlans];
+      plans.splice(index, 1);
+      return { ...prev, subscriptionPlans: plans };
+    });
+  };
+
+  const handleDayToggle = (day: string) => {
+    setForm(prev => {
+      const days = [...prev.workingDays];
+      if (days.includes(day)) {
+        return { ...prev, workingDays: days.filter(d => d !== day) };
+      } else {
+        return { ...prev, workingDays: [...days, day] };
+      }
+    });
+  };
+
+  const handleFacilityToggle = (facility: string) => {
+    setForm(prev => {
+      const facs = [...prev.facilities];
+      if (facs.includes(facility)) {
+        return { ...prev, facilities: facs.filter(f => f !== facility) };
+      } else {
+        return { ...prev, facilities: [...facs, facility] };
+      }
+    });
+  };
+
+  const handleServiceToggle = (service: string) => {
+    setForm(prev => {
+      const srvs = [...prev.services];
+      if (srvs.includes(service)) {
+        return { ...prev, services: srvs.filter(s => s !== service) };
+      } else {
+        return { ...prev, services: [...srvs, service] };
+      }
+    });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    // Validations
+    if (!/^[6-9]\d{9}$/.test(form.phone)) {
+      setError('Phone number must be exactly 10 digits and start with 6, 7, 8, or 9.');
+      setLoading(false);
+      return;
+    }
+
+    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+      setError('Please enter a valid email address (e.g., branch@gym.com).');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const payload = {
+        ...form,
+        location: {
+          address: form.address,
+          area: form.locality,
+          city: form.city,
+          state: form.state,
+          pinCode: form.pinCode,
+        },
+        operatingHours: {
+          openingTime: form.openingTime,
+          closingTime: form.closingTime,
+          workingDays: form.workingDays
+        }
+      };
+
+      const res = await api.post('/branches', payload);
+      if (res.data.success) {
+        navigate('/admin/branches');
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to create branch');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  const allServices = ['Personal Training', 'Group Classes', 'Online Training', 'AI Fitness Coaching', 'Diet Guidance'];
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-6">
+      <div className="flex items-center gap-4 mb-6">
+        <button onClick={() => navigate('/admin/branches')} className="w-10 h-10 bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl flex items-center justify-center text-[#64748B] hover:bg-[#FFF7ED] hover:text-[#EA580C] transition-colors">
+          <ArrowLeft size={20} />
+        </button>
+        <div>
+          <h1 className="text-3xl font-bold text-[#111827] tracking-tight">Add New Branch</h1>
+          <p className="text-[#64748B] mt-1">Add a new location under your gym.</p>
+        </div>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-xl">
+          <p className="text-red-700">{error}</p>
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-8">
+
+        {/* Section 1 - Basic Information */}
+        <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-8">
+          <h2 className="text-xl font-bold text-[#111827] mb-6 flex items-center gap-2 border-b border-[#E2E8F0] pb-4">
+            <Building2 className="text-[#EA580C]" /> Basic Information
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-bold text-[#64748B] mb-2">Branch Name *</label>
+              <input required type="text" value={form.branchName} onChange={e => setForm({ ...form, branchName: e.target.value })} placeholder="e.g. Main Branch" className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 text-[#111827] outline-none focus:border-[#FDBA74]" />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-[#64748B] mb-2">Branch Code *</label>
+              <input required type="text" value={form.branchCode} onChange={e => setForm({ ...form, branchCode: e.target.value.toUpperCase() })} placeholder="e.g. GYM-001" className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 text-[#111827] outline-none focus:border-[#FDBA74]" />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-[#64748B] mb-2">Branch Phone Number *</label>
+              <input
+                required
+                type="tel"
+                minLength={10}
+                maxLength={10}
+                pattern="[6-9]\d{9}"
+                title="Phone number must be 10 digits and start with 6, 7, 8, or 9"
+                value={form.phone}
+                onChange={e => {
+                  const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                  if (val.length > 0 && !/^[6-9]/.test(val)) {
+                    setError('Phone number must start with 6, 7, 8, or 9 (cannot start with 1, 2, 3, 4, or 5).');
+                    return;
+                  }
+                  if (error.includes('Phone number')) setError('');
+                  setForm({...form, phone: val});
+                }}
+                placeholder="e.g. 9876543210"
+                className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 text-[#111827] outline-none focus:border-[#FDBA74]"
+              />
+              {form.phone && !/^[6-9]\d{9}$/.test(form.phone) && (
+                <p className="text-xs text-red-500 mt-1">
+                  {form.phone.length < 10 ? `Enter 10 digits (${form.phone.length}/10)` : 'Must start with 6, 7, 8, or 9'}
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-[#64748B] mb-2">Branch Email</label>
+              <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="e.g. branch@gym.com" className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 text-[#111827] outline-none focus:border-[#FDBA74]" />
+            </div>
+          </div>
+        </div>
+
+        {/* Section 2 - Location */}
+        <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-8">
+          <h2 className="text-xl font-bold text-[#111827] mb-6 flex items-center gap-2 border-b border-[#E2E8F0] pb-4">
+            <MapPin className="text-[#EA580C]" /> Location
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="md:col-span-2">
+              <label className="block text-sm font-bold text-[#64748B] mb-2">Street Address *</label>
+              <input required type="text" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} placeholder="Enter full address" className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 text-[#111827] outline-none focus:border-[#FDBA74]" />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-[#64748B] mb-2">Area / Locality *</label>
+              <input required type="text" value={form.locality} onChange={e => setForm({ ...form, locality: e.target.value })} placeholder="Locality" className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 text-[#111827] outline-none focus:border-[#FDBA74]" />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-[#64748B] mb-2">City *</label>
+              <input required type="text" value={form.city} onChange={e => setForm({ ...form, city: e.target.value })} placeholder="City" className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 text-[#111827] outline-none focus:border-[#FDBA74]" />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-[#64748B] mb-2">State *</label>
+              <input required type="text" value={form.state} onChange={e => setForm({ ...form, state: e.target.value })} placeholder="State" className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 text-[#111827] outline-none focus:border-[#FDBA74]" />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-[#64748B] mb-2">Pincode *</label>
+              <input required type="text" inputMode="numeric" maxLength={6} pattern="\d{6}" title="Enter a valid 6-digit pincode" value={form.pinCode} onChange={e => setForm({ ...form, pinCode: e.target.value.replace(/\D/g, '').slice(0, 6) })} placeholder="6-digit pincode" className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 text-[#111827] outline-none focus:border-[#FDBA74]" />
+            </div>
+          </div>
+        </div>
+
+        {/* Section 3 - Operating Hours */}
+        <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-8">
+          <h2 className="text-xl font-bold text-[#111827] mb-6 flex items-center gap-2 border-b border-[#E2E8F0] pb-4">
+            <Clock className="text-[#EA580C]" /> Operating Details
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div>
+              <label className="block text-sm font-bold text-[#64748B] mb-2">Opening Time *</label>
+              <div className="flex gap-2">
+                <input
+                  required
+                  type="text"
+                  maxLength={5}
+                  placeholder="HH:MM"
+                  value={form.openingTime.split(' ')[0]}
+                  onChange={e => {
+                    let val = e.target.value.replace(/[^\d:]/g, '');
+                    if (val.length === 2 && !val.includes(':') && e.target.value.length === 2) val += ':';
+                    setForm({ ...form, openingTime: `${val} ${form.openingTime.split(' ')[1] || 'AM'}` })
+                  }}
+                  className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 text-[#111827] outline-none focus:border-[#FDBA74]"
+                />
+                <select
+                  value={form.openingTime.split(' ')[1] || 'AM'}
+                  onChange={e => setForm({ ...form, openingTime: `${form.openingTime.split(' ')[0] || '06:00'} ${e.target.value}` })}
+                  className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 text-[#111827] outline-none focus:border-[#FDBA74] font-bold"
+                >
+                  <option value="AM">AM</option>
+                  <option value="PM">PM</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-[#64748B] mb-2">Closing Time *</label>
+              <div className="flex gap-2">
+                <input
+                  required
+                  type="text"
+                  maxLength={5}
+                  placeholder="HH:MM"
+                  value={form.closingTime.split(' ')[0]}
+                  onChange={e => {
+                    let val = e.target.value.replace(/[^\d:]/g, '');
+                    if (val.length === 2 && !val.includes(':') && e.target.value.length === 2) val += ':';
+                    setForm({ ...form, closingTime: `${val} ${form.closingTime.split(' ')[1] || 'PM'}` })
+                  }}
+                  className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 text-[#111827] outline-none focus:border-[#FDBA74]"
+                />
+                <select
+                  value={form.closingTime.split(' ')[1] || 'PM'}
+                  onChange={e => setForm({ ...form, closingTime: `${form.closingTime.split(' ')[0] || '10:00'} ${e.target.value}` })}
+                  className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 text-[#111827] outline-none focus:border-[#FDBA74] font-bold"
+                >
+                  <option value="AM">AM</option>
+                  <option value="PM">PM</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-bold text-[#64748B] mb-3">Working Days *</label>
+            <div className="flex flex-wrap gap-3">
+              {daysOfWeek.map(day => (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => handleDayToggle(day)}
+                  className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors border ${form.workingDays.includes(day)
+                    ? 'bg-[#C2410C] text-white border-[#FDBA74]'
+                    : 'bg-[#F8FAFC] text-[#64748B] border-[#E2E8F0] hover:border-[#FDBA74]'
+                    }`}
+                >
+                  {day}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Section 4 & 5 - Mode and Services */}
+        <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-8">
+          <h2 className="text-xl font-bold text-[#111827] mb-6 flex items-center gap-2 border-b border-[#E2E8F0] pb-4">
+            <Activity className="text-[#EA580C]" /> Training & Services
+          </h2>
+          <div className="mb-8">
+            <label className="block text-sm font-bold text-[#64748B] mb-3">Training Mode *</label>
+            <div className="flex gap-4">
+              {['offline', 'online', 'both'].map(mode => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setForm({ ...form, trainingMode: mode })}
+                  className={`flex-1 py-3 rounded-xl border text-sm font-bold capitalize transition-colors ${form.trainingMode === mode
+                    ? 'bg-green-50 border-[#FDBA74] text-[#EA580C]'
+                    : 'bg-[#FFFFFF] border-[#E2E8F0] text-[#64748B] hover:border-[#FDBA74]'
+                    }`}
+                >
+                  {mode}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-bold text-[#64748B] mb-3">Services Offered</label>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {allServices.map(service => (
+                <button
+                  key={service}
+                  type="button"
+                  onClick={() => handleServiceToggle(service)}
+                  className={`px-4 py-3 rounded-xl text-sm font-semibold transition-colors border text-left flex items-center gap-2 ${form.services.includes(service)
+                    ? 'bg-[#C2410C] text-white border-[#FDBA74]'
+                    : 'bg-[#F8FAFC] text-[#64748B] border-[#E2E8F0] hover:border-[#FDBA74]'
+                    }`}
+                >
+                  <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${form.services.includes(service) ? 'border-white bg-[#FFFFFF]/20' : 'border-[#E2E8F0]'}`}>
+                    {form.services.includes(service) && <CheckCircle size={12} />}
+                  </div>
+                  {service}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Section 6 - Facilities */}
+        <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-8">
+          <h2 className="text-xl font-bold text-[#111827] mb-6 flex items-center gap-2 border-b border-[#E2E8F0] pb-4">
+            <Building2 className="text-[#EA580C]" /> Facilities
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {commonFacilities.map(fac => {
+              const Icon = fac.icon;
+              return (
+                <button
+                  key={fac.id}
+                  type="button"
+                  onClick={() => handleFacilityToggle(fac.label)}
+                  className={`px-4 py-3 rounded-xl text-sm font-semibold transition-colors border text-left flex items-center gap-3 ${form.facilities.includes(fac.label)
+                    ? 'bg-[#C2410C] text-white border-[#FDBA74]'
+                    : 'bg-[#F8FAFC] text-[#64748B] border-[#E2E8F0] hover:border-[#FDBA74]'
+                    }`}
+                >
+                  <Icon size={18} className={form.facilities.includes(fac.label) ? 'text-white' : 'text-[#EA580C]'} />
+                  {fac.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Section 7 - Subscription Plans */}
+        <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-8">
+          <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-4 mb-6">
+            <h2 className="text-xl font-bold text-[#111827] flex items-center gap-2">
+              <CheckCircle className="text-[#EA580C]" /> Subscription Plans
+            </h2>
+            <button type="button" onClick={handleOpenAddPlan} className="px-4 py-2 bg-[#C2410C] text-white font-bold text-sm font-bold rounded-xl hover:bg-[#9A3412] transition-colors flex items-center gap-2">
+              <Plus size={16} /> Add Plan
+            </button>
+          </div>
+
+          {form.subscriptionPlans.length === 0 ? (
+            <p className="text-sm text-[#64748B] italic text-center py-4">No plans added yet. Click "Add Plan" to create one.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {form.subscriptionPlans.map((plan, idx) => (
+                <div key={idx} className="border border-[#E2E8F0] rounded-xl p-4 flex justify-between items-start bg-[#F8FAFC] hover:border-[#FFEDD5] transition-colors">
+                  <div className="flex-1 pr-3">
+                    <h3 className="font-bold text-[#111827] text-lg">{plan.name}</h3>
+                    <p className="text-sm font-bold text-[#EA580C]">₹{plan.price} / {plan.duration}</p>
+                    <p className="text-xs text-[#64748B] mt-2 whitespace-pre-line leading-relaxed">{plan.features}</p>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleEditPlan(idx)}
+                      className="text-[#EA580C] hover:bg-[#FFF7ED] p-1.5 rounded-lg transition-colors"
+                      title="Edit Plan & Features"
+                    >
+                      <Edit size={16} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePlan(idx)}
+                      className="text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition-colors"
+                      title="Delete Plan"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-4 pt-6">
+          <button type="button" onClick={() => navigate('/admin/branches')} className="px-6 py-3 bg-[#FFFFFF] border border-[#E2E8F0] text-[#64748B] font-bold rounded-xl hover:bg-[#FFF7ED] transition-colors">
+            Cancel
+          </button>
+          <button type="submit" disabled={loading} className="px-8 py-3 bg-[#C2410C] text-white font-bold font-bold rounded-xl hover:bg-[#9A3412] transition-colors flex items-center gap-2 disabled:opacity-70 shadow-lg shadow-orange-500/15">
+            {loading ? <Loader2 className="animate-spin" size={20} /> : <Plus size={20} />}
+            Create Branch
+          </button>
+        </div>
+
+      </form>
+
+      {/* Subscription Plan Modal */}
+      {showPlanModal && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-[#FFFFFF] w-full max-w-lg rounded-2xl p-6 shadow-2xl">
+            <div className="flex justify-between items-center mb-6 border-b border-[#E2E8F0] pb-4">
+              <h2 className="text-2xl font-bold text-[#111827]">
+                {editingPlanIndex !== null ? 'Edit Subscription Plan' : 'Create Subscription Plan'}
+              </h2>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPlanModal(false);
+                  setEditingPlanIndex(null);
+                }}
+                className="text-[#64748B] hover:text-[#EA580C] transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePlan} className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-[#64748B] mb-1">Plan Name</label>
+                <input required value={planForm.name} onChange={e => setPlanForm({ ...planForm, name: e.target.value })} className="w-full border border-[#E2E8F0] rounded-lg px-4 py-2 outline-none focus:border-[#FDBA74]" placeholder="e.g. Pro Tier" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Price (₹)</label>
+                  <input required type="text" value={planForm.price} onChange={e => setPlanForm({ ...planForm, price: e.target.value.replace(/[^0-9.]/g, '') })} className="w-full border border-[#E2E8F0] rounded-lg px-4 py-2 outline-none focus:border-[#FDBA74]" placeholder="499" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-[#64748B] mb-1">Duration</label>
+                  <select value={planForm.duration} onChange={e => setPlanForm({ ...planForm, duration: e.target.value })} className="w-full border border-[#E2E8F0] rounded-lg px-4 py-2 outline-none focus:border-[#FDBA74]">
+                    <option value="Monthly">Monthly</option>
+                    <option value="Quarterly">Quarterly</option>
+                    <option value="Half-Yearly">Half-Yearly</option>
+                    <option value="Yearly">Yearly</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-[#64748B] mb-1">Features (Description & Inclusions)</label>
+                <textarea required rows={5} value={planForm.features} onChange={e => setPlanForm({ ...planForm, features: e.target.value })} className="w-full border border-[#E2E8F0] rounded-lg px-4 py-2 outline-none focus:border-[#FDBA74]" placeholder="Enter features (e.g. Access to gym, 1 PT session, Locker access)" />
+              </div>
+              <div className="pt-4 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPlanModal(false);
+                    setEditingPlanIndex(null);
+                  }}
+                  className="px-4 py-2 text-[#64748B] hover:bg-[#FFF7ED] rounded-lg font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="px-6 py-2 bg-[#C2410C] text-white font-bold font-bold rounded-lg hover:bg-[#9A3412] transition-colors">
+                  {editingPlanIndex !== null ? 'Update Plan' : 'Save Plan'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default GymAdminAddBranch;

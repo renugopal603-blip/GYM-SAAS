@@ -1,0 +1,784 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Search,
+  Filter,
+  MapPin,
+  Briefcase,
+  Star,
+  Award,
+  Send,
+  Bookmark,
+  BookmarkCheck,
+  CheckCircle2,
+  Calendar,
+  Sparkles,
+  ExternalLink,
+  ChevronRight,
+  UserCheck,
+  DollarSign,
+  FileText,
+  Phone,
+  Mail,
+  Building2,
+  Clock
+} from 'lucide-react';
+import api, { getAssetUrl } from '../../../utils/api';
+
+interface CandidateTrainer {
+  _id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  city?: string;
+  profilePhoto?: string;
+  specialization?: string;
+  professionalHeadline?: string;
+  experience?: number | string;
+  trainingMode?: string;
+  qualifications?: string;
+  certifications?: string;
+  expertise?: string;
+  bio?: string;
+  previousGym?: string;
+  preferredLocation?: string;
+  employmentPreference?: string;
+  expectedSalary?: number;
+  personalTrainingFee?: number;
+  resumeUrl?: string;
+  certificationUrl?: string;
+  portfolioUrl?: string;
+  availability?: string;
+  earliestJoiningDate?: string;
+  availabilityStatus?: string;
+  isShortlisted?: boolean;
+}
+
+export default function GymAdminBrowseTrainers() {
+  const [trainers, setTrainers] = useState<CandidateTrainer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [locationFilter, setLocationFilter] = useState('all');
+  const [expertiseFilter, setExpertiseFilter] = useState('all');
+  const [experienceFilter, setExperienceFilter] = useState('all');
+  const [shortlistedOnly, setShortlistedOnly] = useState(false);
+  const [sortBy, setSortBy] = useState('relevance');
+
+  // Selected trainer for profile modal
+  const [selectedTrainer, setSelectedTrainer] = useState<CandidateTrainer | null>(null);
+
+  // Hiring Request Modal State
+  const [hiringModalOpen, setHiringModalOpen] = useState(false);
+  const [hiringTrainer, setHiringTrainer] = useState<CandidateTrainer | null>(null);
+  const [hiringForm, setHiringForm] = useState({
+    role: '',
+    employmentType: 'Full-time' as 'Full-time' | 'Part-time' | 'Contract',
+    offeredCompensation: '',
+    personalTrainingFee: '',
+    workingHours: 'Mon-Sat (6 AM - 2 PM)',
+    jobResponsibilities: '',
+    requiredExpertise: '',
+    expectedJoiningDate: '',
+    additionalTerms: '',
+    message: ''
+  });
+  const [submittingHiring, setSubmittingHiring] = useState(false);
+  const [hiringSuccessMsg, setHiringSuccessMsg] = useState('');
+  const [hiringErrorMsg, setHiringErrorMsg] = useState('');
+
+  const fetchTrainers = async () => {
+    try {
+      setLoading(true);
+      const params: any = {};
+      if (search.trim()) params.search = search.trim();
+      if (locationFilter !== 'all') params.location = locationFilter;
+      if (expertiseFilter !== 'all') params.expertise = expertiseFilter;
+      if (experienceFilter !== 'all') params.experience = experienceFilter;
+      if (shortlistedOnly) params.shortlistedOnly = 'true';
+      if (sortBy) params.sortBy = sortBy;
+
+      const res = await api.get('/hiring/owner/trainers', { params });
+      if (res.data?.success) {
+        setTrainers(res.data.trainers || []);
+      }
+    } catch (err) {
+      console.error('Error fetching candidate trainers:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTrainers();
+  }, [search, locationFilter, expertiseFilter, experienceFilter, shortlistedOnly, sortBy]);
+
+  const toggleShortlist = async (trainerId: string) => {
+    try {
+      const res = await api.post(`/hiring/owner/trainers/${trainerId}/shortlist`);
+      if (res.data?.success) {
+        setTrainers(prev => prev.map(t => t._id === trainerId ? { ...t, isShortlisted: res.data.isShortlisted } : t));
+      }
+    } catch (err) {
+      console.error('Error toggling shortlist:', err);
+    }
+  };
+
+  const openHiringModal = (trainer: CandidateTrainer) => {
+    setHiringTrainer(trainer);
+    setHiringForm({
+      role: trainer.specialization || 'Fitness Trainer',
+      employmentType: (trainer.employmentPreference === 'Part-time' || trainer.employmentPreference === 'Contract') ? trainer.employmentPreference : 'Full-time',
+      offeredCompensation: trainer.expectedSalary ? trainer.expectedSalary.toString() : '38000',
+      personalTrainingFee: trainer.personalTrainingFee ? trainer.personalTrainingFee.toString() : '600',
+      workingHours: 'Mon-Sat (8 Hours Standard Shift)',
+      jobResponsibilities: 'Conduct group HIIT classes, new member orientation, and personalized client coaching.',
+      requiredExpertise: trainer.expertise || trainer.specialization || 'Strength & Conditioning',
+      expectedJoiningDate: trainer.earliestJoiningDate || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+      additionalTerms: 'Performance incentives & 70/30 PT session split.',
+      message: `Hi ${trainer.name}, we would like to offer you a role at our gym. Review our proposed terms and let us know if you accept or wish to negotiate.`
+    });
+    setHiringSuccessMsg('');
+    setHiringErrorMsg('');
+    setHiringModalOpen(true);
+  };
+
+  const handleSendHiringRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!hiringTrainer) return;
+
+    try {
+      setSubmittingHiring(true);
+      setHiringErrorMsg('');
+      setHiringSuccessMsg('');
+
+      const payload = {
+        trainerId: hiringTrainer._id,
+        role: hiringForm.role,
+        employmentType: hiringForm.employmentType,
+        offeredCompensation: Number(hiringForm.offeredCompensation),
+        personalTrainingFee: Number(hiringForm.personalTrainingFee || 0),
+        workingHours: hiringForm.workingHours,
+        jobResponsibilities: hiringForm.jobResponsibilities,
+        requiredExpertise: hiringForm.requiredExpertise,
+        expectedJoiningDate: hiringForm.expectedJoiningDate,
+        additionalTerms: hiringForm.additionalTerms,
+        message: hiringForm.message
+      };
+
+      const res = await api.post('/hiring/owner/hiring-requests', payload);
+      if (res.data?.success) {
+        setHiringSuccessMsg('Hiring request successfully sent to trainer! You can track this under "Hiring Requests" in your sidebar.');
+        setTimeout(() => {
+          setHiringModalOpen(false);
+          setHiringTrainer(null);
+        }, 1800);
+      }
+    } catch (err: any) {
+      console.error('Error submitting hiring request:', err);
+      setHiringErrorMsg(err.response?.data?.message || 'Failed to submit hiring request.');
+    } finally {
+      setSubmittingHiring(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6 pb-28 sm:pb-24">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <span className="text-xs font-bold text-[#EA580C] uppercase tracking-wider block mb-1">
+            DIRECT TALENT RECRUITMENT
+          </span>
+          <h1 className="text-2xl sm:text-3xl font-black text-[#111827] tracking-tight">
+            Browse & Hire Trainers
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-400 mt-1">
+            Discover qualified fitness coaches, review credentials, and send direct hiring proposals
+          </p>
+        </div>
+
+        <button
+          onClick={() => setShortlistedOnly(!shortlistedOnly)}
+          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 border ${
+            shortlistedOnly
+              ? 'bg-[#C2410C] text-white border-[#FDBA74]'
+              : 'bg-[#FFFFFF] text-slate-700 hover:text-[#EA580C] border-[#E2E8F0] hover:border-[#FFEDD5]'
+          }`}
+        >
+          <Bookmark size={14} className={shortlistedOnly ? 'fill-white' : ''} />
+          <span>{shortlistedOnly ? 'Showing Shortlisted Candidates' : 'View Shortlisted Only'}</span>
+        </button>
+      </div>
+
+      {/* Filter Toolbar */}
+      <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-3xl p-5 shadow-xl space-y-4">
+        <div className="flex flex-col md:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search candidate trainers by name, headline, expertise..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl pl-10 pr-4 py-2.5 text-xs sm:text-sm text-[#111827] placeholder-slate-400 focus:outline-none focus:border-[#FDBA74]"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-600 font-semibold whitespace-nowrap">Sort:</span>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl px-3 py-2 text-xs text-[#111827] focus:outline-none focus:border-[#FDBA74]"
+            >
+              <option value="relevance">Relevance</option>
+              <option value="experience">Experience (High to Low)</option>
+              <option value="salaryLow">Salary (Low to High)</option>
+              <option value="salaryHigh">Salary (High to Low)</option>
+              <option value="rating">Top Rated</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-[#E2E8F0]/60">
+          <div>
+            <label className="text-[10px] text-slate-600 font-bold uppercase block mb-1">Preferred Location</label>
+            <select
+              value={locationFilter}
+              onChange={(e) => setLocationFilter(e.target.value)}
+              className="w-full bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl px-3 py-2 text-xs text-[#111827] focus:outline-none focus:border-[#FDBA74]"
+            >
+              <option value="all">All Locations</option>
+              <option value="Bangalore">Bangalore</option>
+              <option value="Mumbai">Mumbai</option>
+              <option value="Delhi">Delhi NCR</option>
+              <option value="Hyderabad">Hyderabad</option>
+              <option value="Pune">Pune</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-[10px] text-slate-600 font-bold uppercase block mb-1">Expertise Specialization</label>
+            <select
+              value={expertiseFilter}
+              onChange={(e) => setExpertiseFilter(e.target.value)}
+              className="w-full bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl px-3 py-2 text-xs text-[#111827] focus:outline-none focus:border-[#FDBA74]"
+            >
+              <option value="all">All Specialties</option>
+              <option value="Strength">Strength & Powerlifting</option>
+              <option value="Fat Loss">Fat Loss & HIIT</option>
+              <option value="Hypertrophy">Hypertrophy / Bodybuilding</option>
+              <option value="Yoga">Yoga & Mobility</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-[10px] text-slate-600 font-bold uppercase block mb-1">Minimum Experience</label>
+            <select
+              value={experienceFilter}
+              onChange={(e) => setExperienceFilter(e.target.value)}
+              className="w-full bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl px-3 py-2 text-xs text-[#111827] focus:outline-none focus:border-[#FDBA74]"
+            >
+              <option value="all">Any Experience</option>
+              <option value="2">2+ Years</option>
+              <option value="5">5+ Years</option>
+              <option value="8">8+ Years</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Loading */}
+      {loading && (
+        <div className="py-20 text-center space-y-3">
+          <div className="w-10 h-10 border-2 border-[#FDBA74] border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs text-slate-400">Loading candidate trainers...</p>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {!loading && trainers.length === 0 && (
+        <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-3xl p-12 text-center space-y-3">
+          <h3 className="text-base font-bold text-[#111827]">No Candidate Trainers Found</h3>
+          <p className="text-xs text-slate-400 max-w-sm mx-auto">
+            Try resetting your search query or toggling off the shortlisted filter.
+          </p>
+        </div>
+      )}
+
+      {/* Trainer Cards */}
+      {!loading && trainers.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {trainers.map((trainer) => (
+            <div
+              key={trainer._id}
+              className="bg-[#F8FAFC] border border-[#E2E8F0] hover:border-[#FFEDD5] rounded-3xl p-6 shadow-xl transition-all flex flex-col justify-between space-y-4 group relative"
+            >
+              <div>
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-13 h-13 rounded-2xl overflow-hidden bg-[#FFFFFF] border border-[#E2E8F0] shrink-0">
+                      {trainer.profilePhoto ? (
+                        <img src={trainer.profilePhoto} alt={trainer.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-lg font-bold text-[#EA580C]">
+                          {trainer.name.charAt(0)}
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-[#111827] group-hover:text-[#EA580C] transition-colors leading-tight">
+                        {trainer.name}
+                      </h3>
+                      <p className="text-xs text-[#EA580C] font-semibold truncate max-w-[160px]">
+                        {trainer.professionalHeadline || trainer.specialization || 'Fitness Coach'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => toggleShortlist(trainer._id)}
+                    className="p-2 rounded-xl bg-[#FFFFFF] hover:bg-[#FFF7ED] text-slate-400 hover:text-[#B45309] transition-colors border border-[#E2E8F0]"
+                    title={trainer.isShortlisted ? 'Remove Bookmark' : 'Shortlist Candidate'}
+                  >
+                    <Bookmark size={15} className={trainer.isShortlisted ? 'fill-amber-400 text-[#B45309]' : ''} />
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5 mb-3 text-[10px]">
+                  <span className="px-2 py-0.5 rounded-md bg-[#F8FAFC] text-slate-700 font-semibold border border-[#E2E8F0] flex items-center gap-1">
+                    <Briefcase size={10} className="text-[#EA580C]" /> <strong className="font-bold text-[#111827]">{trainer.experience || 3}+ Yrs</strong>
+                  </span>
+                  <span className="px-2 py-0.5 rounded-md bg-[#F8FAFC] text-slate-700 font-semibold border border-[#E2E8F0] flex items-center gap-1">
+                    <MapPin size={10} className="text-[#EA580C]" /> {trainer.preferredLocation || 'India'}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-md bg-[#F8FAFC] text-slate-700 font-semibold border border-[#E2E8F0]">
+                    {trainer.employmentPreference || 'Full-time'}
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed mb-3">
+                  {trainer.bio || 'Experienced fitness trainer specializing in progressive overload, client accountability, and body transformations.'}
+                </p>
+
+                <div className="grid grid-cols-2 gap-2 pt-3 border-t border-[#E2E8F0] text-xs">
+                  <div className="bg-[#F8FAFC] p-2 rounded-xl border border-[#E2E8F0]">
+                    <span className="text-[10px] text-slate-500 uppercase block font-bold">Expected Salary</span>
+                    <span className="font-mono font-bold text-[#EA580C]">
+                      {trainer.expectedSalary ? `₹${trainer.expectedSalary.toLocaleString()}/mo` : 'Negotiable'}
+                    </span>
+                  </div>
+                  <div className="bg-[#F8FAFC] p-2 rounded-xl border border-[#E2E8F0]">
+                    <span className="text-[10px] text-slate-500 uppercase block font-bold">PT Fee / Session</span>
+                    <span className="font-mono font-bold text-[#111827]">
+                      {trainer.personalTrainingFee ? `₹${trainer.personalTrainingFee.toLocaleString()}` : 'Custom'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedTrainer(trainer)}
+                  className="flex-1 py-2.5 bg-[#FFFFFF] hover:bg-[#FFF7ED] text-[#111827] hover:text-[#C2410C] border border-[#CBD5E1] hover:border-[#FDBA74] font-bold text-xs rounded-xl transition-all shadow-xs text-center cursor-pointer"
+                >
+                  View Profile
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openHiringModal(trainer)}
+                  className="flex-1 py-2.5 bg-[#C2410C] hover:bg-[#9A3412] text-white font-bold text-xs rounded-xl transition-all shadow-md shadow-orange-500/15 flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Send size={13} />
+                  <span>Send Request</span>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* MODAL 1: VIEW TRAINER PROFILE (FULL DETAILS) */}
+      {selectedTrainer && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#F8FAFC] border border-[#FFEDD5] rounded-3xl max-w-2xl w-full p-6 sm:p-8 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-[#E2E8F0] pb-4">
+              <div className="flex items-center gap-3.5">
+                <div className="w-16 h-16 rounded-2xl overflow-hidden bg-[#FFFFFF] border-2 border-[#FFEDD5] shrink-0">
+                  {selectedTrainer.profilePhoto ? (
+                    <img
+                      src={getAssetUrl(selectedTrainer.profilePhoto)}
+                      alt={selectedTrainer.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-xl font-black text-[#EA580C] bg-[#FFF7ED]">
+                      {selectedTrainer.name.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-xl font-extrabold text-[#111827]">{selectedTrainer.name}</h3>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#FFF7ED] text-[#EA580C] border border-[#FFEDD5]">
+                      Verified Coach
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#EA580C] font-semibold mt-0.5">
+                    {selectedTrainer.specialization || selectedTrainer.professionalHeadline || 'Fitness Trainer'}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-400 mt-1">
+                    <span className="flex items-center gap-1">
+                      <Mail size={12} className="text-slate-500" />
+                      {selectedTrainer.email}
+                    </span>
+                    {selectedTrainer.phone && (
+                      <span className="flex items-center gap-1">
+                        <Phone size={12} className="text-[#EA580C]" />
+                        +91 {selectedTrainer.phone.replace(/^\+?91/, '').trim()}
+                      </span>
+                    )}
+                    {(selectedTrainer.city || selectedTrainer.preferredLocation) && (
+                      <span className="flex items-center gap-1">
+                        <MapPin size={12} className="text-slate-500" />
+                        {selectedTrainer.city || selectedTrainer.preferredLocation}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedTrainer(null)}
+                className="p-1.5 rounded-xl bg-[#FFFFFF] text-[#64748B] hover:text-[#C2410C] border border-[#E2E8F0] transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Quick Stats Grid (4 Cards) */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              <div className="p-3 rounded-2xl bg-[#FFFFFF] border border-[#E2E8F0] text-left">
+                <span className="text-[10px] text-slate-500 uppercase font-bold block">Experience</span>
+                <span className="font-bold text-xs text-[#111827] mt-0.5 block">
+                  {selectedTrainer.experience
+                    ? typeof selectedTrainer.experience === 'number'
+                      ? `${selectedTrainer.experience} Years`
+                      : selectedTrainer.experience
+                    : '1–2 Years'}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-[#FFFFFF] border border-[#E2E8F0] text-left">
+                <span className="text-[10px] text-slate-500 uppercase font-bold block">Training Mode</span>
+                <span className="font-bold text-xs text-[#EA580C] mt-0.5 block">
+                  {selectedTrainer.trainingMode === 'online'
+                    ? 'Online / Remote'
+                    : selectedTrainer.trainingMode === 'offline'
+                    ? 'On-Site / Gym'
+                    : selectedTrainer.trainingMode || 'Both (Hybrid)'}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-[#FFFFFF] border border-[#E2E8F0] text-left">
+                <span className="text-[10px] text-slate-500 uppercase font-bold block">Availability</span>
+                <span className="font-bold text-xs text-[#111827] mt-0.5 block truncate">
+                  {selectedTrainer.availability || selectedTrainer.earliestJoiningDate || 'Immediately'}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-2xl bg-[#FFFFFF] border border-[#E2E8F0] text-left">
+                <span className="text-[10px] text-slate-500 uppercase font-bold block">Expected Salary</span>
+                <span className="font-bold font-mono text-xs text-[#EA580C] mt-0.5 block">
+                  {selectedTrainer.expectedSalary ? `₹${selectedTrainer.expectedSalary.toLocaleString()}` : 'Negotiable'}
+                </span>
+              </div>
+            </div>
+
+            {/* Full Details Sections */}
+            <div className="space-y-3.5 text-xs">
+              {/* Previous Gym & Preferred Location Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="p-3.5 rounded-2xl bg-[#FFFFFF] border border-[#E2E8F0] space-y-1">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1.5">
+                    <Building2 size={12} className="text-[#EA580C]" /> Previous Gym / Employer
+                  </span>
+                  <p className="text-[#111827] font-medium">
+                    {selectedTrainer.previousGym || 'Fresher / Independent Coach'}
+                  </p>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-[#FFFFFF] border border-[#E2E8F0] space-y-1">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1.5">
+                    <MapPin size={12} className="text-[#EA580C]" /> Preferred Work Location
+                  </span>
+                  <p className="text-[#111827] font-medium">
+                    {selectedTrainer.preferredLocation || selectedTrainer.city || 'Flexible / Bangalore'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Education & Qualifications */}
+              <div className="p-3.5 rounded-2xl bg-[#FFFFFF] border border-[#E2E8F0] space-y-1">
+                <span className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1.5">
+                  <Award size={12} className="text-[#EA580C]" /> Education &amp; Qualifications
+                </span>
+                <p className="text-[#111827] font-medium">
+                  {selectedTrainer.qualifications || 'Certified Personal Coach / Exercise Specialist'}
+                </p>
+              </div>
+
+              {/* Certifications */}
+              <div className="p-3.5 rounded-2xl bg-[#FFFFFF] border border-[#E2E8F0] space-y-1">
+                <span className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1.5">
+                  <Sparkles size={12} className="text-[#EA580C]" /> Fitness Certifications
+                </span>
+                <p className="text-[#111827] font-medium">
+                  {selectedTrainer.certifications || 'ACE, CSCS, CPR/AED Certified'}
+                </p>
+              </div>
+
+              {/* Professional Introduction / Bio */}
+              <div className="p-3.5 rounded-2xl bg-[#FFFFFF] border border-[#E2E8F0] space-y-1">
+                <span className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1.5">
+                  <UserCheck size={12} className="text-[#EA580C]" /> Professional Introduction
+                </span>
+                <p className="text-slate-600 leading-relaxed italic">
+                  {selectedTrainer.bio ||
+                    'Seasoned fitness instructor with extensive expertise in strength training, client motivation, and nutrition.'}
+                </p>
+              </div>
+
+              {/* Uploaded Documents (Resume & Certifications) */}
+              <div className="space-y-2 pt-1">
+                <span className="text-[10px] font-bold text-slate-500 uppercase block">
+                  Uploaded Candidate Documents
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {/* Resume Document Link */}
+                  {selectedTrainer.resumeUrl ? (
+                    <a
+                      href={getAssetUrl(selectedTrainer.resumeUrl)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="p-3 rounded-2xl bg-[#FFFFFF] hover:bg-[#FFF7ED] border border-[#FFEDD5] hover:border-[#FDBA74] flex items-center justify-between transition-all group shadow-sm"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-[#FFF7ED] text-[#EA580C] flex items-center justify-center">
+                          <FileText size={16} />
+                        </div>
+                        <div>
+                          <span className="font-bold text-[#111827] text-xs block group-hover:text-[#EA580C] transition-colors">
+                            Resume / CV
+                          </span>
+                          <span className="text-[10px] text-slate-400">PDF / Word Document</span>
+                        </div>
+                      </div>
+                      <ExternalLink size={14} className="text-[#EA580C]" />
+                    </a>
+                  ) : (
+                    <div className="p-3 rounded-2xl bg-[#FFFFFF]/40 border border-[#E2E8F0] flex items-center gap-2.5 text-slate-500">
+                      <FileText size={16} />
+                      <span className="text-xs">No resume uploaded</span>
+                    </div>
+                  )}
+
+                  {/* Certification Document Link */}
+                  {selectedTrainer.certificationUrl ? (
+                    <a
+                      href={getAssetUrl(selectedTrainer.certificationUrl)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="p-3 rounded-2xl bg-[#FFFFFF] hover:bg-[#FFF7ED] border border-[#FFEDD5] hover:border-[#FDBA74] flex items-center justify-between transition-all group shadow-sm"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-[#FFF7ED] text-[#EA580C] flex items-center justify-center">
+                          <Award size={16} />
+                        </div>
+                        <div>
+                          <span className="font-bold text-[#111827] text-xs block group-hover:text-[#EA580C] transition-colors">
+                            Certification File
+                          </span>
+                          <span className="text-[10px] text-slate-400">PDF / Image Document</span>
+                        </div>
+                      </div>
+                      <ExternalLink size={14} className="text-[#EA580C]" />
+                    </a>
+                  ) : (
+                    <div className="p-3 rounded-2xl bg-[#FFFFFF]/40 border border-[#E2E8F0] flex items-center gap-2.5 text-slate-500">
+                      <Award size={16} />
+                      <span className="text-xs">No certificate file</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom Actions */}
+            <div className="pt-3 border-t border-[#E2E8F0] flex gap-3">
+              <button
+                onClick={() => {
+                  const t = selectedTrainer;
+                  setSelectedTrainer(null);
+                  openHiringModal(t);
+                }}
+                className="flex-1 py-3 bg-[#C2410C] hover:bg-[#9A3412] text-white font-extrabold text-xs rounded-xl shadow-lg shadow-orange-500/15 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+              >
+                <Send size={14} />
+                <span>Send Hiring Proposal</span>
+              </button>
+              <button
+                onClick={() => setSelectedTrainer(null)}
+                className="px-6 py-3 bg-[#FFFFFF] hover:bg-[#FFF7ED] border border-[#CBD5E1] hover:border-[#FDBA74] text-[#1E293B] hover:text-[#C2410C] text-xs font-bold rounded-xl transition-all cursor-pointer shadow-xs"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: SEND HIRING REQUEST */}
+      {hiringModalOpen && hiringTrainer && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#F8FAFC] border border-[#FFEDD5] rounded-3xl max-w-xl w-full p-6 sm:p-8 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-[#E2E8F0] pb-3">
+              <div>
+                <span className="text-[10px] font-bold text-[#EA580C] uppercase tracking-wider block">
+                  PROPOSAL INTAKE
+                </span>
+                <h3 className="text-base font-bold text-[#111827]">Send Hiring Request to {hiringTrainer.name}</h3>
+              </div>
+              <button onClick={() => setHiringModalOpen(false)} className="text-[#64748B] hover:text-[#C2410C] text-sm">✕</button>
+            </div>
+
+            {hiringSuccessMsg && (
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-[#15803D] text-xs font-bold flex items-center gap-2">
+                <CheckCircle2 size={15} />
+                <span>{hiringSuccessMsg}</span>
+              </div>
+            )}
+
+            {hiringErrorMsg && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-[#B91C1C] text-xs font-bold">
+                {hiringErrorMsg}
+              </div>
+            )}
+
+            <form onSubmit={handleSendHiringRequest} className="space-y-3.5 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-slate-700 font-bold block mb-1">Trainer Role *</label>
+                  <input
+                    type="text"
+                    required
+                    value={hiringForm.role}
+                    onChange={(e) => setHiringForm({ ...hiringForm, role: e.target.value })}
+                    className="w-full bg-[#FFFFFF] border border-[#CBD5E1] rounded-xl px-3 py-2 text-[#111827] focus:outline-none focus:border-[#FDBA74]"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-700 font-bold block mb-1">Employment Type *</label>
+                  <select
+                    value={hiringForm.employmentType}
+                    onChange={(e) => setHiringForm({ ...hiringForm, employmentType: e.target.value as any })}
+                    className="w-full bg-[#FFFFFF] border border-[#CBD5E1] rounded-xl px-3 py-2 text-[#111827] focus:outline-none focus:border-[#FDBA74]"
+                  >
+                    <option value="Full-time">Full-time</option>
+                    <option value="Part-time">Part-time</option>
+                    <option value="Contract">Contract / Freelance</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-slate-700 font-bold block mb-1">Offered Monthly Salary (₹) *</label>
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    value={hiringForm.offeredCompensation}
+                    onChange={(e) => setHiringForm({ ...hiringForm, offeredCompensation: e.target.value })}
+                    className="w-full bg-[#FFFFFF] border border-[#CBD5E1] rounded-xl px-3 py-2 text-[#111827] font-mono focus:outline-none focus:border-[#FDBA74]"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-700 font-bold block mb-1">Personal Training Fee / Session (₹)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={hiringForm.personalTrainingFee}
+                    onChange={(e) => setHiringForm({ ...hiringForm, personalTrainingFee: e.target.value })}
+                    className="w-full bg-[#FFFFFF] border border-[#CBD5E1] rounded-xl px-3 py-2 text-[#111827] font-mono focus:outline-none focus:border-[#FDBA74]"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-slate-700 font-bold block mb-1">Working Schedule</label>
+                  <input
+                    type="text"
+                    value={hiringForm.workingHours}
+                    onChange={(e) => setHiringForm({ ...hiringForm, workingHours: e.target.value })}
+                    className="w-full bg-[#FFFFFF] border border-[#CBD5E1] rounded-xl px-3 py-2 text-[#111827] focus:outline-none focus:border-[#FDBA74]"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-700 font-bold block mb-1">Expected Joining Date *</label>
+                  <input
+                    type="date"
+                    required
+                    value={hiringForm.expectedJoiningDate}
+                    onChange={(e) => setHiringForm({ ...hiringForm, expectedJoiningDate: e.target.value })}
+                    className="w-full bg-[#FFFFFF] border border-[#CBD5E1] rounded-xl px-3 py-2 text-[#111827] focus:outline-none focus:border-[#FDBA74]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-slate-700 font-bold block mb-1">Job Responsibilities *</label>
+                <textarea
+                  required
+                  rows={2}
+                  value={hiringForm.jobResponsibilities}
+                  onChange={(e) => setHiringForm({ ...hiringForm, jobResponsibilities: e.target.value })}
+                  className="w-full bg-[#FFFFFF] border border-[#CBD5E1] rounded-xl px-3 py-2 text-[#111827] focus:outline-none focus:border-[#FDBA74]"
+                />
+              </div>
+
+              <div>
+                <label className="text-slate-700 font-bold block mb-1">Terms & Message to Candidate</label>
+                <textarea
+                  rows={2}
+                  value={hiringForm.message}
+                  onChange={(e) => setHiringForm({ ...hiringForm, message: e.target.value })}
+                  className="w-full bg-[#FFFFFF] border border-[#CBD5E1] rounded-xl px-3 py-2 text-[#111827] focus:outline-none focus:border-[#FDBA74]"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-[#E2E8F0] flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setHiringModalOpen(false)}
+                  className="px-4 py-2 bg-[#FFFFFF] text-[#64748B] hover:text-[#C2410C] rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingHiring}
+                  className="px-6 py-2 bg-[#C2410C] hover:bg-[#9A3412] text-white font-bold rounded-xl transition-all shadow-md shadow-orange-500/15 flex items-center gap-1.5"
+                >
+                  {submittingHiring ? 'Sending...' : 'Send Hiring Request'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,739 @@
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams, Link } from 'react-router-dom';
+import api from '../../../utils/api';
+import { useAuth } from '../../../contexts/AuthContext';
+import WorkingHoursPicker from '../../../components/common/WorkingHoursPicker';
+import { 
+  Briefcase, 
+  ArrowLeft, 
+  Save, 
+  Send, 
+  CheckCircle2, 
+  AlertCircle, 
+  Building2, 
+  IndianRupee, 
+  Clock, 
+  MapPin, 
+  Dumbbell, 
+  Calendar 
+} from 'lucide-react';
+
+const COMMON_EXPERTISE = [
+  'Strength & Conditioning',
+  'Functional Training',
+  'Bodybuilding',
+  'CrossFit',
+  'HIIT & Cardio',
+  'Yoga & Flexibility',
+  'Pilates',
+  'Weight Loss & Fat Reduction',
+  'Nutrition & Dietetics',
+  'Sports Injury & Rehabilitation',
+  'Kettlebell Training',
+  'Olympic Weightlifting',
+  'Zumba & Aerobics',
+  'Boxing & Kickboxing'
+];
+
+const GymAdminPostJob: React.FC = () => {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const isEdit = Boolean(id);
+
+  const [loading, setLoading] = useState(false);
+  const [fetchLoading, setFetchLoading] = useState(isEdit);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [gymData, setGymData] = useState<any>(null);
+  const [salaryMinError, setSalaryMinError] = useState<string | null>(null);
+  const [salaryMaxError, setSalaryMaxError] = useState<string | null>(null);
+
+  const validateSalaryInput = (val: string): string | null => {
+    if (!val || val.trim() === '') return null;
+    const trimmed = val.trim();
+    if (!/^\d+$/.test(trimmed) || Number(trimmed) <= 0) {
+      return 'Please enter a valid salary amount using numbers only.';
+    }
+    return null;
+  };
+
+  const handleMinSalaryChange = (val: string) => {
+    setFormData(prev => ({ ...prev, salaryMin: val }));
+    const minErr = validateSalaryInput(val);
+    setSalaryMinError(minErr);
+
+    const maxVal = formData.salaryMax;
+    const maxErr = validateSalaryInput(maxVal);
+
+    if (!minErr && !maxErr && val && maxVal) {
+      if (Number(maxVal) < Number(val)) {
+        setSalaryMaxError('Max Salary must be greater than or equal to Min Salary.');
+      } else {
+        setSalaryMaxError(null);
+      }
+    } else if (salaryMaxError === 'Max Salary must be greater than or equal to Min Salary.') {
+      setSalaryMaxError(maxErr);
+    }
+  };
+
+  const handleMaxSalaryChange = (val: string) => {
+    setFormData(prev => ({ ...prev, salaryMax: val }));
+    const maxErr = validateSalaryInput(val);
+    if (maxErr) {
+      setSalaryMaxError(maxErr);
+    } else if (val && formData.salaryMin) {
+      const minErr = validateSalaryInput(formData.salaryMin);
+      if (!minErr) {
+        if (Number(val) < Number(formData.salaryMin)) {
+          setSalaryMaxError('Max Salary must be greater than or equal to Min Salary.');
+        } else {
+          setSalaryMaxError(null);
+        }
+      } else {
+        setSalaryMaxError(null);
+      }
+    } else {
+      setSalaryMaxError(null);
+    }
+  };
+
+  const [formData, setFormData] = useState({
+    title: '',
+    expertise: [] as string[],
+    customExpertiseInput: '',
+    description: '',
+    responsibilities: '',
+    experience: '1-2 Years',
+    qualifications: '',
+    certifications: '',
+    salaryMin: '',
+    salaryMax: '',
+    salaryType: 'Monthly',
+    isSalaryNegotiable: false,
+    employmentType: 'Full-time',
+    trainingMode: 'Offline' as 'Online' | 'Offline' | 'Hybrid',
+    location: '',
+    workingHours: 'Morning (06:00 AM - 02:00 PM)',
+    shiftType: 'Morning',
+    shiftStartTime: '06:00 AM',
+    shiftEndTime: '02:00 PM',
+    vacanciesCount: 1,
+    deadline: '',
+    status: 'Published'
+  });
+
+  // Fetch gym profile to auto-populate gym name / location
+  useEffect(() => {
+    if (user?.gymId) {
+      api.get(`/gyms/${user.gymId}`)
+        .then(res => {
+          if (res.data.gym) {
+            setGymData(res.data.gym);
+            if (!isEdit && !formData.location) {
+              const loc = res.data.gym.location?.address || res.data.gym.location?.city || res.data.gym.address || '';
+              setFormData(prev => ({ ...prev, location: loc }));
+            }
+          }
+        })
+        .catch(err => console.error('Failed to load gym data', err));
+    }
+  }, [user?.gymId]);
+
+  // If edit mode, fetch existing vacancy details
+  useEffect(() => {
+    if (isEdit && id) {
+      setFetchLoading(true);
+      api.get(`/hiring/owner/jobs/${id}`)
+        .then(res => {
+          if (res.data.success && res.data.job) {
+            const j = res.data.job;
+            setFormData({
+              title: j.title || '',
+              expertise: j.expertise || [],
+              customExpertiseInput: '',
+              description: j.description || '',
+              responsibilities: j.responsibilities || '',
+              experience: j.experience || '1-2 Years',
+              qualifications: j.qualifications || '',
+              certifications: j.certifications || '',
+              salaryMin: j.salaryMin ? String(j.salaryMin) : '',
+              salaryMax: j.salaryMax ? String(j.salaryMax) : '',
+              salaryType: j.salaryType || 'Monthly',
+              isSalaryNegotiable: Boolean(j.isSalaryNegotiable),
+              employmentType: j.employmentType || 'Full-time',
+              trainingMode: j.trainingMode || 'Offline',
+              location: j.location || '',
+              workingHours: j.workingHours || '',
+              shiftType: j.shiftType || '',
+              shiftStartTime: j.shiftStartTime || '',
+              shiftEndTime: j.shiftEndTime || '',
+              vacanciesCount: j.vacanciesCount || 1,
+              deadline: j.deadline ? new Date(j.deadline).toISOString().split('T')[0] : '',
+              status: j.status || 'Published'
+            });
+          }
+        })
+        .catch(err => {
+          console.error('Failed to load job', err);
+          setError('Failed to load job vacancy details');
+        })
+        .finally(() => setFetchLoading(false));
+    }
+  }, [isEdit, id]);
+
+  const toggleExpertise = (skill: string) => {
+    setFormData(prev => {
+      const exists = prev.expertise.includes(skill);
+      return {
+        ...prev,
+        expertise: exists 
+          ? prev.expertise.filter(s => s !== skill)
+          : [...prev.expertise, skill]
+      };
+    });
+  };
+
+  const handleAddCustomExpertise = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && formData.customExpertiseInput.trim()) {
+      e.preventDefault();
+      const val = formData.customExpertiseInput.trim();
+      if (!formData.expertise.includes(val)) {
+        setFormData(prev => ({
+          ...prev,
+          expertise: [...prev.expertise, val],
+          customExpertiseInput: ''
+        }));
+      }
+    }
+  };
+
+  const handleSubmit = async (submitStatus: 'Draft' | 'Published') => {
+    try {
+      setError(null);
+      setSuccess(null);
+
+      if (!formData.title.trim()) {
+        setError('Please enter a job title');
+        return;
+      }
+      if (!formData.description.trim()) {
+        setError('Please enter a job description');
+        return;
+      }
+      if (!formData.location.trim()) {
+        setError('Please enter a work location');
+        return;
+      }
+
+      // Salary validation
+      const minErr = validateSalaryInput(formData.salaryMin);
+      const maxErr = validateSalaryInput(formData.salaryMax);
+      if (minErr) {
+        setSalaryMinError(minErr);
+        setError(minErr);
+        return;
+      }
+      if (maxErr) {
+        setSalaryMaxError(maxErr);
+        setError(maxErr);
+        return;
+      }
+      if (formData.salaryMin && formData.salaryMax && Number(formData.salaryMax) < Number(formData.salaryMin)) {
+        const rangeErr = 'Max Salary must be greater than or equal to Min Salary.';
+        setSalaryMaxError(rangeErr);
+        setError(rangeErr);
+        return;
+      }
+
+      if (formData.shiftType !== 'Flexible' && formData.shiftStartTime && formData.shiftEndTime) {
+        if (formData.shiftStartTime.trim().toLowerCase() === formData.shiftEndTime.trim().toLowerCase()) {
+          setError('Shift start time and end time cannot be identical.');
+          return;
+        }
+      }
+
+      setLoading(true);
+
+      const payload = {
+        ...formData,
+        status: submitStatus,
+        salaryMin: formData.salaryMin ? Number(formData.salaryMin) : undefined,
+        salaryMax: formData.salaryMax ? Number(formData.salaryMax) : undefined,
+        vacanciesCount: Number(formData.vacanciesCount) || 1,
+        deadline: formData.deadline ? new Date(formData.deadline) : undefined
+      };
+
+      if (isEdit) {
+        const res = await api.put(`/hiring/owner/jobs/${id}`, payload);
+        if (res.data.success) {
+          setSuccess('Job vacancy updated successfully!');
+          setTimeout(() => navigate('/admin/hiring/jobs'), 1200);
+        }
+      } else {
+        const res = await api.post('/hiring/owner/jobs', payload);
+        if (res.data.success) {
+          setSuccess(submitStatus === 'Draft' ? 'Job saved as draft!' : 'Job vacancy published successfully!');
+          setTimeout(() => navigate('/admin/hiring/jobs'), 1200);
+        }
+      }
+    } catch (err: any) {
+      console.error('Save error:', err);
+      setError(err.response?.data?.message || 'Failed to save job vacancy');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (fetchLoading) {
+    return (
+      <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-3xl p-16 text-center text-sm text-[#64748B] flex flex-col items-center justify-center gap-3">
+        <div className="w-8 h-8 border-2 border-[#FDBA74] border-t-transparent rounded-full animate-spin" />
+        <span>Loading job vacancy details...</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-6">
+      {/* Back & Breadcrumb */}
+      <div className="flex items-center justify-between">
+        <Link
+          to="/admin/hiring/jobs"
+          className="text-xs font-bold text-[#64748B] hover:text-[#EA580C] flex items-center gap-1.5 transition-colors"
+        >
+          <ArrowLeft size={16} />
+          <span>Back to Manage Vacancies</span>
+        </Link>
+        <span className="text-xs text-[#64748B] font-mono">
+          Gym: <span className="text-[#111827] font-bold">{gymData?.name || 'Your Gym'}</span>
+        </span>
+      </div>
+
+      {/* Main Form Header Card */}
+      <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-3xl p-6 sm:p-8 shadow-xl relative overflow-hidden">
+        <div className="flex items-center gap-3.5 mb-2">
+          <div className="w-12 h-12 rounded-2xl bg-[#FFF7ED] text-[#EA580C] flex items-center justify-center shrink-0 border border-[#FFEDD5]">
+            <Briefcase size={24} />
+          </div>
+          <div>
+            <h1 className="text-2xl font-black text-[#111827] tracking-tight">
+              {isEdit ? 'Edit Trainer Vacancy' : 'Post a Trainer Job Vacancy'}
+            </h1>
+            <p className="text-xs text-[#64748B] mt-0.5">
+              Fill in the job details, qualifications, and salary expectations to attract certified coaches.
+            </p>
+          </div>
+        </div>
+
+        {error && (
+          <div className="mt-4 p-3.5 rounded-xl bg-red-50 border border-red-500/30 text-[#B91C1C] text-xs flex items-center gap-2">
+            <AlertCircle size={16} className="shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {success && (
+          <div className="mt-4 p-3.5 rounded-xl bg-emerald-50 border border-emerald-500/30 text-[#15803D] text-xs flex items-center gap-2">
+            <CheckCircle2 size={16} className="shrink-0" />
+            <span>{success}</span>
+          </div>
+        )}
+
+        <div className="mt-8 space-y-6">
+          {/* 1. Basic Info Row */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-[#111827] mb-1.5">
+                Job Title <span className="text-[#B91C1C]">*</span>
+              </label>
+              <input
+                type="text"
+                value={formData.title}
+                onChange={e => setFormData({ ...formData, title: e.target.value })}
+                placeholder="e.g. Senior Strength & Conditioning Coach"
+                className="w-full px-4 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-xs text-[#111827] placeholder:text-[#64748B]/50 focus:outline-none focus:border-[#FDBA74]"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-[#111827] mb-1.5">
+                Gym / Facility Name
+              </label>
+              <div className="flex items-center gap-2 px-4 py-2.5 bg-[#F8FAFC]/70 border border-[#E2E8F0] rounded-xl text-xs text-[#64748B]">
+                <Building2 size={15} className="text-[#EA580C]" />
+                <span className="font-semibold text-[#111827]">{gymData?.name || 'Auto-linked to Your Gym'}</span>
+                <span className="text-[10px] ml-auto text-[#15803D] bg-emerald-500/10 px-2 py-0.5 rounded-full font-bold">Verified Gym</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 2. Employment Type, Required Experience & Vacancies */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-[#111827] mb-1.5">
+                Employment Type <span className="text-[#B91C1C]">*</span>
+              </label>
+              <select
+                value={formData.employmentType}
+                onChange={e => setFormData({ ...formData, employmentType: e.target.value as any })}
+                className="w-full px-4 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-xs text-[#111827] focus:outline-none focus:border-[#FDBA74]"
+              >
+                <option value="Full-time">Full-time</option>
+                <option value="Part-time">Part-time</option>
+                <option value="Contract">Contract</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-[#111827] mb-1.5">
+                Required Experience <span className="text-[#B91C1C]">*</span>
+              </label>
+              <select
+                value={formData.experience}
+                onChange={e => setFormData({ ...formData, experience: e.target.value })}
+                className="w-full px-4 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-xs text-[#111827] focus:outline-none focus:border-[#FDBA74]"
+              >
+                <option value="Fresher / Entry Level">Fresher / Entry Level</option>
+                <option value="1-2 Years">1-2 Years</option>
+                <option value="3-5 Years">3-5 Years</option>
+                <option value="5-8 Years">5-8 Years</option>
+                <option value="8+ Years (Master Trainer)">8+ Years (Master Trainer)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-[#111827] mb-1.5">
+                Number of Vacancies <span className="text-[#B91C1C]">*</span>
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="50"
+                value={formData.vacanciesCount}
+                onChange={e => setFormData({ ...formData, vacanciesCount: Math.max(1, parseInt(e.target.value) || 1) })}
+                className="w-full px-4 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-xs text-[#111827] focus:outline-none focus:border-[#FDBA74]"
+              />
+            </div>
+          </div>
+
+          {/* 3. Expertise & Coaching Domains */}
+          <div>
+            <label className="block text-xs font-bold text-[#111827] mb-1.5">
+              Coaching Domains & Expertise
+            </label>
+            <p className="text-[11px] text-[#64748B] mb-3">
+              Select all specializations you are looking for in this trainer.
+            </p>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {COMMON_EXPERTISE.map((skill) => {
+                const selected = formData.expertise.includes(skill);
+                return (
+                  <button
+                    type="button"
+                    key={skill}
+                    onClick={() => toggleExpertise(skill)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border ${
+                      selected
+                        ? 'bg-[#C2410C] text-white border-[#FDBA74] shadow-sm shadow-orange-500/15'
+                        : 'bg-[#F8FAFC] text-[#64748B] hover:text-[#111827] border-[#E2E8F0] hover:border-[#FFEDD5]'
+                    }`}
+                  >
+                    {skill}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={formData.customExpertiseInput}
+                onChange={e => setFormData({ ...formData, customExpertiseInput: e.target.value })}
+                onKeyDown={handleAddCustomExpertise}
+                placeholder="Type other custom skill and press Enter..."
+                className="w-full max-w-sm px-3.5 py-2 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-xs text-[#111827] placeholder:text-[#64748B]/50 focus:outline-none focus:border-[#FDBA74]"
+              />
+            </div>
+          </div>
+
+          {/* 4. Training Mode */}
+          <div>
+            <label className="block text-xs font-bold text-[#111827] mb-1.5">
+              Training Mode <span className="text-[#B91C1C]">*</span>
+            </label>
+            <p className="text-[11px] text-[#64748B] mb-3">
+              Select how the trainer will conduct sessions.
+            </p>
+            <div className="flex flex-wrap gap-3">
+              {(['Online', 'Offline', 'Hybrid'] as const).map((mode) => {
+                const icons: Record<string, string> = {
+                  Online: '💻',
+                  Offline: '🏋️',
+                  Hybrid: '🔄',
+                };
+                const descriptions: Record<string, string> = {
+                  Online: 'Remote / virtual sessions only',
+                  Offline: 'In-person at gym facility',
+                  Hybrid: 'Mix of online & in-person',
+                };
+                const selected = formData.trainingMode === mode;
+                return (
+                  <button
+                    type="button"
+                    key={mode}
+                    onClick={() => setFormData({ ...formData, trainingMode: mode })}
+                    className={`flex items-center gap-2.5 px-4 py-3 rounded-2xl border text-left transition-all ${
+                      selected
+                        ? 'bg-[#FFF7ED] border-[#FDBA74] text-[#EA580C] shadow-sm shadow-orange-500/15'
+                        : 'bg-[#F8FAFC] border-[#E2E8F0] text-[#64748B] hover:border-[#FFEDD5] hover:text-[#111827]'
+                    }`}
+                  >
+                    <span className="text-lg">{icons[mode]}</span>
+                    <div>
+                      <div className={`text-xs font-bold ${selected ? 'text-[#EA580C]' : 'text-[#111827]'}`}>
+                        {mode}
+                      </div>
+                      <div className="text-[10px] text-[#64748B]">{descriptions[mode]}</div>
+                    </div>
+                    {selected && (
+                      <CheckCircle2 size={15} className="ml-auto text-[#EA580C] shrink-0" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 5. Compensation / Salary Range */}
+          <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-[#111827] flex items-center gap-1.5">
+                <IndianRupee size={15} className="text-[#EA580C]" />
+                <span>Salary & Compensation Structure</span>
+              </span>
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={formData.isSalaryNegotiable}
+                  onChange={e => setFormData({ ...formData, isSalaryNegotiable: e.target.checked })}
+                  className="rounded text-[#EA580C] focus:ring-0 bg-[#F8FAFC] border-[#E2E8F0]"
+                />
+                <span className="text-xs text-[#64748B]">Negotiable for top candidates</span>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-[11px] text-[#64748B] mb-1">Min Salary (₹)</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="e.g. 25000"
+                  value={formData.salaryMin}
+                  onChange={e => handleMinSalaryChange(e.target.value)}
+                  onKeyDown={e => {
+                    if (['+', '-', 'e', 'E', '.'].includes(e.key)) {
+                      e.preventDefault();
+                    }
+                  }}
+                  className={`w-full px-3.5 py-2 bg-[#FFFFFF] border rounded-xl text-xs text-[#111827] focus:outline-none ${salaryMinError ? 'border-red-400 focus:border-red-500' : 'border-[#E2E8F0] focus:border-[#FDBA74]'}`}
+                />
+                {salaryMinError && (
+                  <p className="text-[11px] text-red-500 mt-1">{salaryMinError}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-[11px] text-[#64748B] mb-1">Max Salary (₹)</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="e.g. 45000"
+                  value={formData.salaryMax}
+                  onChange={e => handleMaxSalaryChange(e.target.value)}
+                  onKeyDown={e => {
+                    if (['+', '-', 'e', 'E', '.'].includes(e.key)) {
+                      e.preventDefault();
+                    }
+                  }}
+                  className={`w-full px-3.5 py-2 bg-[#FFFFFF] border rounded-xl text-xs text-[#111827] focus:outline-none ${salaryMaxError ? 'border-red-400 focus:border-red-500' : 'border-[#E2E8F0] focus:border-[#FDBA74]'}`}
+                />
+                {salaryMaxError && (
+                  <p className="text-[11px] text-red-500 mt-1">{salaryMaxError}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-[11px] text-[#64748B] mb-1">Payment Frequency</label>
+                <select
+                  value={formData.salaryType}
+                  onChange={e => setFormData({ ...formData, salaryType: e.target.value as any })}
+                  className="w-full px-3.5 py-2 bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl text-xs text-[#111827] focus:outline-none focus:border-[#FDBA74]"
+                >
+                  <option value="Monthly">Per Month</option>
+                  <option value="Hourly">Per Hour</option>
+                  <option value="Per Session">Per Session</option>
+                  <option value="Annual">Per Annum (CTC)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* 5. Location, Working Hours & Application Deadline */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
+            <div>
+              <label className="block text-xs font-bold text-[#111827] mb-1.5 flex items-center gap-1.5">
+                <MapPin size={13} className="text-[#EA580C]" /> Location <span className="text-[#B91C1C]">*</span>
+              </label>
+              <input
+                type="text"
+                value={formData.location}
+                onChange={e => setFormData({ ...formData, location: e.target.value })}
+                placeholder="e.g. Indiranagar, Bangalore"
+                className="w-full px-4 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-xs text-[#111827] focus:outline-none focus:border-[#FDBA74]"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-[#111827] mb-1.5 flex items-center gap-1.5">
+                <Clock size={13} className="text-[#EA580C]" /> Working Hours / Shift
+              </label>
+              <WorkingHoursPicker
+                value={formData.workingHours}
+                onChange={(formatted, structured) => {
+                  setFormData(prev => ({
+                    ...prev,
+                    workingHours: formatted,
+                    shiftType: structured?.shift || '',
+                    shiftStartTime: structured?.startTime || '',
+                    shiftEndTime: structured?.endTime || ''
+                  }));
+                }}
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-[#111827] mb-1.5 flex items-center gap-1.5">
+                <Calendar size={13} className="text-[#EA580C]" /> Application Deadline
+              </label>
+              <input
+                type="date"
+                value={formData.deadline}
+                onChange={e => setFormData({ ...formData, deadline: e.target.value })}
+                className="w-full px-4 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-xs text-[#111827] focus:outline-none focus:border-[#FDBA74]"
+              />
+              {formData.deadline && new Date(formData.deadline).setHours(23, 59, 59, 999) < Date.now() ? (
+                <p className="text-[11px] text-[#B91C1C] mt-1 flex items-center gap-1 font-semibold">
+                  <AlertCircle size={12} /> Deadline expired: This job vacancy will be shown as over.
+                </p>
+              ) : (
+                <p className="text-[10px] text-[#64748B] mt-1">
+                  Once this deadline is completed, the job vacancy will automatically be shown as over.
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* 6. Job Description */}
+          <div>
+            <label className="block text-xs font-bold text-[#111827] mb-1.5">
+              Job Description <span className="text-[#B91C1C]">*</span>
+            </label>
+            <textarea
+              rows={4}
+              value={formData.description}
+              onChange={e => setFormData({ ...formData, description: e.target.value })}
+              placeholder="Provide a compelling overview of this role, the gym environment, and what makes your fitness community unique..."
+              className="w-full px-4 py-3 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-xs text-[#111827] placeholder:text-[#64748B]/50 focus:outline-none focus:border-[#FDBA74] leading-relaxed"
+              required
+            />
+          </div>
+
+          {/* 7. Key Responsibilities */}
+          <div>
+            <label className="block text-xs font-bold text-[#111827] mb-1.5">
+              Key Responsibilities
+            </label>
+            <textarea
+              rows={3}
+              value={formData.responsibilities}
+              onChange={e => setFormData({ ...formData, responsibilities: e.target.value })}
+              placeholder="e.g.
+• Conduct client fitness assessments and 1-on-1 personal training sessions.
+• Guide members on proper posture, breathing, and safe machine usage.
+• Design customized strength and cardio programs using Gymora AI tools."
+              className="w-full px-4 py-3 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-xs text-[#111827] placeholder:text-[#64748B]/50 focus:outline-none focus:border-[#FDBA74] leading-relaxed font-sans"
+            />
+          </div>
+
+          {/* 8. Qualifications & Certifications */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-[#111827] mb-1.5">
+                Required Qualifications
+              </label>
+              <input
+                type="text"
+                value={formData.qualifications}
+                onChange={e => setFormData({ ...formData, qualifications: e.target.value })}
+                placeholder="e.g. Degree in Physical Education or Sports Science"
+                className="w-full px-4 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-xs text-[#111827] focus:outline-none focus:border-[#FDBA74]"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-[#111827] mb-1.5">
+                Preferred Certifications
+              </label>
+              <input
+                type="text"
+                value={formData.certifications}
+                onChange={e => setFormData({ ...formData, certifications: e.target.value })}
+                placeholder="e.g. ACE, NASM, ISSA, CSCS, CPR / AED"
+                className="w-full px-4 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl text-xs text-[#111827] focus:outline-none focus:border-[#FDBA74]"
+              />
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="pt-6 border-t border-[#E2E8F0] flex flex-col sm:flex-row items-center justify-end gap-3">
+            <Link
+              to="/admin/hiring/jobs"
+              className="w-full sm:w-auto px-5 py-2.5 bg-[#F8FAFC] hover:bg-[#E2E8F0] text-xs font-bold text-[#64748B] hover:text-[#111827] rounded-xl transition-all text-center"
+            >
+              Cancel
+            </Link>
+
+            <button
+              type="button"
+              onClick={() => handleSubmit('Draft')}
+              disabled={loading || Boolean(salaryMinError || salaryMaxError)}
+              className="w-full sm:w-auto px-5 py-2.5 bg-[#FFFFFF] hover:bg-[#FFF7ED] border border-[#E2E8F0] hover:border-[#FFEDD5] text-xs font-bold text-[#111827] rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Save size={15} className="text-[#EA580C]" />
+              <span>Save as Draft</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleSubmit('Published')}
+              disabled={loading || Boolean(salaryMinError || salaryMaxError)}
+              className="w-full sm:w-auto px-7 py-2.5 bg-[#C2410C] hover:bg-[#9A3412] text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg shadow-orange-500/15 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? (
+                <div className="w-4 h-4 border-2 border-[#FFFFFF] border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Send size={15} />
+              )}
+              <span>{isEdit ? 'Save & Update Vacancy' : 'Publish Vacancy Live'}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default GymAdminPostJob;

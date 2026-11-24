@@ -1,0 +1,732 @@
+import { useState, useEffect, useCallback } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import {
+  Building2, MapPin, Phone, Mail, Globe, CheckCircle2, Calendar, Dumbbell,
+  Wind, Star, Navigation, ExternalLink, Target, Zap, Activity, Crown,
+  Leaf, TrendingUp, Users, Cpu, RefreshCw
+} from 'lucide-react';
+import api from '../../utils/api';
+import { useAuth } from '../../contexts/AuthContext';
+import GymSelectorModal from '../../components/Member/GymSelectorModal';
+
+const BADGE_CONFIG: Record<string, { icon: any; accent: string; bg: string }> = {
+  'Weight Loss':       { icon: Target,    accent: '#B91C1C', bg: 'rgba(248, 113, 113,0.1)'   },
+  'Muscle Gain':       { icon: Dumbbell,  accent: '#F97316', bg: 'rgba(183,110,121,0.1)'  },
+  'Strength':          { icon: Zap,       accent: '#F97316', bg: 'rgba(183,110,121,0.1)'  },
+  'General Fitness':   { icon: Activity,  accent: '#15803D', bg: 'rgba(52, 211, 153,0.1)'   },
+  'Bodybuilding':      { icon: Crown,     accent: '#9A3412', bg: 'rgba(234,88,12,0.12)'  },
+  'Yoga':              { icon: Leaf,      accent: '#15803D', bg: 'rgba(16,185,129,0.1)'  },
+  'CrossFit':          { icon: TrendingUp,accent: '#B45309', bg: 'rgba(251, 191, 36,0.1)'  },
+  'Personal Training': { icon: Users,     accent: '#8B5CF6', bg: 'rgba(139,92,246,0.1)'  },
+  'Online Coaching':   { icon: Cpu,       accent: '#0EA5E9', bg: 'rgba(14,165,233,0.1)'  },
+};
+
+const MemberGymProfile = () => {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [gym, setGym] = useState<any>(null);
+  const [packages, setPackages] = useState<any[]>([]);
+  const [trainers, setTrainers] = useState<any[]>([]);
+  const [activeMembership, setActiveMembership] = useState<any>(null);
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [isSelectorOpen, setIsSelectorOpen] = useState(false);
+
+  const fetchGym = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError('');
+      const [res, memRes] = await Promise.all([
+        api.get('/gyms/my-gym'),
+        api.get('/memberships/my').catch(() => ({ data: { memberships: [] } }))
+      ]);
+      const gymData = res.data?.gym || null;
+      setGym(gymData);
+      setTrainers(Array.isArray(res.data?.trainers) ? res.data.trainers : []);
+
+      const userMemberships: any[] = memRes.data?.memberships || [];
+      const now = new Date();
+      const active = userMemberships.find((m: any) => {
+        const isStatusActive = m.status === 'Active' || m.status === 'Free Trial';
+        const end = m.endDate ? new Date(m.endDate) : null;
+        return isStatusActive && (!end || end >= now);
+      });
+      setActiveMembership(active || null);
+
+      if (gymData?._id) {
+        const inlinePackages = Array.isArray(res.data?.packages) ? res.data.packages : null;
+        if (inlinePackages && inlinePackages.length > 0) {
+          setPackages(inlinePackages);
+          const pop = inlinePackages.find((p: any) => p.isPopular) || inlinePackages[0];
+          setSelectedPlanId(pop._id);
+        } else {
+          try {
+            const pkgRes = await api.get('/gym-packages/public', { params: { gymId: gymData._id } });
+            if (pkgRes.data?.success && Array.isArray(pkgRes.data.packages) && pkgRes.data.packages.length > 0) {
+              setPackages(pkgRes.data.packages);
+              const pop = pkgRes.data.packages.find((p: any) => p.isPopular) || pkgRes.data.packages[0];
+              setSelectedPlanId(pop._id);
+            } else {
+              setPackages([]);
+              setSelectedPlanId(null);
+            }
+          } catch (pkgErr) {
+            console.warn('Could not load gym packages:', pkgErr);
+            setPackages([]);
+          }
+        }
+      } else {
+        setPackages([]);
+        setSelectedPlanId(null);
+      }
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        setGym(null);
+        setPackages([]);
+        setTrainers([]);
+      } else {
+        setError(err.response?.data?.message || 'Failed to fetch gym details');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchGym();
+  }, [fetchGym, user?.gymId]);
+
+  if (isLoading) {
+    return <div className="flex justify-center py-20 text-[#64748B]">Loading gym details...</div>;
+  }
+
+  if (error) {
+    return (
+      <div className="bg-[#FFF7ED] border border-[#F8FAFC]/30 text-[#EA580C] p-4 rounded-xl text-sm max-w-3xl mx-auto">
+        {error}
+      </div>
+    );
+  }
+
+  if (!gym) {
+    return (
+      <div className="max-w-3xl mx-auto py-12 px-4">
+        <div className="bg-white border border-[#E2E8F0] rounded-3xl p-8 md:p-10 text-center space-y-4 shadow-xs">
+          <div className="w-16 h-16 mx-auto rounded-2xl bg-[#FFF7ED] border border-[#FFEDD5] flex items-center justify-center text-[#EA580C]">
+            <Building2 size={30} />
+          </div>
+          <h1 className="text-2xl font-black text-[#111827]">No Gym Selected Yet</h1>
+          <p className="text-sm text-[#64748B] max-w-md mx-auto leading-relaxed">
+            Explore active gyms to inspect their facilities, equipment, membership packages, and trainers, then choose the gym that fits you best.
+          </p>
+          <button
+            type="button"
+            onClick={() => setIsSelectorOpen(true)}
+            className="inline-flex items-center gap-2 px-6 py-3 bg-[#EA580C] hover:bg-[#C2410C] text-white font-bold text-sm rounded-xl shadow-sm transition-colors cursor-pointer"
+          >
+            <Building2 size={16} /> Find a Gym / Choose a Gym
+          </button>
+        </div>
+
+        <GymSelectorModal
+          isOpen={isSelectorOpen}
+          onClose={() => setIsSelectorOpen(false)}
+          currentGymId={null}
+          onGymSelected={({ gym: selectedGym, trainers: gymTrainers, packages: gymPkgs }) => {
+            setGym(selectedGym);
+            setTrainers(gymTrainers || []);
+            setPackages(gymPkgs || []);
+          }}
+        />
+      </div>
+    );
+  }
+
+  // Combine services and facilities, removing duplicates
+  const allAmenities = Array.from(new Set([...(gym.services || []), ...(gym.facilities || [])]));
+  const hasFacilities = Boolean(
+    gym.description ||
+    allAmenities.length > 0 ||
+    (gym.equipment && gym.equipment.length > 0) ||
+    gym.acDetails
+  );
+
+  const memberFullLoc = [gym.location?.address, gym.location?.area, gym.location?.city, gym.location?.state, gym.location?.pinCode].filter(Boolean).join(', ');
+  const memberMapUrl = (gym.location?.latitude && gym.location?.longitude)
+    ? `https://www.google.com/maps?q=${gym.location.latitude},${gym.location.longitude}`
+    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(memberFullLoc || gym.name)}`;
+
+  return (
+    <div className="max-w-6xl mx-auto space-y-6 md:space-y-8 animate-fade-in pb-12">
+      {/* Header Section */}
+      <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl md:rounded-3xl p-6 md:p-8 shadow-xs">
+        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 text-center sm:text-left">
+          <div className="w-24 h-24 sm:w-28 sm:h-28 bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl flex items-center justify-center overflow-hidden shrink-0 shadow-xs">
+            {gym.logo ? (
+              <img src={gym.logo} alt={gym.name} className="w-full h-full object-contain p-2" />
+            ) : (
+              <Building2 className="text-[#64748B]" size={42} />
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-black text-[#111827] tracking-tight">{gym.name}</h1>
+                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5 mt-2.5">
+                  <span className="bg-red-50 text-[#B91C1C] px-3 py-1 rounded-full font-bold text-xs tracking-wide uppercase border border-red-100">
+                    {gym.gymType || 'Commercial'}
+                  </span>
+                  {gym.trainingMode && (
+                    <span className="bg-[#F8FAFC] text-[#EA580C] px-3 py-1 rounded-full font-bold text-xs tracking-wide uppercase border border-[#E2E8F0]">
+                      {gym.trainingMode === 'both' ? 'Online & Offline' : gym.trainingMode}
+                    </span>
+                  )}
+                  {gym.establishedYear && (
+                    <span className="text-[#64748B] text-xs font-semibold flex items-center gap-1 bg-[#F8FAFC] px-2.5 py-1 rounded-full border border-[#E2E8F0]">
+                      <Calendar size={13} /> Est. {gym.establishedYear}
+                    </span>
+                  )}
+                  {gym.rating && (
+                    <span className="text-yellow-700 text-xs font-bold flex items-center gap-1 bg-yellow-50 px-2.5 py-1 rounded-full border border-yellow-200">
+                      <Star size={13} className="fill-yellow-500 text-yellow-500" /> {gym.rating} ({gym.reviewCount || 0})
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 self-center sm:self-start">
+                {gym.location?.city && (
+                  <a
+                    href={memberMapUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 text-xs font-bold text-[#EA580C] bg-[#FFF7ED] hover:bg-[#C2410C] hover:text-[#FFFFFF] border border-[#FFEDD5] px-3.5 py-2 rounded-xl transition-all shadow-2xs"
+                    title="Click to open location in Google Maps"
+                  >
+                    <MapPin size={14} />
+                    <span>{gym.location.city}{gym.location.state ? `, ${gym.location.state}` : ''}</span>
+                    <ExternalLink size={11} className="ml-0.5" />
+                  </a>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsSelectorOpen(true)}
+                  className="flex items-center gap-1.5 text-xs font-bold text-[#334155] bg-[#F8FAFC] hover:bg-[#FFF7ED] hover:text-[#EA580C] border border-[#E2E8F0] px-3.5 py-2 rounded-xl transition-all cursor-pointer shadow-2xs"
+                >
+                  <RefreshCw size={13} /> Change Gym
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Image Gallery - Symmetrically and evenly aligned based on count */}
+      {gym.images && gym.images.length > 0 && (
+        <div>
+          {gym.images.length === 1 && (
+            <div className="rounded-2xl md:rounded-3xl overflow-hidden border border-[#E2E8F0] shadow-xs h-64 sm:h-80 md:h-96">
+              <img 
+                src={gym.images[0]} 
+                alt={`${gym.name} gallery`} 
+                className="w-full h-full object-cover hover:scale-105 transition-transform duration-500" 
+              />
+            </div>
+          )}
+
+          {gym.images.length === 2 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {gym.images.map((img: string, idx: number) => (
+                <div 
+                  key={idx} 
+                  className="rounded-2xl md:rounded-3xl overflow-hidden border border-[#E2E8F0] shadow-xs h-64 md:h-80"
+                >
+                  <img 
+                    src={img} 
+                    alt={`${gym.name} gallery ${idx + 1}`} 
+                    className="w-full h-full object-cover hover:scale-105 transition-transform duration-500" 
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {gym.images.length === 3 && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {gym.images.map((img: string, idx: number) => (
+                <div 
+                  key={idx} 
+                  className="rounded-2xl overflow-hidden border border-[#E2E8F0] shadow-xs h-64 md:h-72"
+                >
+                  <img 
+                    src={img} 
+                    alt={`${gym.name} gallery ${idx + 1}`} 
+                    className="w-full h-full object-cover hover:scale-105 transition-transform duration-500" 
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {gym.images.length >= 4 && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {gym.images.slice(0, 4).map((img: string, idx: number) => (
+                <div 
+                  key={idx} 
+                  className="rounded-2xl overflow-hidden border border-[#E2E8F0] shadow-xs h-48 md:h-60"
+                >
+                  <img 
+                    src={img} 
+                    alt={`${gym.name} gallery ${idx + 1}`} 
+                    className="w-full h-full object-cover hover:scale-105 transition-transform duration-500" 
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Available Package Plans - Full Width Section */}
+      <div className="w-full bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl md:rounded-3xl p-6 md:p-8 shadow-xs">
+        <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-[#111827]">
+          <Calendar className="text-[#EA580C]" size={20} />
+          Available Plans
+        </h2>
+        {packages.length === 0 ? (
+          <div className="bg-[#F8FAFC] border border-dashed border-[#CBD5E1] rounded-2xl p-8 text-center">
+            <p className="font-bold text-[#111827] text-sm">No membership packages published by this gym yet.</p>
+            <p className="text-xs text-[#64748B] mt-1">Contact the gym or check back later for membership plans.</p>
+          </div>
+        ) : (
+          <div className={`grid gap-6 ${
+            packages.length === 1 ? 'grid-cols-1 max-w-md mx-auto' :
+            packages.length === 2 ? 'grid-cols-1 md:grid-cols-2 max-w-4xl mx-auto' :
+            packages.length === 4 ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4' :
+            'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+          }`}>
+            {packages.map((pkg: any) => {
+              const badge = BADGE_CONFIG[pkg.fitnessGoal] || BADGE_CONFIG['General Fitness'] || { icon: Dumbbell, accent: '#F97316', bg: 'rgba(183,110,121,0.1)' };
+              const Icon = badge.icon;
+              const price = pkg.monthlyPrice ?? pkg.price ?? 0;
+              const duration = pkg.duration || '1 Month';
+              const featuresList: string[] = Array.isArray(pkg.features)
+                ? pkg.features
+                : (typeof pkg.features === 'string' ? pkg.features.split(',').map((f: string) => f.trim()).filter(Boolean) : []);
+              const isSelected = selectedPlanId === pkg._id;
+              const isCurrentActivePlan = Boolean(
+                activeMembership &&
+                (
+                  (pkg._id && (activeMembership.packageId === pkg._id || activeMembership.packageId?._id === pkg._id)) ||
+                  (pkg.name && activeMembership.planName && pkg.name.trim().toLowerCase() === activeMembership.planName.trim().toLowerCase())
+                )
+              );
+
+              return (
+                <div
+                  key={pkg._id}
+                  onClick={() => {
+                    if (!isCurrentActivePlan) setSelectedPlanId(pkg._id);
+                  }}
+                  className={`bg-[#FFFFFF] rounded-2xl p-6 relative flex flex-col justify-between transition-all duration-200 cursor-pointer border-2 ${
+                    isCurrentActivePlan
+                      ? 'border-emerald-500/60 shadow-md shadow-emerald-500/10'
+                      : isSelected
+                        ? 'border-[#FDBA74] shadow-md shadow-orange-500/15'
+                        : 'border-[#E2E8F0] hover:border-[#FFEDD5] shadow-2xs'
+                  }`}
+                >
+                  {isCurrentActivePlan ? (
+                    <div className="absolute top-0 right-6 -translate-y-1/2 bg-emerald-600 text-white font-bold px-3 py-1 rounded-full text-[10px] font-black shadow-lg uppercase tracking-wider flex items-center gap-1">
+                      <CheckCircle2 size={12} />
+                      CURRENT PLAN
+                    </div>
+                  ) : pkg.isPopular ? (
+                    <div className="absolute top-0 right-6 -translate-y-1/2 bg-[#C2410C] text-white font-bold px-3 py-1 rounded-full text-[10px] font-black shadow-lg uppercase tracking-wider">
+                      POPULAR
+                    </div>
+                  ) : null}
+
+                  <div>
+                    {/* Fitness Goal Badge & Icon */}
+                    <div className="flex items-center gap-2.5 mb-3">
+                      <div
+                        className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                        style={{ backgroundColor: badge.bg }}
+                      >
+                        <Icon size={18} style={{ color: badge.accent }} />
+                      </div>
+                      <span
+                        className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full"
+                        style={{ color: badge.accent, backgroundColor: badge.bg }}
+                      >
+                        {pkg.fitnessGoal || pkg.name}
+                      </span>
+                    </div>
+
+                    <h3 className="text-xl font-bold text-[#111827] mb-1.5 leading-snug">{pkg.name}</h3>
+                    {pkg.description && (
+                      <p className="text-xs text-[#64748B] mb-3 line-clamp-2 leading-relaxed">{pkg.description}</p>
+                    )}
+
+                    <div className="flex items-baseline mb-3">
+                      <span className="text-3xl font-extrabold text-[#111827]">₹{price}</span>
+                      <span className="text-xs font-semibold text-[#64748B] ml-1.5">/ {duration.toLowerCase().includes('month') ? 'month' : duration}</span>
+                    </div>
+
+                    {/* Training type and duration pills */}
+                    <div className="flex flex-wrap items-center gap-2 mb-4">
+                      <span className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-[#F8FAFC] text-[#111827]">
+                        {pkg.trainingType || 'Offline'}
+                      </span>
+                      <span className="px-2.5 py-0.5 rounded-lg text-xs font-bold bg-[#F8FAFC] text-[#111827]">
+                        {duration}
+                      </span>
+                    </div>
+
+                    {/* Features list */}
+                    <div className="border-t border-[#E2E8F0] pt-3 mb-6">
+                      <p className="text-xs font-bold text-[#111827] uppercase tracking-wider mb-2.5">FEATURES INCLUDED:</p>
+                      <ul className="space-y-2">
+                        {featuresList.map((f: string, i: number) => (
+                          <li key={i} className="flex items-start text-xs text-[#64748B] leading-snug">
+                            <CheckCircle2 size={14} className="text-[#EA580C] mr-2 shrink-0 mt-0.5" />
+                            <span>{f.trim()}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+
+                  {isCurrentActivePlan ? (
+                    <button
+                      type="button"
+                      disabled
+                      className="w-full py-3 rounded-xl font-bold transition-all bg-[#FFFFFF] border-2 border-emerald-500/40 text-emerald-600 shadow-xs cursor-not-allowed text-sm flex items-center justify-center gap-1.5"
+                    >
+                      <CheckCircle2 size={16} className="text-emerald-500" />
+                      <span>Current Plan</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (gym?._id) {
+                          navigate(`/gyms/${gym._id}/checkout`, {
+                            state: {
+                              plan: {
+                                ...pkg,
+                                price: pkg.monthlyPrice ?? pkg.price,
+                                name: pkg.name
+                              },
+                              gym
+                            }
+                          });
+                        }
+                      }}
+                      className="w-full py-3 rounded-xl font-bold transition-all text-white shadow-sm hover:opacity-95 active:scale-95 cursor-pointer text-sm"
+                      style={{ backgroundColor: badge.accent }}
+                    >
+                      {Number(price) === 0 || pkg.name?.toLowerCase().includes('trial')
+                        ? 'Start Free Trial'
+                        : `Choose ${pkg.name} • Pay Now`}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Active Trainers - Full Width Section */}
+      <div className="w-full bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl md:rounded-3xl p-6 md:p-8 shadow-xs">
+        <div className="flex items-center justify-between gap-3 mb-5">
+          <h2 className="text-xl font-bold flex items-center gap-2 text-[#111827]">
+            <Users className="text-[#EA580C]" size={20} />
+            Available Trainers ({trainers.length})
+          </h2>
+          <Link to="/member/find-trainers" className="text-xs font-bold text-[#EA580C] hover:underline">
+            View All Trainers →
+          </Link>
+        </div>
+        {trainers.length === 0 ? (
+          <div className="bg-[#F8FAFC] border border-dashed border-[#CBD5E1] rounded-2xl p-6 text-center">
+            <p className="font-bold text-sm text-[#111827]">No active trainers available at this gym yet.</p>
+            <p className="text-xs text-[#64748B] mt-1">Once trainers are activated by {gym.name}, they will appear here.</p>
+          </div>
+        ) : (
+          <div className={`grid gap-4 ${
+            trainers.length === 1 ? 'grid-cols-1 max-w-md' :
+            trainers.length === 2 ? 'grid-cols-1 sm:grid-cols-2' :
+            'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+          }`}>
+            {trainers.map((tr: any) => (
+              <div key={tr._id} className="p-4 rounded-2xl border border-[#E2E8F0] bg-[#F8FAFC] flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-12 h-12 rounded-full bg-white border border-[#E2E8F0] flex items-center justify-center font-bold text-[#EA580C] overflow-hidden shrink-0">
+                    {tr.profilePhoto ? <img src={tr.profilePhoto} alt={tr.name} className="w-full h-full object-cover" /> : (tr.name?.[0] || 'T')}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-bold text-sm text-[#111827] truncate">{tr.name}</p>
+                    <p className="text-xs text-[#EA580C] font-semibold truncate">{tr.specialization || 'Certified Trainer'}</p>
+                    <p className="text-[11px] text-[#64748B]">
+                      <strong className="font-bold text-[#111827]">{tr.experience ? `${tr.experience} yrs exp` : 'Coach'}</strong> • {tr.availabilityStatus || 'Available'}
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  to={`/member/book-session?trainerId=${tr._id}`}
+                  className="px-3 py-1.5 rounded-xl bg-[#C2410C] hover:bg-[#9A3412] text-white text-xs font-bold shrink-0"
+                >
+                  Book
+                </Link>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Gym Facilities, Equipment, About & Contact Details */}
+      {hasFacilities ? (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8 items-start">
+          <div className="lg:col-span-2 space-y-6 md:space-y-8">
+            {/* About */}
+            {gym.description && (
+              <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl md:rounded-3xl p-6 md:p-8 shadow-xs">
+                <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-[#111827]">
+                  <Building2 className="text-[#EA580C]" size={20} />
+                  About the Gym
+                </h2>
+                <p className="text-[#64748B] leading-relaxed whitespace-pre-wrap text-sm md:text-base">{gym.description}</p>
+              </div>
+            )}
+
+            {/* Amenities & Services */}
+            {allAmenities.length > 0 && (
+              <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl md:rounded-3xl p-6 md:p-8 shadow-xs">
+                <h2 className="text-xl font-bold mb-5 flex items-center gap-2 text-[#111827]">
+                  <CheckCircle2 className="text-[#EA580C]" size={20} />
+                  Amenities & Services
+                </h2>
+                <div className="flex flex-wrap gap-2.5">
+                  {allAmenities.map((amenity, idx) => (
+                    <span key={idx} className="bg-[#F8FAFC] border border-[#E2E8F0] text-[#64748B] px-3.5 py-1.5 rounded-xl text-sm font-medium">
+                      {amenity}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Equipment & AC Details */}
+            {(gym.equipment?.length > 0 || gym.acDetails) && (
+              <div className="grid sm:grid-cols-2 gap-6">
+                {gym.equipment?.length > 0 && (
+                  <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl md:rounded-3xl p-6 shadow-xs">
+                    <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-[#111827]">
+                      <Dumbbell className="text-[#EA580C]" size={18} />
+                      Equipment
+                    </h2>
+                    <ul className="space-y-2.5">
+                      {gym.equipment.slice(0, 5).map((eq: any, idx: number) => (
+                        <li key={idx} className="flex justify-between items-center text-sm py-1 border-b border-gray-50 last:border-0">
+                          <span className="text-[#64748B] font-medium">{eq.name}</span>
+                          <span className="bg-[#F8FAFC] text-[#111827] px-2 py-0.5 rounded-md font-semibold text-xs">{eq.quantity}</span>
+                        </li>
+                      ))}
+                      {gym.equipment.length > 5 && (
+                        <li className="text-sm text-[#EA580C] font-semibold pt-2 text-center">
+                          + {gym.equipment.length - 5} more
+                        </li>
+                      )}
+                    </ul>
+                  </div>
+                )}
+                
+                {gym.acDetails && (
+                  <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl md:rounded-3xl p-6 shadow-xs h-fit">
+                    <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-[#111827]">
+                      <Wind className="text-[#EA580C]" size={18} />
+                      AC Details
+                    </h2>
+                    <p className="text-[#64748B] font-medium mb-3">{gym.acDetails.type}</p>
+                    {gym.acDetails.areas?.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {gym.acDetails.areas.map((area: string, idx: number) => (
+                          <span key={idx} className="text-xs bg-[#F8FAFC] text-[#EA580C] border border-[#E2E8F0] px-2.5 py-1 rounded-md font-medium">
+                            {area}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Sidebar Info */}
+          <div className="space-y-6 lg:sticky lg:top-6">
+            {/* Contact Info */}
+            <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl md:rounded-3xl p-6 shadow-xs">
+              <h2 className="text-lg font-bold mb-5 flex items-center gap-2 text-[#111827]">
+                <Phone className="text-[#EA580C]" size={18} />
+                Contact Info
+              </h2>
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] flex items-center justify-center text-[#64748B] shrink-0">
+                    <Mail size={16} />
+                  </div>
+                  <div>
+                    <p className="text-xs text-[#64748B] uppercase tracking-wider font-semibold mb-0.5">Email</p>
+                    <p className="text-[#111827] text-sm font-medium break-all">{gym.email || 'N/A'}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] flex items-center justify-center text-[#64748B] shrink-0">
+                    <Phone size={16} />
+                  </div>
+                  <div>
+                    <p className="text-xs text-[#64748B] uppercase tracking-wider font-semibold mb-0.5">Phone</p>
+                    <p className="text-[#111827] text-sm font-medium">{gym.phone || 'N/A'}</p>
+                  </div>
+                </div>
+                {gym.website && (
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] flex items-center justify-center text-[#64748B] shrink-0">
+                      <Globe size={16} />
+                    </div>
+                    <div>
+                      <p className="text-xs text-[#64748B] uppercase tracking-wider font-semibold mb-0.5">Website</p>
+                      <a href={gym.website} target="_blank" rel="noopener noreferrer" className="text-[#EA580C] hover:underline text-sm font-medium break-all">
+                        {gym.website.replace(/^https?:\/\//, '')}
+                      </a>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Location Info */}
+            <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl md:rounded-3xl p-6 shadow-xs">
+              <h2 className="text-lg font-bold mb-5 flex items-center gap-2 text-[#111827]">
+                <MapPin className="text-[#EA580C]" size={18} />
+                Location Details
+              </h2>
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] flex items-center justify-center text-[#64748B] shrink-0">
+                  <MapPin size={16} />
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs text-[#64748B] uppercase tracking-wider font-semibold mb-0.5">Address</p>
+                  <p className="text-[#111827] text-sm font-medium leading-relaxed mb-3">
+                    {gym.location?.address && <>{gym.location.address}<br /></>}
+                    {gym.location?.area && <>{gym.location.area}<br /></>}
+                    {gym.location?.city}, {gym.location?.state} {gym.location?.pinCode}
+                  </p>
+                  <a
+                    href={memberMapUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#C2410C] text-white font-bold hover:bg-[#9A3412] rounded-xl text-xs font-bold transition-all shadow-xs"
+                  >
+                    <Navigation size={13} /> View Map & Directions <ExternalLink size={12} />
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Contact Info */}
+          <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl md:rounded-3xl p-6 shadow-xs">
+            <h2 className="text-lg font-bold mb-5 flex items-center gap-2 text-[#111827]">
+              <Phone className="text-[#EA580C]" size={18} />
+              Contact Info
+            </h2>
+            <div className="space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] flex items-center justify-center text-[#64748B] shrink-0">
+                  <Mail size={16} />
+                </div>
+                <div>
+                  <p className="text-xs text-[#64748B] uppercase tracking-wider font-semibold mb-0.5">Email</p>
+                  <p className="text-[#111827] text-sm font-medium break-all">{gym.email || 'N/A'}</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] flex items-center justify-center text-[#64748B] shrink-0">
+                  <Phone size={16} />
+                </div>
+                <div>
+                  <p className="text-xs text-[#64748B] uppercase tracking-wider font-semibold mb-0.5">Phone</p>
+                  <p className="text-[#111827] text-sm font-medium">{gym.phone || 'N/A'}</p>
+                </div>
+              </div>
+              {gym.website && (
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] flex items-center justify-center text-[#64748B] shrink-0">
+                    <Globe size={16} />
+                  </div>
+                  <div>
+                    <p className="text-xs text-[#64748B] uppercase tracking-wider font-semibold mb-0.5">Website</p>
+                    <a href={gym.website} target="_blank" rel="noopener noreferrer" className="text-[#EA580C] hover:underline text-sm font-medium break-all">
+                      {gym.website.replace(/^https?:\/\//, '')}
+                    </a>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Location Info */}
+          <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl md:rounded-3xl p-6 shadow-xs">
+            <h2 className="text-lg font-bold mb-5 flex items-center gap-2 text-[#111827]">
+              <MapPin className="text-[#EA580C]" size={18} />
+              Location Details
+            </h2>
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] flex items-center justify-center text-[#64748B] shrink-0">
+                <MapPin size={16} />
+              </div>
+              <div className="flex-1">
+                <p className="text-xs text-[#64748B] uppercase tracking-wider font-semibold mb-0.5">Address</p>
+                <p className="text-[#111827] text-sm font-medium leading-relaxed mb-3">
+                  {gym.location?.address && <>{gym.location.address}<br /></>}
+                  {gym.location?.area && <>{gym.location.area}<br /></>}
+                  {gym.location?.city}, {gym.location?.state} {gym.location?.pinCode}
+                </p>
+                <a
+                  href={memberMapUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#C2410C] text-white font-bold hover:bg-[#9A3412] rounded-xl text-xs font-bold transition-all shadow-xs"
+                >
+                  <Navigation size={13} /> View Map & Directions <ExternalLink size={12} />
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <GymSelectorModal
+        isOpen={isSelectorOpen}
+        onClose={() => setIsSelectorOpen(false)}
+        currentGymId={gym?._id}
+        onGymSelected={({ gym: selectedGym, trainers: gymTrainers, packages: gymPkgs }) => {
+          setGym(selectedGym);
+          setTrainers(gymTrainers || []);
+          setPackages(gymPkgs || []);
+          setSelectedPlanId(gymPkgs?.[0]?._id || null);
+        }}
+      />
+    </div>
+  );
+};
+
+export default MemberGymProfile;

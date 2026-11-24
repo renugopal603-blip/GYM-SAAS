@@ -1,0 +1,552 @@
+import { useState, useEffect } from 'react';
+import { Search, Loader2, Eye, X, MapPin, Truck, PackageCheck, Trash2, AlertTriangle } from 'lucide-react';
+import api from '../../../utils/api';
+
+const statusColor: Record<string, string> = {
+  'Pending': 'bg-amber-100 text-amber-800 border border-amber-200',
+  'Confirmed': 'bg-sky-100 text-sky-800 border border-sky-200',
+  'Preparing': 'bg-blue-100 text-blue-800 border border-blue-200',
+  'Ready for Pickup': 'bg-emerald-100 text-emerald-800 border border-emerald-200',
+  'Out for Delivery': 'bg-indigo-100 text-indigo-800 border border-indigo-200',
+  'Completed': 'bg-emerald-100 text-emerald-800 border border-emerald-200',
+  'Cancelled': 'bg-red-100 text-red-800 border border-red-200',
+  'Refunded': 'bg-purple-100 text-purple-800 border border-purple-200',
+};
+
+const paymentColor: Record<string, string> = {
+  'Paid': 'bg-[#FFF7ED] text-[#EA580C]',
+  'Pending': 'bg-yellow-100 text-yellow-700',
+  'Failed': 'bg-red-100 text-red-700',
+  'Refunded': 'bg-[#F8FAFC] text-[#EA580C]',
+};
+
+const nextActions: Record<string, string[]> = {
+  'Pending': ['Confirmed', 'Cancelled'],
+  'Confirmed': ['Preparing', 'Cancelled'],
+  'Preparing': ['Ready for Pickup', 'Out for Delivery', 'Cancelled'],
+  'Ready for Pickup': ['Completed'],
+  'Out for Delivery': ['Completed'],
+  'Completed': ['Refunded'],
+};
+
+const getOrderTimelineSteps = (order: any) => {
+  if (!order) return [];
+  const isCancelFlow = order.status === 'Cancelled' || order.status === 'Refunded';
+  const isDelivery = order.fulfilmentType === 'Delivery';
+
+  const pipeline = isDelivery
+    ? [
+        { status: 'Pending', label: 'Order Placed', defaultNote: 'Order placed and payment received' },
+        { status: 'Confirmed', label: 'Order Confirmed', defaultNote: 'Order confirmed by store manager' },
+        { status: 'Preparing', label: 'Order Preparing', defaultNote: 'Order is being packed at gym store' },
+        { status: 'Out for Delivery', label: 'Out for Delivery', defaultNote: 'Package is on the way to delivery address' },
+        { status: 'Completed', label: 'Delivered', defaultNote: 'Order successfully delivered to customer' },
+      ]
+    : [
+        { status: 'Pending', label: 'Order Placed', defaultNote: 'Order placed and payment received' },
+        { status: 'Confirmed', label: 'Order Confirmed', defaultNote: 'Order confirmed by store manager' },
+        { status: 'Preparing', label: 'Order Preparing', defaultNote: 'Order is being packed at gym store' },
+        { status: 'Ready for Pickup', label: 'Ready for Pickup', defaultNote: 'Order ready for collection at gym front desk' },
+        { status: 'Completed', label: 'Picked Up', defaultNote: 'Order picked up by customer' },
+      ];
+
+  if (isCancelFlow) {
+    const rawHistory = Array.isArray(order.statusHistory) && order.statusHistory.length > 0
+      ? order.statusHistory
+      : [
+          { status: 'Pending', at: order.createdAt, note: 'Order placed' },
+          { status: order.status, at: order.updatedAt || new Date(), note: order.cancellationReason || 'Order cancelled' }
+        ];
+
+    // Deduplicate consecutive identical statuses so repeated clicks only show once
+    const deduplicatedHistory: any[] = [];
+    rawHistory.forEach((h: any) => {
+      const statusKey = (h.status || '').toString().toLowerCase().trim();
+      const last = deduplicatedHistory[deduplicatedHistory.length - 1];
+      const lastKey = last ? (last.status || '').toString().toLowerCase().trim() : '';
+
+      if (statusKey === lastKey) {
+        deduplicatedHistory[deduplicatedHistory.length - 1] = h;
+      } else {
+        deduplicatedHistory.push(h);
+      }
+    });
+
+    return deduplicatedHistory.map((h: any) => ({
+      status: h.status,
+      at: h.at,
+      note: h.note || `Status: ${h.status}`,
+      future: false,
+      isCancelled: h.status === 'Cancelled' || h.status === 'Refunded',
+    }));
+  }
+
+  const currentStatus = order.status || 'Pending';
+  const currentIndex = pipeline.findIndex(p => p.status.toLowerCase() === currentStatus.toLowerCase());
+  const maxReachedIndex = currentIndex >= 0 ? currentIndex : 0;
+
+  const historyMap: Record<string, { at?: any; note?: string }> = {};
+  if (Array.isArray(order.statusHistory)) {
+    order.statusHistory.forEach((h: any) => {
+      if (h?.status) {
+        historyMap[h.status.toLowerCase()] = {
+          at: h.at,
+          note: h.note
+        };
+      }
+    });
+  }
+
+  return pipeline.map((stage, idx) => {
+    const isReached = idx <= maxReachedIndex;
+    const isCurrent = idx === maxReachedIndex;
+    const recorded = historyMap[stage.status.toLowerCase()];
+
+    let atTime = undefined;
+    if (isReached) {
+      if (recorded?.at) {
+        atTime = recorded.at;
+      } else if (idx === 0 && order.createdAt) {
+        atTime = order.createdAt;
+      } else {
+        atTime = isCurrent ? (order.updatedAt || new Date()) : undefined;
+      }
+    }
+
+    return {
+      status: stage.status,
+      label: stage.label,
+      at: atTime,
+      note: recorded?.note || stage.defaultNote,
+      future: !isReached,
+      isCurrent,
+    };
+  });
+};
+
+const GymStoreOrders = () => {
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState('all');
+  const [paymentStatus, setPaymentStatus] = useState('all');
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState<any>(null);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [refundPrompt, setRefundPrompt] = useState<any>(null);
+  const [refundReason, setRefundReason] = useState('');
+  const [deleteConfirmOrder, setDeleteConfirmOrder] = useState<any>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDeleteOrder = async () => {
+    if (!deleteConfirmOrder?._id) return;
+    try {
+      setIsDeleting(true);
+      await api.delete(`/store/admin/orders/${deleteConfirmOrder._id}`);
+      alert(`Order #${deleteConfirmOrder.orderNumber || deleteConfirmOrder._id} deleted successfully.`);
+      if (selected?._id === deleteConfirmOrder._id) {
+        setSelected(null);
+      }
+      setDeleteConfirmOrder(null);
+      await load();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to delete order.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const load = async () => {
+    try {
+      setLoading(true);
+      const params = new URLSearchParams();
+      if (status !== 'all') params.set('status', status);
+      if (paymentStatus !== 'all') params.set('paymentStatus', paymentStatus);
+      if (search.trim()) params.set('search', search.trim());
+      params.set('limit', '100');
+      const res = await api.get(`/store/admin/orders?${params.toString()}`);
+      setOrders(res.data.orders || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { load(); }, [status, paymentStatus, search]);
+
+  const changeStatus = async (id: string, next: string, explicitReason?: string) => {
+    let reason = explicitReason || '';
+    if (!explicitReason && next === 'Cancelled') {
+      const p = window.prompt(`Are you sure you want to cancel this order? Provide a reason (optional):`);
+      if (p === null) return;
+      reason = p;
+    }
+
+    try {
+      setUpdatingId(id);
+      await api.patch(`/store/admin/orders/${id}/status`, { status: next, note: reason });
+      if (selected && selected._id === id) {
+        setSelected({ ...selected, status: next });
+      }
+      load();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to update status');
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-[#111827] tracking-tight">Orders</h1>
+        <p className="text-[#64748B] mt-1">Manage online orders from your members.</p>
+      </div>
+
+      <div className="flex flex-col lg:flex-row gap-3">
+        <div className="relative flex-1">
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search order number or transaction id..." className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl pl-9 pr-4 py-2 text-sm text-[#111827] focus:border-[#FDBA74] outline-none" />
+          <Search className="absolute left-3 top-2.5 text-[#64748B]" size={16} />
+        </div>
+        <select value={status} onChange={(e) => setStatus(e.target.value)} className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3 py-2 text-sm text-[#111827] focus:border-[#FDBA74] outline-none lg:w-48">
+          <option value="all">All Status</option>
+          {Object.keys(nextActions).map((s) => <option key={s} value={s}>{s}</option>)}
+          <option value="Completed">Completed</option>
+          <option value="Cancelled">Cancelled</option>
+          <option value="Refunded">Refunded</option>
+        </select>
+        <select value={paymentStatus} onChange={(e) => setPaymentStatus(e.target.value)} className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3 py-2 text-sm text-[#111827] focus:border-[#FDBA74] outline-none lg:w-44">
+          <option value="all">All Payments</option>
+          <option value="Paid">Paid</option>
+          <option value="Pending">Pending</option>
+          <option value="Failed">Failed</option>
+          <option value="Refunded">Refunded</option>
+        </select>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-24"><Loader2 className="animate-spin text-[#EA580C]" size={40} /></div>
+      ) : (
+        <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl overflow-hidden">
+          <div className="overflow-x-auto custom-scrollbar">
+            <table className="w-full text-left text-sm text-[#64748B] whitespace-nowrap">
+              <thead className="bg-[#FFFFFF] border-b border-[#E2E8F0] text-[#111827]">
+                <tr>
+                  <th className="px-4 py-4 font-semibold text-center w-14">S.No</th>
+                  <th className="px-6 py-4 font-semibold">Order</th>
+                  <th className="px-6 py-4 font-semibold">Customer</th>
+                  <th className="px-6 py-4 font-semibold">Items</th>
+                  <th className="px-6 py-4 font-semibold">Total</th>
+                  <th className="px-6 py-4 font-semibold">Status</th>
+                  <th className="px-6 py-4 font-semibold">Payment</th>
+                  <th className="px-6 py-4 font-semibold">Fulfilment</th>
+                  <th className="px-6 py-4 font-semibold text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#E2E8F0]">
+                {orders.length === 0 ? (
+                  <tr><td colSpan={9} className="px-6 py-10 text-center">No orders found.</td></tr>
+                ) : orders.map((o, idx) => (
+                  <tr key={o._id} className="hover:bg-[#FFF7ED] transition-colors">
+                    <td className="px-4 py-4 text-center font-medium text-[#64748B] w-14">
+                      {idx + 1}
+                    </td>
+                    <td className="px-6 py-4">
+                      <p className="font-bold text-[#111827]">{o.orderNumber}</p>
+                      <p className="text-xs text-[#64748B]">{new Date(o.createdAt).toLocaleString()}</p>
+                    </td>
+                    <td className="px-6 py-4 font-semibold text-[#111827]">
+                      {o.customerId && (o.customerId.firstName || o.customerId.lastName) 
+                        ? `${o.customerId.firstName || ''} ${o.customerId.lastName || ''}`.trim()
+                        : 'Unknown Customer'}
+                    </td>
+                    <td className="px-6 py-4">{o.items.reduce((s: number, i: any) => s + i.quantity, 0)} item(s)</td>
+                    <td className="px-6 py-4 font-black text-[#EA580C]">₹{o.total}</td>
+                    <td className="px-6 py-4"><span className={`px-2.5 py-1 rounded-full text-xs font-bold ${statusColor[o.status] || 'bg-[#F8FAFC]'}`}>{o.status}</span></td>
+                    <td className="px-6 py-4"><span className={`px-2.5 py-1 rounded-full text-xs font-bold ${paymentColor[o.paymentStatus] || 'bg-[#F8FAFC]'}`}>{o.paymentStatus}</span></td>
+                    <td className="px-6 py-4">
+                      <p className="flex items-center gap-1 font-medium">{o.fulfilmentType === 'Delivery' ? <><Truck size={14} /> Delivery</> : <><MapPin size={14} /> Pickup</>}</p>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <select 
+                          className="px-2 py-1.5 bg-[#FFFFFF] border border-[#E2E8F0] text-[#111827] rounded-lg text-xs font-bold focus:outline-none focus:ring-1 focus:ring-[#F97316] disabled:opacity-50"
+                          value=""
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              if (e.target.value === 'Refunded') {
+                                setRefundPrompt(o);
+                                setRefundReason('');
+                              } else {
+                                changeStatus(o._id, e.target.value);
+                              }
+                            }
+                          }}
+                          disabled={updatingId === o._id}
+                        >
+                          <option value="">Update Status...</option>
+                          {['Pending', 'Confirmed', 'Preparing', 'Ready for Pickup', 'Out for Delivery', 'Completed', 'Cancelled', 'Refunded'].map(st => (
+                            <option key={st} value={st} disabled={st === o.status}>{st}</option>
+                          ))}
+                        </select>
+                        <button onClick={() => setSelected(o)} className="px-3 py-1.5 bg-[#F8FAFC] text-[#EA580C] rounded-lg hover:bg-[#FFF7ED] transition-colors text-xs font-bold inline-flex items-center gap-1 shrink-0 cursor-pointer">
+                          <Eye size={13} /> View
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteConfirmOrder(o)}
+                          className="p-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer shrink-0"
+                          title="Delete Order"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {selected && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-[#FFFFFF] rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden border border-[#E2E8F0] flex flex-col max-h-[85vh] shrink-0 my-auto">
+            <div className="p-6 border-b border-[#E2E8F0] flex justify-between items-center bg-[#F8FAFC] shrink-0">
+              <div>
+                <div className="flex items-center gap-3">
+                  <h2 className="text-xl sm:text-2xl font-bold text-[#111827]">{selected.orderNumber}</h2>
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${statusColor[selected.status]}`}>{selected.status}</span>
+                </div>
+                <p className="text-xs sm:text-sm text-[#64748B] mt-1">Placed on {new Date(selected.createdAt).toLocaleString()}</p>
+              </div>
+              <button onClick={() => setSelected(null)} className="text-[#64748B] hover:text-[#C2410C] transition-colors p-2 hover:bg-[#FFF7ED] rounded-lg">
+                <X size={22} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5 overflow-y-auto flex-1">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl p-4">
+                  <p className="text-xs text-[#64748B] font-semibold uppercase mb-2">Customer</p>
+                  <p className="font-bold text-[#111827]">
+                    {selected.customerId && (selected.customerId.firstName || selected.customerId.lastName)
+                      ? `${selected.customerId.firstName || ''} ${selected.customerId.lastName || ''}`.trim()
+                      : 'Unknown Customer'}
+                  </p>
+                  <p className="text-sm text-[#64748B]">{selected.customerId?.email || 'No email'}</p>
+                  <p className="text-sm text-[#64748B]">{selected.customerId?.mobile || 'No mobile'}</p>
+                </div>
+                <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl p-4">
+                  <p className="text-xs text-[#64748B] font-semibold uppercase mb-2">Payment</p>
+                  <p className="font-bold text-[#111827]">{selected.paymentMethod} · ₹{selected.total}</p>
+                  {selected.paymentMethod === 'Net Banking' && selected.bankName && (
+                    <p className="text-sm text-[#64748B] mt-0.5">Bank: <span className="font-semibold text-[#111827]">{selected.bankName}</span></p>
+                  )}
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold inline-block mt-1 ${paymentColor[selected.paymentStatus]}`}>{selected.paymentStatus}</span>
+                  {selected.transactionId && <p className="font-mono text-xs mt-1 text-[#64748B]">{selected.transactionId}</p>}
+                </div>
+              </div>
+
+              {selected.fulfilmentType === 'Delivery' && selected.deliveryDetails && (
+                <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl p-4">
+                  <p className="text-xs text-[#64748B] font-semibold uppercase mb-2 flex items-center gap-1"><Truck size={14} /> Delivery Details</p>
+                  <p className="font-bold text-[#111827]">{selected.deliveryDetails.name} · {selected.deliveryDetails.phone}</p>
+                  <p className="text-sm text-[#64748B]">{selected.deliveryDetails.address}, {selected.deliveryDetails.city}, {selected.deliveryDetails.state} — {selected.deliveryDetails.pinCode}</p>
+                </div>
+              )}
+
+              <div className="border border-[#E2E8F0] rounded-xl overflow-hidden">
+                <div className="px-4 py-3 bg-[#F8FAFC] font-bold text-[#111827] text-sm border-b border-[#E2E8F0]">Items</div>
+                {selected.items.map((it: any, idx: number) => (
+                  <div key={idx} className="flex items-center justify-between px-4 py-3 border-b border-[#F8FAFC] last:border-0">
+                    <div className="flex items-center gap-3">
+                      {it.image ? <img src={it.image} alt={it.name} className="w-10 h-10 rounded-lg object-cover" /> : <PackageCheck className="text-[#EA580C]" size={18} />}
+                      <div>
+                        <div className="flex items-center gap-1.5 flex-wrap my-0.5">
+                          <p className="font-semibold text-[#111827] text-sm mr-2">{it.name}</p>
+                          {it.attributes && Object.entries(it.attributes).map(([k, v]) => (
+                             <span key={k} className="text-[10px] bg-[#F8FAFC] text-[#111827] px-1.5 py-0.5 rounded font-medium">{String(v)}</span>
+                          ))}
+                        </div>
+                        <p className="text-xs text-[#64748B]">Qty {it.quantity} × ₹{it.unitPrice}</p>
+                      </div>
+                    </div>
+                    <p className="font-bold text-[#111827]">₹{it.total}</p>
+                  </div>
+                ))}
+                <div className="px-4 py-3 bg-[#F8FAFC] flex justify-between text-sm">
+                  <span className="text-[#64748B]">Subtotal <span className="text-xs">(discount ₹{selected.discount})</span></span>
+                  <span className="font-bold text-[#111827]">₹{selected.total}</span>
+                </div>
+              </div>
+
+              {selected.cancellationReason && (
+                <p className="text-sm text-[#111827] bg-red-50 rounded-xl px-4 py-3">Cancellation reason: {selected.cancellationReason}</p>
+              )}
+
+              {/* ── Status Timeline (zigzag) ── */}
+              {(() => {
+                const isCancelFlow = selected.status === 'Cancelled' || selected.status === 'Refunded';
+                const steps = getOrderTimelineSteps(selected);
+                return (
+                  <div>
+                    <p className="text-xs font-bold text-[#64748B] uppercase mb-6">Status Timeline</p>
+                    <div className="relative">
+                      {/* Center vertical line */}
+                      <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-[#E2E8F0] -translate-x-1/2" />
+                      <div className="space-y-5">
+                        {steps.map((h: any, i: number, arr: any[]) => {
+                          const isReached = !h.future;
+                          const isLastReached = isReached && (i === arr.length - 1 || arr[i + 1]?.future);
+                          const isLeft = i % 2 === 0;
+                          const isCancelStatus = isCancelFlow && isLastReached;
+
+                          const dotColor = isCancelStatus
+                            ? 'bg-red-500 shadow-[0_0_0_4px_rgba(220,38,38,0.15)]'
+                            : isLastReached
+                            ? 'bg-[#C2410C] shadow-[0_0_0_4px_rgba(194,65,12,0.2)]'
+                            : isReached
+                            ? 'bg-emerald-600 shadow-[0_0_0_4px_rgba(16,185,129,0.15)]'
+                            : 'bg-[#94A3B8]';
+
+                          const cardBg = isReached
+                            ? isCancelStatus
+                              ? 'bg-red-50 border-red-200'
+                              : isLastReached
+                              ? 'bg-[#FFF7ED] border-[#FDBA74] shadow-xs'
+                              : 'bg-[#FFFFFF] border-[#E2E8F0] shadow-xs'
+                            : 'bg-[#F8FAFC] border-[#CBD5E1]';
+
+                          const labelColor = isCancelStatus
+                            ? 'text-red-600'
+                            : isLastReached
+                            ? 'text-[#C2410C]'
+                            : isReached
+                            ? 'text-[#111827]'
+                            : 'text-[#1E293B]';
+
+                          return (
+                            <div key={i} className="relative flex items-center justify-between gap-2">
+                              {/* LEFT CARD or spacer */}
+                              <div className="w-[44%]">
+                                {isLeft ? (
+                                  <div className={`rounded-xl border p-3 text-right ${cardBg}`}>
+                                    <p className={`font-bold text-sm ${labelColor}`}>{h.status}</p>
+                                    {isReached ? (
+                                      <p className="text-[11px] text-[#475569] mt-0.5 leading-snug">
+                                        {h.at ? new Date(h.at).toLocaleString() : 'Completed'}
+                                        {h.note && h.note !== h.status ? <><br /><span className="italic">{h.note}</span></> : ''}
+                                      </p>
+                                    ) : (
+                                      <p className="text-[11px] text-[#475569] font-medium mt-0.5">Upcoming step</p>
+                                    )}
+                                  </div>
+                                ) : <div />}
+                              </div>
+
+                              {/* CENTER DOT */}
+                              <div className="relative z-10 flex-shrink-0">
+                                <div className={`w-9 h-9 rounded-full border-2 border-white flex items-center justify-center ${dotColor}`}>
+                                  {isReached ? (
+                                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                  ) : (
+                                    <div className="w-2 h-2 rounded-full bg-white" />
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* RIGHT CARD or spacer */}
+                              <div className="w-[44%]">
+                                {!isLeft ? (
+                                  <div className={`rounded-xl border p-3 ${cardBg}`}>
+                                    <p className={`font-bold text-sm ${labelColor}`}>{h.status}</p>
+                                    {isReached ? (
+                                      <p className="text-[11px] text-[#475569] mt-0.5 leading-snug">
+                                        {h.at ? new Date(h.at).toLocaleString() : 'Completed'}
+                                        {h.note && h.note !== h.status ? <><br /><span className="italic">{h.note}</span></> : ''}
+                                      </p>
+                                    ) : (
+                                      <p className="text-[11px] text-[#475569] font-medium mt-0.5">Upcoming step</p>
+                                    )}
+                                  </div>
+                                ) : <div />}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+
+
+
+            </div>
+          </div>
+        </div>
+      )}
+
+      {refundPrompt && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-[#FFFFFF] rounded-2xl max-w-md w-full p-6 shadow-2xl relative border border-[#E2E8F0] max-h-[85vh] overflow-y-auto my-auto shrink-0">
+            <h2 className="text-xl font-bold text-[#111827] mb-4">Refund Payment Details</h2>
+            <div className="bg-[#F8FAFC] rounded-xl p-4 mb-4 border border-[#E2E8F0]">
+               <p className="text-sm text-[#64748B] mb-1">Customer</p>
+               <p className="font-bold">{refundPrompt.customerId?.firstName} {refundPrompt.customerId?.lastName}</p>
+               <p className="text-sm text-[#64748B] mt-3 mb-1">Amount to Refund</p>
+               <p className="font-bold text-xl text-[#EA580C]">₹{refundPrompt.total}</p>
+               <p className="text-sm text-[#64748B] mt-3 mb-1">Payment Method Used</p>
+               <p className="font-bold">{refundPrompt.paymentMethod || 'Online'}</p>
+            </div>
+            <p className="text-sm text-[#111827] mb-3">Please process this refund via your payment gateway or manually, then confirm below.</p>
+            <input type="text" placeholder="Refund Reference / Reason" value={refundReason} onChange={(e) => setRefundReason(e.target.value)} className="w-full px-4 py-2 bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#F97316]" />
+            <div className="flex gap-3 mt-5">
+              <button onClick={() => { setRefundPrompt(null); setRefundReason(''); }} className="flex-1 py-2.5 bg-[#F8FAFC] text-[#111827] font-bold rounded-xl hover:bg-gray-200 transition-colors">Cancel</button>
+              <button onClick={() => { changeStatus(refundPrompt._id, 'Refunded', refundReason); setRefundPrompt(null); }} className="flex-1 py-2.5 bg-[#C2410C] text-white font-bold font-bold rounded-xl hover:bg-[#9A3412] transition-colors" disabled={updatingId === refundPrompt._id}>Confirm Refund</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {deleteConfirmOrder && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-[#FFFFFF] rounded-2xl max-w-md w-full p-6 shadow-2xl relative border border-[#E2E8F0]">
+            <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mb-4">
+              <AlertTriangle size={24} />
+            </div>
+            <h2 className="text-xl font-bold text-[#111827] mb-2">Delete Order</h2>
+            <p className="text-sm text-[#64748B] mb-4">
+              Are you sure you want to delete order <strong className="text-[#111827]">#{deleteConfirmOrder.orderNumber || deleteConfirmOrder._id}</strong>? Any active product inventory will be safely restocked and historical financial integrity preserved.
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmOrder(null)}
+                disabled={isDeleting}
+                className="flex-1 py-2.5 bg-[#F8FAFC] border border-[#E2E8F0] text-[#111827] font-bold rounded-xl hover:bg-gray-100 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteOrder}
+                disabled={isDeleting}
+                className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-red-600/20"
+              >
+                {isDeleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                <span>{isDeleting ? 'Deleting...' : 'Confirm Delete'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default GymStoreOrders;

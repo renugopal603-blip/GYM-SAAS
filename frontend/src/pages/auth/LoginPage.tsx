@@ -1,0 +1,391 @@
+import { useState, useEffect } from 'react';
+import type { FormEvent } from 'react';
+import { Link, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
+import { Eye, EyeOff, Activity, AlertCircle, Loader2, ShieldCheck, Building2, UserCheck, ArrowLeft, X, Dumbbell, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { getDashboardRoute, isSubscriptionActive } from '../../utils/routeHelpers';
+import { markAuthorizedNavigation } from '../../components/NavigationGuard';
+import api from '../../utils/api';
+
+const LoginPage = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const portalParam = searchParams.get('portal');
+  const portal = portalParam || (
+    (location.state as any)?.from?.includes('customer') ||
+    (location.state as any)?.from?.includes('member') ||
+    (location.state as any)?.fromLabel?.toLowerCase().includes('customer')
+      ? 'customer'
+      : (location.state as any)?.from?.includes('gym-owner')
+      ? 'gym-owner'
+      : (location.state as any)?.from?.includes('super-admin')
+      ? 'super-admin'
+      : null
+  );
+  const { login, user, isAuthenticated, isLoading: authLoading } = useAuth();
+
+  useEffect(() => {
+    if (!authLoading && isAuthenticated && user) {
+      markAuthorizedNavigation();
+      navigate(getDashboardRoute(user), { replace: true });
+    }
+  }, [isAuthenticated, user, authLoading, navigate]);
+
+  const [form, setForm] = useState({ email: '', password: '' });
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [showRegisterModal, setShowRegisterModal] = useState(false);
+
+
+
+  const validate = () => {
+    const errors: Record<string, string> = {};
+    if (!form.email.trim()) errors.email = 'Email is required';
+    else if (!/\S+@\S+\.\S+/.test(form.email)) errors.email = 'Enter a valid email';
+    if (!form.password) errors.password = 'Password is required';
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (!validate()) return;
+
+    setIsLoading(true);
+    try {
+      const res = await api.post('/auth/login', { email: form.email, password: form.password });
+      const { token, user } = res.data;
+      
+      if (rememberMe) {
+        localStorage.setItem('rememberedEmail', form.email);
+      } else {
+        localStorage.removeItem('rememberedEmail');
+      }
+
+      markAuthorizedNavigation();
+      login(user, token, rememberMe);
+      markAuthorizedNavigation();
+      
+      const intentStr = sessionStorage.getItem('checkout_intent');
+      if (intentStr && user.role === 'MEMBER') {
+        try {
+          const intent = JSON.parse(intentStr);
+          const isTrial = intent.plan?.name?.toLowerCase().includes('trial') || Number(intent.plan?.price || 0) === 0;
+          const isAlreadyEnrolled = isSubscriptionActive(user.subscriptionStatus) || Boolean(user.gymId);
+
+          sessionStorage.removeItem('checkout_intent');
+
+          // If the user is already enrolled/approved with active plan/trial, or intent was just trial, go to dashboard
+          if (!isTrial && !isAlreadyEnrolled) {
+            navigate(`/gyms/${intent.gymId}/checkout`, { state: { plan: intent.plan, gym: intent.gym || { _id: intent.gymId } }, replace: true });
+            return;
+          }
+        } catch (e) {
+          sessionStorage.removeItem('checkout_intent');
+        }
+      } else {
+        sessionStorage.removeItem('checkout_intent');
+      }
+
+      const statusUpper = (user.approvalStatus || '').toUpperCase().trim();
+      const detailUpper = (((user as any).statusDetail || '') as string).toUpperCase().trim();
+      const isInactiveOrNonActive = 
+        detailUpper === 'INACTIVE' || statusUpper === 'INACTIVE' || statusUpper === 'SUSPENDED' || user.isActive === false ||
+        detailUpper === 'REJECTED' || statusUpper === 'REJECTED' ||
+        detailUpper === 'PENDING' || detailUpper === 'NEW' || statusUpper === 'PENDING';
+
+      if (user.role === 'MEMBER' && !isInactiveOrNonActive) {
+        const isCompleted = res.data?.isSubscriptionCompleted || user.subscriptionStatus === 'Expired' || user.subscriptionStatus === 'EXPIRED';
+        if (isCompleted) {
+          navigate('/member/subscription', { replace: true, state: { expiredAlert: true } });
+          return;
+        }
+      }
+
+      if (user.role === 'GYM_OWNER' || user.role === 'ADMIN') {
+        if (!isSubscriptionActive(user.subscriptionStatus)) {
+          navigate('/subscription-plans', { replace: true });
+          return;
+        }
+      }
+
+      markAuthorizedNavigation();
+      navigate(getDashboardRoute(user), { replace: true });
+    } catch (err: any) {
+      const msg = err.response?.data?.message || (err.message === 'Network Error' || !err.response ? 'Server connection error. Please make sure the backend is running.' : 'Something went wrong. Please try again.');
+      setError(msg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#FFFFFF] flex flex-col items-center justify-center px-4 py-12 sm:py-16 relative">
+      {/* Back to Home Button */}
+      <div className="absolute top-6 left-6 z-20">
+        <Link
+          to="/"
+          className="inline-flex items-center gap-2 text-xs font-bold text-[#64748B] hover:text-[#EA580C] px-3.5 py-2 rounded-xl bg-[#FFFFFF] border border-[#E2E8F0] shadow-xs hover:border-[#FFEDD5] hover:bg-[#FFF7ED] transition-all"
+        >
+          <ArrowLeft size={16} />
+          <span>Back to Home</span>
+        </Link>
+      </div>
+
+      {/* Background glow */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(183,110,121,0.07)_0%,_transparent_65%)] pointer-events-none" />
+
+
+      {/* Logo */}
+      <Link to="/" className="flex items-center space-x-2.5 mt-8 sm:mt-4 mb-6 sm:mb-8 group z-10">
+        <div className="w-10 h-10 bg-gradient-to-br from-[#EA580C] to-[#C2410C] rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/15">
+          <Activity className="text-[#FFFFFF]" size={22} strokeWidth={2.5} />
+        </div>
+        <span className="text-2xl font-bold tracking-tight text-[#111827] group-hover:text-[#EA580C] transition-colors">Gymora</span>
+      </Link>
+
+      <div className="w-full max-w-md bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-8 sm:p-9 shadow-2xl relative z-10 backdrop-blur-sm">
+        {/* Context Badge */}
+        {portal === 'super-admin' && (
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#FFF7ED] text-[#EA580C] border border-[#FFEDD5] mb-3">
+            <ShieldCheck size={13} />
+            <span>Super Admin Login</span>
+          </div>
+        )}
+        {portal === 'customer' && (
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#FFF7ED] text-[#EA580C] border border-[#FFEDD5] mb-3">
+            <UserCheck size={13} />
+            <span>Customer Login</span>
+          </div>
+        )}
+        {portal === 'gym-owner' && (
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#FFF7ED] text-[#EA580C] border border-[#FFEDD5] mb-3">
+            <Building2 size={13} />
+            <span>Gym Owner Login</span>
+          </div>
+        )}
+        {portal === 'trainer' && (
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#FFF7ED] text-[#EA580C] border border-[#FFEDD5] mb-3">
+            <UserCheck size={13} />
+            <span>Trainer Login</span>
+          </div>
+        )}
+
+        <h1 className="text-2xl sm:text-3xl font-bold text-[#111827] mb-1.5 tracking-tight">Welcome back</h1>
+        <p className="text-[#64748B] text-sm mb-7">Log in to your Gymora account</p>
+
+        {error && (
+          <div className="flex items-center space-x-3 bg-red-500/10 border border-red-500/25 text-[#B91C1C] rounded-xl px-4 py-3 mb-6 text-sm">
+            <AlertCircle size={18} className="shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} noValidate autoComplete="off" className="space-y-5">
+          {/* Email */}
+          <div>
+            <label className="block text-sm font-medium text-[#111827] mb-2">Email Address</label>
+            <input
+              id="login-email"
+              type="email"
+              value={form.email}
+              onChange={(e) => { setForm({ ...form, email: e.target.value }); setFieldErrors({ ...fieldErrors, email: '' }); }}
+              placeholder="you@example.com"
+              autoComplete="off"
+              className={`w-full bg-[#FFFFFF] border ${fieldErrors.email ? 'border-red-400/80' : 'border-[#E2E8F0]'} text-[#111827] placeholder-[#94A3B8] rounded-xl px-4 py-3 text-sm outline-none focus:border-[#FDBA74] focus:ring-1 focus:ring-[#F97316] transition-all`}
+            />
+            {fieldErrors.email && <p className="text-[#B91C1C] text-xs mt-1.5">{fieldErrors.email}</p>}
+          </div>
+
+          {/* Password */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-[#111827]">Password</label>
+              <Link to="/forgot-password" className="text-xs text-[#EA580C] hover:text-[#9A3412] hover:underline font-medium transition-colors">Forgot Password?</Link>
+            </div>
+            <div className="relative">
+              <input
+                id="login-password"
+                type={showPassword ? 'text' : 'password'}
+                value={form.password}
+                onChange={(e) => { setForm({ ...form, password: e.target.value }); setFieldErrors({ ...fieldErrors, password: '' }); }}
+                placeholder="Enter your password"
+                autoComplete="new-password"
+                className={`w-full bg-[#FFFFFF] border ${fieldErrors.password ? 'border-red-400/80' : 'border-[#E2E8F0]'} text-[#111827] placeholder-[#94A3B8] rounded-xl px-4 py-3 pr-12 text-sm outline-none focus:border-[#FDBA74] focus:ring-1 focus:ring-[#F97316] transition-all`}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#EA580C] transition-colors cursor-pointer"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+            {fieldErrors.password && <p className="text-[#B91C1C] text-xs mt-1.5">{fieldErrors.password}</p>}
+          </div>
+
+          {/* Remember Me */}
+          <div className="flex items-center space-x-3">
+            <button
+              type="button"
+              id="remember-me"
+              onClick={() => setRememberMe(!rememberMe)}
+              className={`w-5 h-5 rounded-md border flex items-center justify-center flex-shrink-0 transition-colors cursor-pointer ${
+                rememberMe ? 'bg-[#C2410C] border-[#FDBA74]' : 'border-[#E2E8F0] bg-[#FFFFFF] hover:border-[#FFEDD5]'
+              }`}
+            >
+              {rememberMe && (
+                <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                  <path d="M1 4L3.5 6.5L9 1" stroke="#FFFFFF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              )}
+            </button>
+            <label className="text-sm text-[#111827] cursor-pointer select-none" onClick={() => setRememberMe(!rememberMe)}>
+              Remember me
+            </label>
+          </div>
+
+          {/* Submit */}
+          <button
+            id="login-submit"
+            type="submit"
+            disabled={isLoading}
+            className="w-full py-3.5 bg-gradient-to-r from-[#EA580C] to-[#C2410C] text-[#FFFFFF] font-bold rounded-xl hover:from-[#9A3412] hover:to-[#C2410C] transition-all disabled:opacity-60 flex items-center justify-center space-x-2 shadow-lg shadow-orange-500/15 hover:shadow-teal-500/30 cursor-pointer"
+          >
+            {isLoading ? (
+              <>
+                <Loader2 size={18} className="animate-spin" />
+                <span>Logging in...</span>
+              </>
+            ) : (
+              <span>Log In</span>
+            )}
+          </button>
+        </form>
+
+        <div className="mt-6 text-center text-sm text-[#64748B]">
+          <div>
+            Don't have an account?{' '}
+            <button
+              type="button"
+              onClick={() => setShowRegisterModal(true)}
+              className="text-[#EA580C] font-semibold hover:text-[#9A3412] hover:underline transition-colors cursor-pointer"
+            >
+              Sign Up
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Account Type Selection Modal */}
+      {showRegisterModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl relative space-y-5">
+            {/* Close button */}
+            <button
+              type="button"
+              onClick={() => setShowRegisterModal(false)}
+              className="absolute top-5 right-5 p-2 rounded-xl text-[#64748B] hover:text-[#111827] hover:bg-[#F1F5F9] transition-colors cursor-pointer"
+              title="Close"
+            >
+              <X size={18} />
+            </button>
+
+            <div>
+              <span className="text-[11px] font-bold text-[#EA580C] uppercase tracking-wider bg-[#FFF7ED] px-2.5 py-1 rounded-full border border-[#FFEDD5]">
+                New to Gymora
+              </span>
+              <h2 className="text-xl font-bold text-[#111827] mt-2 tracking-tight">Create Your Account</h2>
+              <p className="text-xs text-[#64748B] mt-1">Select your account type to proceed with registration:</p>
+            </div>
+
+            {/* Options Grid */}
+            <div className="space-y-3">
+              {/* Gym Owner Option */}
+              <div
+                onClick={() => {
+                  setShowRegisterModal(false);
+                  navigate('/register/gym-owner');
+                }}
+                className="group p-4 bg-[#FFFFFF] hover:bg-[#FFF7ED] border-2 border-[#E2E8F0] hover:border-[#EA580C] rounded-2xl cursor-pointer transition-all flex items-start gap-3.5 shadow-xs hover:shadow-md"
+              >
+                <div className="w-12 h-12 rounded-xl bg-[#FFF7ED] group-hover:bg-white text-[#EA580C] border border-[#FFEDD5] flex items-center justify-center shrink-0 transition-colors">
+                  <Building2 size={24} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold text-sm text-[#111827] group-hover:text-[#EA580C] transition-colors">
+                      Gym Owner Registration
+                    </h3>
+                    <ArrowRight size={14} className="text-[#EA580C] opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+                  </div>
+                  <p className="text-xs text-[#64748B] mt-1 leading-relaxed">
+                    Register your fitness club or gym facility, manage trainers, and scale memberships.
+                  </p>
+                </div>
+              </div>
+
+              {/* Customer / Member Option */}
+              <div
+                onClick={() => {
+                  setShowRegisterModal(false);
+                  navigate('/register/customer');
+                }}
+                className="group p-4 bg-[#FFFFFF] hover:bg-[#FFF7ED] border-2 border-[#E2E8F0] hover:border-[#EA580C] rounded-2xl cursor-pointer transition-all flex items-start gap-3.5 shadow-xs hover:shadow-md"
+              >
+                <div className="w-12 h-12 rounded-xl bg-[#FFF7ED] group-hover:bg-white text-[#EA580C] border border-[#FFEDD5] flex items-center justify-center shrink-0 transition-colors">
+                  <UserCheck size={24} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold text-sm text-[#111827] group-hover:text-[#EA580C] transition-colors">
+                      Customer Registration
+                    </h3>
+                    <ArrowRight size={14} className="text-[#EA580C] opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+                  </div>
+                  <p className="text-xs text-[#64748B] mt-1 leading-relaxed">
+                    Join gyms, access workout programs, tailored diet plans, and hire certified trainers.
+                  </p>
+                </div>
+              </div>
+
+              {/* Trainer Option */}
+              <div
+                onClick={() => {
+                  setShowRegisterModal(false);
+                  navigate('/register/trainer');
+                }}
+                className="group p-4 bg-[#FFFFFF] hover:bg-[#FFF7ED] border-2 border-[#E2E8F0] hover:border-[#EA580C] rounded-2xl cursor-pointer transition-all flex items-start gap-3.5 shadow-xs hover:shadow-md"
+              >
+                <div className="w-12 h-12 rounded-xl bg-[#FFF7ED] group-hover:bg-white text-[#EA580C] border border-[#FFEDD5] flex items-center justify-center shrink-0 transition-colors">
+                  <Dumbbell size={24} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-bold text-sm text-[#111827] group-hover:text-[#EA580C] transition-colors">
+                      Trainer Registration
+                    </h3>
+                    <ArrowRight size={14} className="text-[#EA580C] opacity-0 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
+                  </div>
+                  <p className="text-xs text-[#64748B] mt-1 leading-relaxed">
+                    Join gym rosters, conduct 1-on-1 and group personal training, manage workout & diet plans.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <p className="mt-8 text-xs text-[#64748B] z-10">&copy; {new Date().getFullYear()} Gymora Technologies. All rights reserved.</p>
+    </div>
+  );
+};
+
+export default LoginPage;
