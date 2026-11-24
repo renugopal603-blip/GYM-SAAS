@@ -907,12 +907,12 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({ role = 'GYM_
                 <div className={`grid ${flowchartMode === 'annual' ? 'grid-cols-6' : 'grid-cols-12'} gap-2 sm:gap-2.5 relative z-10`}>
                   {(flowchartMode === 'annual'
                     ? [
-                        { month: '2021', yearLabel: '2021', multiplier: 0.35, gyms: 1, growth: '+0%', desc: 'Initial Base' },
-                        { month: '2022', yearLabel: '2022', multiplier: 0.48, gyms: 2, growth: '+37%', desc: 'Early Adoption', isOrangePill: true },
-                        { month: '2023', yearLabel: '2023', multiplier: 0.62, gyms: 2, growth: '+29%', desc: 'Expansion', isOrangePill: true },
-                        { month: '2024', yearLabel: '2024', multiplier: 0.76, gyms: 3, growth: '+23%', desc: 'New Quotas' },
-                        { month: '2025', yearLabel: '2025', multiplier: 0.90, gyms: 3, growth: '+18%', desc: 'Scale' },
-                        { month: '2026', yearLabel: '2026', multiplier: 1.00, gyms: 3, growth: '+11%', desc: 'Current Year', isCurrent: true, isOrangePill: true },
+                        { month: '2021', yearLabel: '2021', multiplier: 0.35, gyms: 1, growth: '+0%', desc: 'Initial Base', isCurrent: false, isOrangePill: false, isFuture: false },
+                        { month: '2022', yearLabel: '2022', multiplier: 0.48, gyms: 2, growth: '+37%', desc: 'Early Adoption', isCurrent: false, isOrangePill: true, isFuture: false },
+                        { month: '2023', yearLabel: '2023', multiplier: 0.62, gyms: 2, growth: '+29%', desc: 'Expansion', isCurrent: false, isOrangePill: true, isFuture: false },
+                        { month: '2024', yearLabel: '2024', multiplier: 0.76, gyms: 3, growth: '+23%', desc: 'New Quotas', isCurrent: false, isOrangePill: false, isFuture: false },
+                        { month: '2025', yearLabel: '2025', multiplier: 0.90, gyms: 3, growth: '+18%', desc: 'Scale', isCurrent: false, isOrangePill: false, isFuture: false },
+                        { month: '2026', yearLabel: '2026', multiplier: 1.00, gyms: 3, growth: '+11%', desc: 'Current Year', isCurrent: true, isOrangePill: true, isFuture: false },
                       ]
                     : [
                         { month: 'Jan', yearLabel: 'Month 1', multiplier: 0.35, gyms: 1, growth: '+0%', desc: 'Base Kickoff' },
@@ -939,26 +939,33 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({ role = 'GYM_
                           desc: isCurrentM ? 'Active Now' : isFutureM ? 'Upcoming' : item.desc
                         };
                       })
-                  ).map((m, idx) => {
+                  ).map((m: any, idx) => {
                     const stepNum = String(idx + 1).padStart(2, '0');
-                    const isCurrent = m.isCurrent;
-                    const isOrangePill = m.isOrangePill || isCurrent;
+                    const isCurrent = Boolean(m.isCurrent);
+                    const isFuture = Boolean(m.isFuture);
+                    const isOrangePill = (Boolean(m.isOrangePill) || isCurrent) && !isFuture;
                     const baseRev = flowchartMode === 'annual'
                       ? (summary.totalGrossRevenue && summary.totalGrossRevenue > 0 ? summary.totalGrossRevenue * 12 : 45564)
                       : (summary.totalGrossRevenue && summary.totalGrossRevenue > 0 ? summary.totalGrossRevenue : 3797);
                     
                     const stepTotal = isCurrent
                       ? (flowchartMode === 'annual' ? (timeframe === 'annual' ? displayTotalRevenue : baseRev) : (displayTotalRevenue || 3797))
+                      : isFuture
+                      ? 0
                       : Math.round(baseRev * m.multiplier);
 
                     const stepGyms = isCurrent
                       ? (summary.activeSubscriptionsCount || 3)
+                      : isFuture
+                      ? 0
                       : m.gyms;
 
                     const totalSteps = flowchartMode === 'annual' ? 6 : 12;
                     const minHeightPx = 45;
                     const maxHeightPx = 135;
-                    const calculatedHeight = Math.round(minHeightPx + ((idx / (totalSteps - 1)) * (maxHeightPx - minHeightPx)));
+                    const calculatedHeight = isFuture
+                      ? 22
+                      : Math.round(minHeightPx + ((idx / (totalSteps - 1)) * (maxHeightPx - minHeightPx)));
 
                     return (
                       <div key={idx} className="flex flex-col items-center group">
@@ -967,9 +974,14 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({ role = 'GYM_
                           <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-wider text-[#64748B] whitespace-nowrap">
                             S{stepNum}
                           </span>
-                          {m.growth && (
+                          {!isFuture && m.growth && (
                             <span className="text-[8px] sm:text-[9px] font-black text-[#EA580C] bg-[#F8FAFC] px-1 py-0.2 rounded-full whitespace-nowrap">
                               {m.growth}
+                            </span>
+                          )}
+                          {isFuture && (
+                            <span className="text-[8px] sm:text-[9px] font-bold text-[#94A3B8] bg-[#F1F5F9] px-1 py-0.2 rounded-full whitespace-nowrap">
+                              Upcoming
                             </span>
                           )}
                         </div>
@@ -979,10 +991,12 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({ role = 'GYM_
                           className={`mb-2.5 text-[11px] sm:text-xs font-black px-2 sm:px-2.5 py-1 rounded-xl shadow-xs transition-all whitespace-nowrap ${
                             isOrangePill
                               ? 'bg-gradient-to-r from-[#EA580C] to-[#C2410C] text-white shadow-orange-500/15'
+                              : isFuture
+                              ? 'bg-[#F8FAFC] text-[#94A3B8] border border-dashed border-[#CBD5E1]'
                               : 'bg-[#F8FAFC] text-[#111827] border border-[#E2E8F0] group-hover:bg-[#C2410C] group-hover:border-[#FDBA74]'
                           } ${isCurrent ? 'ring-2 ring-orange-400/50 scale-105' : ''}`}
                         >
-                          ₹{stepTotal.toLocaleString('en-IN')}
+                          {isFuture ? '₹0' : `₹${stepTotal.toLocaleString('en-IN')}`}
                         </div>
 
                         {/* 3. Flow Pillar Card Container */}
@@ -990,6 +1004,8 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({ role = 'GYM_
                           className={`w-full h-44 flex items-end justify-center rounded-2xl p-1.5 sm:p-2 transition-all shadow-xs ${
                             isCurrent
                               ? 'bg-[#FFF7ED] border-2 border-[#FDBA74] shadow-orange-500/15 ring-2 ring-[#F97316]/30'
+                              : isFuture
+                              ? 'bg-[#F8FAFC] border border-dashed border-[#CBD5E1]/60'
                               : 'bg-[#FFFFFF] border border-[#E2E8F0] group-hover:border-[#FFEDD5] group-hover:bg-[#FFF7ED]/20'
                           }`}
                         >
@@ -998,12 +1014,14 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({ role = 'GYM_
                             className={`w-9 sm:w-11 rounded-xl shadow-md flex flex-col justify-between items-center py-2 transition-all duration-300 ${
                               isCurrent
                                 ? 'bg-gradient-to-t from-[#FFFFFF] via-[#F97316] to-[#F8FAFC] ring-2 ring-[#F97316]/60'
+                                : isFuture
+                                ? 'bg-gradient-to-t from-[#F8FAFC] to-[#E2E8F0] border border-dashed border-[#CBD5E1]'
                                 : 'bg-gradient-to-t from-[#FFFFFF] via-[#64748B] to-[#EA580C] group-hover:from-[#3D264C] group-hover:to-[#C2410C]'
                             }`}
                           >
-                            <div className="w-4 h-1 bg-[#FFFFFF]/60 rounded-full" />
-                            <div className="text-[9px] font-extrabold text-white drop-shadow-sm whitespace-nowrap">
-                              {stepGyms} Gyms
+                            <div className={`w-4 h-1 rounded-full ${isFuture ? 'bg-[#94A3B8]/30' : 'bg-[#FFFFFF]/60'}`} />
+                            <div className={`text-[9px] font-extrabold drop-shadow-sm whitespace-nowrap ${isFuture ? 'text-[#94A3B8]' : 'text-white'}`}>
+                              {isFuture ? '0 Gyms' : `${stepGyms} Gyms`}
                             </div>
                           </div>
                         </div>
@@ -1014,22 +1032,24 @@ export const RevenueAnalytics: React.FC<RevenueAnalyticsProps> = ({ role = 'GYM_
                             className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full bg-[#FFFFFF] border-2 shadow-xs flex items-center justify-center transition-transform group-hover:scale-110 ${
                               isCurrent
                                 ? 'border-[#FFFFFF] ring-2 ring-[#F97316]/50'
+                                : isFuture
+                                ? 'border-[#CBD5E1] border-dashed'
                                 : m.isOrangePill
                                 ? 'border-[#FFFFFF]'
                                 : 'border-[#FDBA74]'
                             }`}
                           >
-                            <div className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full ${isOrangePill ? 'bg-[#FFFFFF]' : 'bg-[#C2410C]'}`} />
+                            <div className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full ${isOrangePill ? 'bg-[#FFFFFF]' : isFuture ? 'bg-[#CBD5E1]' : 'bg-[#C2410C]'}`} />
                           </div>
                           <span
                             className={`text-xs font-black mt-1.5 transition-colors whitespace-nowrap ${
-                              isCurrent ? 'text-[#111827] font-black' : isOrangePill ? 'text-[#111827]' : 'text-[#111827] group-hover:text-[#EA580C]'
+                              isCurrent ? 'text-[#111827] font-black' : isFuture ? 'text-[#94A3B8]' : isOrangePill ? 'text-[#111827]' : 'text-[#111827] group-hover:text-[#EA580C]'
                             }`}
                           >
                             {flowchartMode === 'annual' ? m.yearLabel : m.month}
                           </span>
-                          <span className="text-[9px] text-[#64748B] font-semibold mt-0.5 whitespace-nowrap">
-                            {stepGyms} Gyms
+                          <span className={`text-[9px] font-semibold mt-0.5 whitespace-nowrap ${isFuture ? 'text-[#94A3B8]' : 'text-[#64748B]'}`}>
+                            {isFuture ? '0 Gyms' : `${stepGyms} Gyms`}
                           </span>
 
                           {/* Currently Active Indicator */}
