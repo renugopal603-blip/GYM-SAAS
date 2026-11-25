@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 
 export const PRIMARY_RENDER_API_URL = 'https://gym-saas-lb9s.onrender.com/api';
 export const LIVE_RENDER_API_URL = PRIMARY_RENDER_API_URL;
-export const LOCAL_WIFI_API_URL = 'http://192.168.245.132:5600/api';
+export const LOCAL_WIFI_API_URL = 'http://10.154.63.132:5600/api';
 export const LOCALHOST_API_URL = 'http://localhost:5600/api';
 
 export const BACKEND_STORAGE_KEY = '@gymora_custom_backend_url';
