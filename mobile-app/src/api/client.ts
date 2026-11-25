@@ -1,25 +1,27 @@
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
-export const LIVE_RENDER_API_URL = 'https://gym-saas-vu70.onrender.com/api';
-export const LOCAL_WIFI_API_URL = 'http://192.168.1.29:5600/api';
+export const PRIMARY_RENDER_API_URL = 'https://gym-saas-lb9s.onrender.com/api';
+export const LIVE_RENDER_API_URL = PRIMARY_RENDER_API_URL;
+export const LOCAL_WIFI_API_URL = 'http://192.168.245.132:5600/api';
 export const LOCALHOST_API_URL = 'http://localhost:5600/api';
 
 export const BACKEND_STORAGE_KEY = '@gymora_custom_backend_url';
 
 export const BACKEND_PRESETS = [
   {
-    id: 'render',
-    name: 'Cloud Render (Live DB)',
-    url: LIVE_RENDER_API_URL,
-    desc: 'Shared Atlas MongoDB (ai-gym)',
+    id: 'render_primary',
+    name: 'Cloud Render (Gymora Live DB)',
+    url: PRIMARY_RENDER_API_URL,
+    desc: 'Live Atlas MongoDB (Gymora)',
     isProduction: true,
   },
   {
     id: 'local_wifi',
     name: 'Local PC on Wi-Fi (Port 5600)',
     url: LOCAL_WIFI_API_URL,
-    desc: 'Same Wi-Fi network (192.168.1.29:5600)',
+    desc: 'Same Wi-Fi network (192.168.245.132:5600)',
     isProduction: false,
   },
   {
@@ -37,7 +39,7 @@ declare const process: any;
 const INITIAL_BASE_URL =
   (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_API_URL) ||
   (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_BACKEND_URL ? `${process.env.EXPO_PUBLIC_BACKEND_URL}/api` : '') ||
-  LIVE_RENDER_API_URL;
+  PRIMARY_RENDER_API_URL;
 
 console.log(`[Gymora Mobile API] Initial Base URL: ${INITIAL_BASE_URL}`);
 
@@ -55,6 +57,17 @@ AsyncStorage.getItem(BACKEND_STORAGE_KEY)
     if (savedUrl && typeof savedUrl === 'string' && savedUrl.trim().startsWith('http')) {
       const cleaned = savedUrl.trim().replace(/\/+$/, '');
       const finalUrl = cleaned.endsWith('/api') ? cleaned : `${cleaned}/api`;
+
+      // On physical mobile devices (Android/iOS), do NOT allow localhost, 127.0.0.1 or outdated private LAN IPs to override Render!
+      if (Platform.OS !== 'web') {
+        const isLocal = /^(https?:\/\/)?(localhost|127\.0\.0\.1|192\.168\.|10\.|172\.)/i.test(finalUrl);
+        if (isLocal) {
+          console.log(`[Gymora Mobile API] Ignoring local/private URL on physical device: ${finalUrl}, keeping ${PRIMARY_RENDER_API_URL}`);
+          api.defaults.baseURL = PRIMARY_RENDER_API_URL;
+          return;
+        }
+      }
+
       api.defaults.baseURL = finalUrl;
       console.log(`[Gymora Mobile API] Restored Custom Base URL: ${finalUrl}`);
     }
@@ -76,9 +89,9 @@ export const setActiveBaseUrl = async (newUrl: string): Promise<void> => {
 };
 
 export const resetDefaultBaseUrl = async (): Promise<void> => {
-  api.defaults.baseURL = LIVE_RENDER_API_URL;
+  api.defaults.baseURL = PRIMARY_RENDER_API_URL;
   await AsyncStorage.removeItem(BACKEND_STORAGE_KEY);
-  console.log(`[Gymora Mobile API] Reset Base URL to default: ${LIVE_RENDER_API_URL}`);
+  console.log(`[Gymora Mobile API] Reset Base URL to default: ${PRIMARY_RENDER_API_URL}`);
 };
 
 let userToken: string | null = null;
@@ -105,15 +118,13 @@ api.interceptors.request.use(async (config) => {
   }
 
   try {
-    if (!config.headers.Authorization) {
-      if (userToken) {
-        config.headers.Authorization = `Bearer ${userToken}`;
-      } else {
-        const storedToken = await AsyncStorage.getItem('@gymora_auth_token');
-        if (storedToken) {
-          userToken = storedToken;
-          config.headers.Authorization = `Bearer ${storedToken}`;
-        }
+    const activeToken = userToken || (await AsyncStorage.getItem('@gymora_auth_token'));
+    if (activeToken) {
+      userToken = activeToken;
+      if (config.headers?.set && typeof config.headers.set === 'function') {
+        config.headers.set('Authorization', `Bearer ${activeToken}`);
+      } else if (config.headers) {
+        config.headers['Authorization'] = `Bearer ${activeToken}`;
       }
     }
   } catch (storageErr) {

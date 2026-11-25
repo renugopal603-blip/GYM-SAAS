@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { api, setAuthToken } from '../api/client';
+import { api, setAuthToken, PRIMARY_RENDER_API_URL } from '../api/client';
 
 export type UserRole = 'GYM_OWNER' | 'TRAINER' | 'CUSTOMER';
 
@@ -164,29 +164,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ): Promise<{ success: boolean; message?: string }> => {
     try {
       let res: any = null;
+      let lastErr: any = null;
 
-      // Attempt login with automatic cold-start wake-up retry
+      // Target live backend URL: PRIMARY_RENDER_API_URL (gym-saas-lb9s.onrender.com)
+      const targetBaseUrl = api.defaults.baseURL || PRIMARY_RENDER_API_URL;
+      const cleanBase = targetBaseUrl.replace(/\/+$/, '');
+      const finalBaseUrl = cleanBase.endsWith('/api') ? cleanBase : `${cleanBase}/api`;
+
+      // Attempt login with cold-start wakeup retry
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
           res = await api.post('/auth/login', {
             email: email.trim().toLowerCase(),
             password,
+          }, {
+            baseURL: finalBaseUrl,
+            timeout: 30000,
           });
-          break;
+
+          if (res?.data?.success && res?.data?.token && res?.data?.user) {
+            api.defaults.baseURL = finalBaseUrl;
+            break;
+          }
         } catch (postErr: any) {
-          // If server was sleeping / cold-starting and this was the 1st attempt, retry once after 2.5s
-          if (attempt === 1 && (!postErr.response || postErr.code === 'ECONNABORTED' || postErr.message === 'Network Error')) {
-            await new Promise((r) => setTimeout(r, 2500));
+          lastErr = postErr;
+          // If auth rejected (401 or 403), credentials are bad or account inactive; do not retry
+          if (postErr.response?.status === 401 || postErr.response?.status === 403) {
+            throw postErr;
+          }
+          // If cold starting / waking up on first attempt, wait 2 seconds and retry
+          if (attempt === 1) {
+            await new Promise((r) => setTimeout(r, 2000));
             continue;
           }
-          throw postErr;
         }
       }
 
-      if (!res.data?.success || !res.data?.token || !res.data?.user) {
+      if (!res?.data?.success || !res?.data?.token || !res?.data?.user) {
+        if (lastErr) throw lastErr;
         return {
           success: false,
-          message: res.data?.message || 'Login failed. Invalid response from server.',
+          message: 'Login failed. Invalid response from server.',
         };
       }
 
@@ -209,9 +227,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       let errorMsg = err.response?.data?.message;
       if (!errorMsg) {
         if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
-          errorMsg = 'Server was waking up from sleep. It is now active—please tap Login again.';
+          errorMsg = 'Connection timed out. Render may be waking up—please tap Login again.';
         } else if (err.message === 'Network Error' || !err.response) {
-          errorMsg = 'Cannot connect to server. Render may be waking up—please wait 5 seconds and tap Login again.';
+          errorMsg = 'Cannot connect to server. Render may be waking up—please wait a few seconds and tap Login again.';
         } else {
           errorMsg = 'Login failed. Please verify your credentials.';
         }
