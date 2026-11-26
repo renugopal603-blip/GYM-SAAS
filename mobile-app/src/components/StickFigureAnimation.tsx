@@ -324,6 +324,63 @@ const drawBarbell = (dc: DrawContext, bx: number, by: number, widthPx = 210) => 
   );
 };
 
+const drawCable = (dc: DrawContext, x1: number, y1: number, x2: number, y2: number) => {
+  const { scale, offsetX, offsetY } = dc;
+  const sx1 = offsetX + x1 * scale;
+  const sy1 = offsetY + y1 * scale;
+  const sx2 = offsetX + x2 * scale;
+  const sy2 = offsetY + y2 * scale;
+  const dx = sx2 - sx1;
+  const dy = sy2 - sy1;
+  const dist = Math.hypot(dx, dy);
+  const mx = (sx1 + sx2) / 2;
+  const my = (sy1 + sy2) / 2;
+  const deg = (Math.atan2(dy, dx) * 180) / Math.PI;
+
+  dc.elements.push(
+    <View
+      key={nextKey(dc, 'cable')}
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        left: mx - dist / 2,
+        top: my - 1,
+        width: dist,
+        height: Math.max(1.5, 2.5 * scale),
+        backgroundColor: '#06B6D4',
+        opacity: 0.9,
+        transform: [{ rotate: `${deg}deg` }],
+      }}
+    />
+  );
+};
+
+const drawCableHandle = (dc: DrawContext, cx: number, cy: number, widthPx = 36) => {
+  const { scale, offsetX, offsetY } = dc;
+  const sx = offsetX + cx * scale;
+  const sy = offsetY + cy * scale;
+  const totalW = widthPx * scale;
+  const h = Math.max(2.5, 4.5 * scale);
+
+  dc.elements.push(
+    <View
+      key={nextKey(dc, 'chandle')}
+      pointerEvents="none"
+      style={{
+        position: 'absolute',
+        left: sx - totalW / 2,
+        top: sy - h / 2,
+        width: totalW,
+        height: h,
+        backgroundColor: '#0284C7',
+        borderRadius: 2,
+        borderWidth: 1,
+        borderColor: '#38BDF8',
+      }}
+    />
+  );
+};
+
 export const StickFigureAnimation: React.FC<StickFigureProps> = ({
   exerciseName = '',
   category = '',
@@ -374,6 +431,14 @@ export const StickFigureAnimation: React.FC<StickFigureProps> = ({
     nameOnly.includes('shoulder');
   const isLunge = nameOnly.includes('lunge') || nameOnly.includes('split squat') || nameOnly.includes('step up');
   const isTwist = nameOnly.includes('twist');
+  const isTricep =
+    nameOnly.includes('tricep') ||
+    nameOnly.includes('pushdown') ||
+    nameOnly.includes('push-down') ||
+    nameOnly.includes('extension') ||
+    nameOnly.includes('skull crusher') ||
+    nameOnly.includes('dip') ||
+    exLower.includes('tricep');
 
   const defaultAngle: 'front' | 'side' =
     isSquat || isDeadlift || isPushUp || isBenchPress || isPlank || isLunge ? 'side' : 'front';
@@ -427,11 +492,19 @@ export const StickFigureAnimation: React.FC<StickFigureProps> = ({
 
   let phaseLabel = 'Setup';
   if (cycleProgress < 0.45) {
-    phaseLabel = isSquat || isPushUp || isDeadlift || isLunge ? 'Eccentric (Lowering)' : 'Concentric (Lifting)';
+    phaseLabel = isSquat || isPushUp || isDeadlift || isLunge
+      ? 'Eccentric (Lowering)'
+      : isTricep
+      ? 'Concentric (Pushing Down)'
+      : 'Concentric (Lifting)';
   } else if (cycleProgress <= 0.55) {
-    phaseLabel = 'Peak Contraction';
+    phaseLabel = 'Peak Contraction & Squeeze';
   } else {
-    phaseLabel = isSquat || isPushUp || isDeadlift || isLunge ? 'Concentric (Drive Up)' : 'Eccentric (Controlled)';
+    phaseLabel = isSquat || isPushUp || isDeadlift || isLunge
+      ? 'Concentric (Drive Up)'
+      : isTricep
+      ? 'Eccentric (Controlled Return)'
+      : 'Eccentric (Controlled)';
   }
 
   useEffect(() => {
@@ -477,8 +550,151 @@ export const StickFigureAnimation: React.FC<StickFigureProps> = ({
     />
   );
 
+  // 0. CABLE TRICEP PUSHDOWN / EXTENSION (SIDE & FRONT PROFILE)
+  if (isTricep) {
+    const shoulderY = FLOOR_Y - 175;
+    const hipY = FLOOR_Y - 105;
+
+    if (viewAngle === 'side') {
+      // --- BIOMECHANICAL SIDE VIEW ---
+      const torsoX = CENTER_X - 10;
+      const hipX = torsoX - 14;
+      const shoulderX = torsoX + 6;
+
+      drawHead(dc, shoulderX + 8, shoulderY - 24, 15, true);
+      drawLimb(dc, shoulderX - 4, shoulderY - 8, shoulderX, shoulderY, 8, false);
+      drawLimb(dc, shoulderX, shoulderY, hipX, hipY, 14, false);
+
+      // Stable athletic staggered stance
+      const frontFootX = torsoX + 26;
+      const backFootX = torsoX - 32;
+      // Rear leg (far background)
+      drawLimb(dc, hipX - 6, hipY, torsoX - 20, FLOOR_Y - 50, 10, false, 0.5);
+      drawLimb(dc, torsoX - 20, FLOOR_Y - 50, backFootX, FLOOR_Y, 9, false, 0.5);
+      // Front leg (near foreground)
+      drawLimb(dc, hipX + 4, hipY, torsoX + 10, FLOOR_Y - 50, 11, false);
+      drawLimb(dc, torsoX + 10, FLOOR_Y - 50, frontFootX, FLOOR_Y, 10, false);
+
+      // Top Cable Machine Pulley
+      const pulleyX = CENTER_X + 56;
+      const pulleyY = FLOOR_Y - 212;
+
+      // Elbows locked strictly at side of ribs
+      const elbowX = shoulderX + 2;
+      const elbowY = shoulderY + 44;
+
+      // Forearm pushdown arc: from 48 deg (chest/sternum level) to full lockout ~105 deg (down past hips)
+      const forearmLen = 44;
+      const pushAngle = 0.82 + t * 0.98;
+      const handX = elbowX + Math.cos(pushAngle) * forearmLen;
+      const handY = elbowY + Math.sin(pushAngle) * forearmLen;
+
+      // Far upper arm & forearm
+      drawLimb(dc, shoulderX - 6, shoulderY, elbowX - 6, elbowY, 10, true, 0.5);
+      drawLimb(dc, elbowX - 6, elbowY, handX - 4, handY, 7, false, 0.5);
+
+      // Near upper arm (active tricep neon glow)
+      drawLimb(dc, shoulderX, shoulderY, elbowX, elbowY, 11, true);
+      // Near forearm
+      drawLimb(dc, elbowX, elbowY, handX, handY, 8, false);
+
+      // Cable wire & handle
+      drawCable(dc, pulleyX, pulleyY, handX, handY);
+      drawCableHandle(dc, handX, handY, 26);
+
+      if (showFormGuides && isDetail) {
+        dc.elements.push(
+          <Text
+            key={nextKey(dc, 'guide1')}
+            style={{
+              position: 'absolute',
+              left: offsetX + (elbowX + 12) * scale,
+              top: offsetY + (elbowY - 10) * scale,
+              fontSize: 9,
+              fontWeight: '700',
+              color: '#0284C7',
+            }}
+          >
+            Elbows Pinned at Ribs
+          </Text>
+        );
+        if (t > 0.65) {
+          dc.elements.push(
+            <Text
+              key={nextKey(dc, 'guide2')}
+              style={{
+                position: 'absolute',
+                left: offsetX + (handX - 45) * scale,
+                top: offsetY + (handY + 8) * scale,
+                fontSize: 9,
+                fontWeight: '700',
+                color: '#15803D',
+              }}
+            >
+              Full Triceps Lockout
+            </Text>
+          );
+        }
+      }
+    } else {
+      // --- BIOMECHANICAL FRONT VIEW ---
+      const shoulderSpan = 24;
+      const sL = CENTER_X - shoulderSpan;
+      const sR = CENTER_X + shoulderSpan;
+      const hL = CENTER_X - 14;
+      const hR = CENTER_X + 14;
+
+      drawHead(dc, CENTER_X, shoulderY - 26, 15, false);
+      drawLimb(dc, CENTER_X, shoulderY - 10, CENTER_X, shoulderY, 8, false);
+      drawLimb(dc, sL, shoulderY, sR, shoulderY, 12, false);
+      drawLimb(dc, CENTER_X, shoulderY, CENTER_X, hipY, 14, false);
+      drawLimb(dc, hL, hipY, hR, hipY, 12, false);
+
+      const kneeY = FLOOR_Y - 50;
+      drawLimb(dc, hL, hipY, CENTER_X - 20, kneeY, 11, false);
+      drawLimb(dc, CENTER_X - 20, kneeY, CENTER_X - 18, FLOOR_Y, 10, false);
+      drawLimb(dc, hR, hipY, CENTER_X + 20, kneeY, 11, false);
+      drawLimb(dc, CENTER_X + 20, kneeY, CENTER_X + 18, FLOOR_Y, 10, false);
+
+      // Upper arms pinned close to ribs (Triceps active glow)
+      const elbowY = shoulderY + 44;
+      drawLimb(dc, sL, shoulderY, sL + 2, elbowY, 11, true);
+      drawLimb(dc, sR, shoulderY, sR - 2, elbowY, 11, true);
+
+      // Forearms pushing straight down from sternum to thighs
+      const handY = elbowY + 10 + t * 36;
+      const handSpread = 10 + t * 14;
+      const handX_L = CENTER_X - handSpread;
+      const handX_R = CENTER_X + handSpread;
+
+      drawLimb(dc, sL + 2, elbowY, handX_L, handY, 8, false);
+      drawLimb(dc, sR - 2, elbowY, handX_R, handY, 8, false);
+
+      // Cable and horizontal bar
+      drawCable(dc, CENTER_X, FLOOR_Y - 215, (handX_L + handX_R) / 2, handY);
+      drawCableHandle(dc, (handX_L + handX_R) / 2, handY, 44);
+
+      if (showFormGuides && isDetail) {
+        dc.elements.push(
+          <Text
+            key={nextKey(dc, 'guide_front')}
+            style={{
+              position: 'absolute',
+              left: offsetX + (CENTER_X - 42) * scale,
+              top: offsetY + (elbowY - 16) * scale,
+              fontSize: 9,
+              fontWeight: '700',
+              color: '#0284C7',
+            }}
+          >
+            Arms Tucked In
+          </Text>
+        );
+      }
+    }
+
   // 1. DUMBBELL BICEP CURLS
-  if (isCurl) {
+  } else if (isCurl) {
     const shoulderY = FLOOR_Y - 175;
     const hipY = FLOOR_Y - 105;
 
@@ -923,24 +1139,47 @@ export const StickFigureAnimation: React.FC<StickFigureProps> = ({
 
   // 10. GENERAL DYNAMIC RESISTANCE MOVEMENT
   } else {
-    const dip = t * 35;
-    const hipY = FLOOR_Y - 110 + dip;
-    const shoulderY = FLOOR_Y - 180 + dip;
+    if (viewAngle === 'side') {
+      const dip = t * 30;
+      const hipY = FLOOR_Y - 105 + dip;
+      const shoulderY = FLOOR_Y - 175 + dip;
+      const torsoX = CENTER_X - 10;
 
-    drawHead(dc, CENTER_X, shoulderY - 26, 15, false);
-    drawLimb(dc, CENTER_X - 24, shoulderY, CENTER_X + 24, shoulderY, 12, false);
-    drawLimb(dc, CENTER_X, shoulderY, CENTER_X, hipY, 14, true);
+      drawHead(dc, torsoX + 8, shoulderY - 24, 15, true);
+      drawLimb(dc, torsoX, shoulderY, torsoX - 6, hipY, 14, true);
 
-    const kneeY = FLOOR_Y - 50;
-    drawLimb(dc, CENTER_X - 14, hipY, CENTER_X - 24, kneeY, 11, false);
-    drawLimb(dc, CENTER_X - 24, kneeY, CENTER_X - 20, FLOOR_Y, 10, false);
-    drawLimb(dc, CENTER_X + 14, hipY, CENTER_X + 24, kneeY, 11, false);
-    drawLimb(dc, CENTER_X + 24, kneeY, CENTER_X + 20, FLOOR_Y, 10, false);
+      // Legs in side stance
+      drawLimb(dc, torsoX - 10, hipY, torsoX - 16, FLOOR_Y - 50, 10, false, 0.5);
+      drawLimb(dc, torsoX - 16, FLOOR_Y - 50, torsoX - 22, FLOOR_Y, 9, false, 0.5);
+      drawLimb(dc, torsoX - 2, hipY, torsoX + 6, FLOOR_Y - 50, 11, false);
+      drawLimb(dc, torsoX + 6, FLOOR_Y - 50, torsoX + 16, FLOOR_Y, 10, false);
 
-    drawLimb(dc, CENTER_X - 24, shoulderY, CENTER_X - 34, shoulderY + 40, 9, false);
-    drawLimb(dc, CENTER_X + 24, shoulderY, CENTER_X + 34, shoulderY + 40, 9, false);
-    drawDumbbell(dc, CENTER_X - 34, shoulderY + 40, 0);
-    drawDumbbell(dc, CENTER_X + 34, shoulderY + 40, 0);
+      // Arms in side plane
+      const armReach = t * 24;
+      drawLimb(dc, torsoX - 6, shoulderY, torsoX + 12 + armReach, shoulderY + 36, 8, false, 0.5);
+      drawDumbbell(dc, torsoX + 12 + armReach, shoulderY + 36, 0);
+      drawLimb(dc, torsoX + 6, shoulderY, torsoX + 22 + armReach, shoulderY + 38, 9, false);
+      drawDumbbell(dc, torsoX + 22 + armReach, shoulderY + 38, 0);
+    } else {
+      const dip = t * 35;
+      const hipY = FLOOR_Y - 110 + dip;
+      const shoulderY = FLOOR_Y - 180 + dip;
+
+      drawHead(dc, CENTER_X, shoulderY - 26, 15, false);
+      drawLimb(dc, CENTER_X - 24, shoulderY, CENTER_X + 24, shoulderY, 12, false);
+      drawLimb(dc, CENTER_X, shoulderY, CENTER_X, hipY, 14, true);
+
+      const kneeY = FLOOR_Y - 50;
+      drawLimb(dc, CENTER_X - 14, hipY, CENTER_X - 24, kneeY, 11, false);
+      drawLimb(dc, CENTER_X - 24, kneeY, CENTER_X - 20, FLOOR_Y, 10, false);
+      drawLimb(dc, CENTER_X + 14, hipY, CENTER_X + 24, kneeY, 11, false);
+      drawLimb(dc, CENTER_X + 24, kneeY, CENTER_X + 20, FLOOR_Y, 10, false);
+
+      drawLimb(dc, CENTER_X - 24, shoulderY, CENTER_X - 34, shoulderY + 40, 9, false);
+      drawLimb(dc, CENTER_X + 24, shoulderY, CENTER_X + 34, shoulderY + 40, 9, false);
+      drawDumbbell(dc, CENTER_X - 34, shoulderY + 40, 0);
+      drawDumbbell(dc, CENTER_X + 34, shoulderY + 40, 0);
+    }
   }
 
   return (

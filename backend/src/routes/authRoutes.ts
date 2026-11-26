@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { 
   register, registerTrainer, registerGymOwner, login, getMe, sendOtp, verifyOtp, 
-  forgotPassword, resetPassword, sendGymOwnerInvitation, sendGymOwnerExpiryWarning 
+  forgotPassword, resetPassword, changePassword, sendGymOwnerInvitation, sendGymOwnerExpiryWarning 
 } from '../controllers/authController';
 import { authenticate, authorize } from '../middlewares/auth';
 
@@ -16,6 +16,7 @@ router.post('/send-otp', sendOtp);
 router.post('/verify-otp', verifyOtp);
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPassword);
+router.post('/change-password', authenticate, changePassword);
 router.post('/send-gym-invitation', authenticate, authorize(['SUPER_ADMIN', 'ADMIN']), sendGymOwnerInvitation);
 router.post('/send-expiry-warning', authenticate, authorize(['SUPER_ADMIN', 'ADMIN']), sendGymOwnerExpiryWarning);
 router.get('/me', authenticate, getMe);

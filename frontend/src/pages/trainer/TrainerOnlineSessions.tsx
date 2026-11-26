@@ -190,18 +190,6 @@ const TrainerOnlineSessions = () => {
         </div>
       </div>
 
-      {/* Workflow Banner */}
-      <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl p-4 flex items-start gap-3">
-        <div className="p-2 bg-[#F8FAFC] rounded-xl shrink-0">
-          <Video size={16} className="text-[#EA580C]" />
-        </div>
-        <div className="text-sm text-[#EA580C]">
-          <span className="font-bold">Only approved online bookings appear here.</span>{' '}
-          To approve a new customer booking, go to <span className="font-bold">Session Bookings</span>.
-          Once approved, the session will automatically appear in this list.
-        </div>
-      </div>
-
       {/* Tabs */}
       <div className="flex gap-2 flex-wrap">
         {tabs.map(tab => (

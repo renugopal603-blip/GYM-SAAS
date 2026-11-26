@@ -919,33 +919,6 @@ export const TrainerScheduleScreen: React.FC<{ onNavigateTab?: (tab: string, sub
             </Text>
           </View>
 
-          {/* Workflow Notice Banner */}
-          <View style={styles.workflowNoticeBanner}>
-            <View style={styles.workflowIconSquircle}>
-              <Ionicons name="funnel-outline" size={16} color="#EA580C" />
-            </View>
-            <Text style={styles.workflowNoticeText}>
-              <Text style={{ fontWeight: '800', color: '#111827' }}>Workflow: </Text>
-              Customer books →{' '}
-              <Text
-                style={{ color: '#B45309', fontWeight: '800' }}
-                onPress={() => setBookingStatusFilter('Pending')}
-              >
-                Pending
-              </Text>{' '}
-              → You <Text style={{ fontWeight: '800', color: '#EA580C' }}>Approve</Text> or{' '}
-              <Text style={{ fontWeight: '800', color: '#BE123C' }}>Reject</Text> → Approved online bookings appear
-              automatically in{' '}
-              <Text
-                style={{ color: '#EA580C', fontWeight: '800', textDecorationLine: 'underline' }}
-                onPress={() => setActiveTab('online')}
-              >
-                Online Sessions
-              </Text>
-              .
-            </Text>
-          </View>
-
           {/* Status Filter Pills with Count Badges */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
             {BOOKING_STATUS_FILTERS.map(st => {

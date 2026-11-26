@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   IndianRupee, AlertCircle, Search, CreditCard, CheckCircle,
   Building2, Smartphone, QrCode, Copy, Check, X, Banknote
@@ -6,6 +6,17 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import api from '../../utils/api';
 import TrainerNavigationTabs from '../../components/GymAdmin/TrainerNavigationTabs';
+import {
+  isValidBankName,
+  sanitizeBankName,
+  isValidAccountNumber,
+  sanitizeAccountNumber,
+  isValidIfscCode,
+  sanitizeIfscCode,
+  isValidUtrNumber,
+  sanitizeUtrNumber,
+  isValidUpiId
+} from '../../utils/validation';
 const UPI_APPS = [
   { name: 'Google Pay', handle: 'okaxis', color: 'from-blue-500 to-emerald-500' },
   { name: 'PhonePe', handle: 'ybl', color: 'from-purple-600 to-indigo-600' },
@@ -142,20 +153,46 @@ const GymAdminTrainerPayments = () => {
 
     // Validate Bank Transfer details if selected
     if (form.paymentMethod === 'Bank Transfer') {
-      if (form.accountNumber && form.accountNumber.length < 9) {
-        alert('Bank account number must be at least 9 digits (9–18 digits).');
+      const bName = (form.bankName || '').trim();
+      if (!bName) {
+        alert('Please enter Bank Name.');
         return;
       }
-      if (form.ifscCode && form.ifscCode.length < 11) {
-        alert('IFSC code must be exactly 11 characters.');
+      if (!isValidBankName(bName)) {
+        alert('Bank Name must contain only uppercase letters and spaces (e.g. HDFC BANK, SBI, ICICI BANK).');
+        return;
+      }
+      const accNum = (form.accountNumber || '').trim();
+      if (!accNum || !isValidAccountNumber(accNum)) {
+        alert('Bank account number must be between 10 and 19 digits.');
+        return;
+      }
+      const ifsc = (form.ifscCode || '').trim().toUpperCase();
+      if (!ifsc || !isValidIfscCode(ifsc)) {
+        alert('IFSC code must be 11 characters matching standard RBI format (e.g. HDFC0001234).');
+        return;
+      }
+    }
+
+    if (form.paymentMethod === 'UPI') {
+      const upi = (form.upiId || '').trim();
+      if (!upi || !isValidUpiId(upi)) {
+        alert('Please enter a valid UPI ID (e.g. name@okhdfcbank).');
         return;
       }
     }
 
     // Enforce Transaction ID for digital payment methods
-    if (['Bank Transfer', 'UPI'].includes(form.paymentMethod) && !form.transactionId?.trim()) {
-      alert(`Please enter the ${form.paymentMethod === 'UPI' ? 'UPI Reference / UTR Number' : 'Bank UTR / Transaction ID'} to complete and confirm this payment.`);
-      return;
+    if (['Bank Transfer', 'UPI'].includes(form.paymentMethod)) {
+      const txId = (form.transactionId || '').trim();
+      if (!txId) {
+        alert(`Please enter the ${form.paymentMethod === 'UPI' ? 'UPI Reference / UTR Number' : 'Bank UTR / Transaction ID'} to complete and confirm this payment.`);
+        return;
+      }
+      if (!isValidUtrNumber(txId)) {
+        alert('Transaction Reference / UTR ID must be between 6 and 22 alphanumeric characters.');
+        return;
+      }
     }
 
     setSaving(true);
@@ -168,6 +205,15 @@ const GymAdminTrainerPayments = () => {
         paymentDate: form.paymentDate,
         notes: form.notes,
       };
+
+      if (form.paymentMethod === 'Bank Transfer') {
+        payload.bankName = form.bankName;
+        payload.accountNumber = form.accountNumber;
+        payload.ifscCode = form.ifscCode;
+        payload.accountHolder = form.accountHolder;
+      } else if (form.paymentMethod === 'UPI') {
+        payload.upiId = form.upiId;
+      }
 
       if (form.transactionId?.trim()) {
         payload.transactionId = form.transactionId.trim();
@@ -453,13 +499,13 @@ const GymAdminTrainerPayments = () => {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold text-[#111827] mb-1">Bank Name</label>
+                      <label className="block text-xs font-bold text-[#111827] mb-1">Bank Name *</label>
                       <input
                         type="text"
                         value={form.bankName}
-                        onChange={e => setForm({ ...form, bankName: e.target.value })}
-                        placeholder="e.g. HDFC Bank, SBI, ICICI"
-                        className="w-full px-3 py-2 bg-[#FFFFFF] border border-[#E2E8F0] rounded-lg text-sm outline-none focus:border-[#FDBA74]"
+                        onChange={e => setForm({ ...form, bankName: sanitizeBankName(e.target.value) })}
+                        placeholder="e.g. HDFC BANK, SBI, ICICI"
+                        className="w-full px-3 py-2 bg-[#FFFFFF] border border-[#E2E8F0] rounded-lg text-sm uppercase outline-none focus:border-[#FDBA74]"
                       />
                     </div>
 
@@ -467,21 +513,21 @@ const GymAdminTrainerPayments = () => {
                       <div className="flex items-center justify-between mb-1">
                         <label className="block text-xs font-bold text-[#111827]">Account Number *</label>
                         {form.accountNumber && (
-                          <span className={`text-[11px] font-semibold ${form.accountNumber.length >= 9 ? 'text-[#EA580C]' : 'text-amber-600'}`}>
-                            {form.accountNumber.length}/18 digits {form.accountNumber.length >= 9 ? '✓' : '(min 9)'}
+                          <span className={`text-[11px] font-semibold ${form.accountNumber.length >= 10 ? 'text-[#EA580C]' : 'text-amber-600'}`}>
+                            {form.accountNumber.length}/19 digits {form.accountNumber.length >= 10 ? '✓' : '(min 10)'}
                           </span>
                         )}
                       </div>
                       <div className="relative">
                         <input
                           type="text"
-                          maxLength={18}
+                          maxLength={19}
                           inputMode="numeric"
                           value={form.accountNumber}
-                          onChange={e => setForm({ ...form, accountNumber: e.target.value.replace(/\D/g, '').slice(0, 18) })}
-                          placeholder="e.g. 50100428765432 (9–18 digits)"
+                          onChange={e => setForm({ ...form, accountNumber: sanitizeAccountNumber(e.target.value) })}
+                          placeholder="e.g. 50100428765432 (10–19 digits)"
                           className={`w-full px-3 py-2 bg-[#FFFFFF] border rounded-lg text-sm font-mono outline-none pr-11 transition-all ${
-                            form.accountNumber && form.accountNumber.length < 9
+                            form.accountNumber && form.accountNumber.length < 10
                               ? 'border-amber-400 focus:border-amber-500 focus:ring-1 focus:ring-amber-200'
                               : 'border-[#E2E8F0] focus:border-[#FDBA74] focus:ring-1 focus:ring-blue-200'
                           }`}
@@ -497,8 +543,8 @@ const GymAdminTrainerPayments = () => {
                           </button>
                         )}
                       </div>
-                      {form.accountNumber && form.accountNumber.length < 9 && (
-                        <p className="text-[11px] text-amber-600 mt-1">Bank account number must be between 9 and 18 digits.</p>
+                      {form.accountNumber && form.accountNumber.length < 10 && (
+                        <p className="text-[11px] text-amber-600 mt-1">Bank account number must be between 10 and 19 digits.</p>
                       )}
                     </div>
 
@@ -516,7 +562,7 @@ const GymAdminTrainerPayments = () => {
                           type="text"
                           maxLength={11}
                           value={form.ifscCode}
-                          onChange={e => setForm({ ...form, ifscCode: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 11) })}
+                          onChange={e => setForm({ ...form, ifscCode: sanitizeIfscCode(e.target.value) })}
                           placeholder="e.g. HDFC0001234"
                           className="w-full px-3 py-2 bg-[#FFFFFF] border border-[#E2E8F0] rounded-lg text-sm font-mono uppercase outline-none focus:border-[#FDBA74] focus:ring-1 focus:ring-blue-200 pr-11 transition-all"
                         />
@@ -547,12 +593,12 @@ const GymAdminTrainerPayments = () => {
                       required
                       value={form.transactionId}
                       maxLength={22}
-                      onChange={e => setForm({ ...form, transactionId: e.target.value.replace(/[^a-zA-Z0-9]/g, '').toUpperCase() })}
+                      onChange={e => setForm({ ...form, transactionId: sanitizeUtrNumber(e.target.value) })}
                       placeholder="e.g. UTR202609298877 or IMPS987654"
-                      className="w-full px-3 py-2.5 bg-[#FFFFFF] border-2 border-[#E2E8F0] rounded-xl text-sm font-mono font-semibold outline-none focus:border-[#E2E8F0] text-[#EA580C] placeholder:text-[#64748B]"
+                      className="w-full px-3 py-2.5 bg-[#FFFFFF] border-2 border-[#E2E8F0] rounded-xl text-sm font-mono font-semibold uppercase outline-none focus:border-[#E2E8F0] text-[#EA580C] placeholder:text-[#64748B]"
                     />
                     <p className="text-[11px] text-[#EA580C] mt-1">
-                      Enter the UTR or reference number from your Netbanking/NEFT/IMPS transfer confirmation. (max 22 characters)
+                      Enter the UTR or reference number from your Netbanking/NEFT/IMPS transfer confirmation. (6–22 alphanumeric characters)
                     </p>
                   </div>
                 </div>
@@ -655,13 +701,13 @@ const GymAdminTrainerPayments = () => {
                       type="text"
                       required
                       value={form.transactionId}
-                      maxLength={12}
-                      onChange={e => setForm({ ...form, transactionId: e.target.value.replace(/[^0-9]/g, '') })}
-                      placeholder="e.g. 427212345678 (12-digit UTR)"
-                      className="w-full px-3 py-2.5 bg-[#FFFFFF] border-2 border-[#E2E8F0] rounded-xl text-sm font-mono font-semibold outline-none focus:border-[#E2E8F0] text-[#EA580C] placeholder:text-[#64748B]"
+                      maxLength={22}
+                      onChange={e => setForm({ ...form, transactionId: sanitizeUtrNumber(e.target.value) })}
+                      placeholder="e.g. 427212345678 (6–22 character UTR / Ref)"
+                      className="w-full px-3 py-2.5 bg-[#FFFFFF] border-2 border-[#E2E8F0] rounded-xl text-sm font-mono font-semibold uppercase outline-none focus:border-[#E2E8F0] text-[#EA580C] placeholder:text-[#64748B]"
                     />
                     <p className="text-[11px] text-[#EA580C] mt-1">
-                      Enter the 12-digit UPI Transaction / UTR number from your Google Pay, PhonePe, or Paytm receipt. ({12 - form.transactionId.length} digits remaining)
+                      Enter the UPI Transaction / UTR number from your Google Pay, PhonePe, or Paytm receipt. (6–22 alphanumeric characters)
                     </p>
                   </div>
                 </div>

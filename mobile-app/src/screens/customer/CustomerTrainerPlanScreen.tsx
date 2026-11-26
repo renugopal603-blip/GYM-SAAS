@@ -623,7 +623,7 @@ export const CustomerTrainerPlanScreen: React.FC = () => {
             activeOpacity={0.85}
           >
             <Ionicons name="add" size={18} color="#FFFFFF" />
-            <Text style={styles.enterManuallyBtnText}>+ Enter Manually</Text>
+            <Text style={styles.enterManuallyBtnText}>Enter Manually</Text>
           </TouchableOpacity>
         </View>
 

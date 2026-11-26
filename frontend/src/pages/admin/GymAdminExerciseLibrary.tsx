@@ -158,6 +158,10 @@ export const GymAdminExerciseLibrary: React.FC = () => {
       alert('Please fill in Exercise Name, Category, and Target Muscle.');
       return;
     }
+    if (!form.videoUrl || !form.videoUrl.trim()) {
+      alert('Please provide a Demo Video / Animation URL. This field is required to guide members with proper form.');
+      return;
+    }
 
     setFormSubmitting(true);
     try {
@@ -824,7 +828,7 @@ export const GymAdminExerciseLibrary: React.FC = () => {
                   {/* Direct Video URL input */}
                   <div className="flex flex-col justify-center">
                     <label className="text-xs font-semibold text-[#64748B] mb-1">
-                      Or Paste Video / Animation URL:
+                      Or Paste Video / Animation URL <span className="text-rose-500 font-bold">*</span>:
                     </label>
                     <input
                       type="url"

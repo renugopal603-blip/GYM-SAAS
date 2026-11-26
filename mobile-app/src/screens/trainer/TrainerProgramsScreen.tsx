@@ -1431,11 +1431,25 @@ export const TrainerProgramsScreen: React.FC<{ initialSection?: ProgramSectionKe
         if (list && list.length > 0) setExercises(list);
       } else if (section === 'videos') {
         try {
-          const [vidRes, reqRes, clientsRes] = await Promise.allSettled([
+          const [vidRes, reqRes, clientsRes, gymVidRes] = await Promise.allSettled([
             api.get('/workout-videos'),
             api.get('/trainer-plans/trainer-requests'),
-            api.get('/trainer-plans/clients')
+            api.get('/trainer-plans/clients'),
+            api.get('/gym-exercise-videos')
           ]);
+          if (gymVidRes.status === 'fulfilled' && gymVidRes.value.data?.videos) {
+            const list = gymVidRes.value.data.videos;
+            if (Array.isArray(list) && list.length > 0) {
+              setVideos(prev => {
+                const map = new Map();
+                list.forEach((item: any) => map.set(item._id || item.id, item));
+                prev.forEach(item => {
+                  if (!map.has(item._id || item.id)) map.set(item._id || item.id, item);
+                });
+                return Array.from(map.values());
+              });
+            }
+          }
           if (vidRes.status === 'fulfilled') {
             const list = vidRes.value.data?.videos || (Array.isArray(vidRes.value.data) ? vidRes.value.data : []);
             if (list && list.length > 0) {
@@ -2089,9 +2103,32 @@ export const TrainerProgramsScreen: React.FC<{ initialSection?: ProgramSectionKe
       isCustom: true
     };
 
+    api.post('/gym-exercise-videos', {
+      title: newVid.title,
+      titleTamil: newVid.titleTamil,
+      language: newVid.language,
+      category: newVid.category,
+      youtubeId: newVid.youtubeId,
+      videoUrl: newVid.videoUrl,
+      thumbnailUrl: newVid.thumbnail,
+      duration: newVid.duration,
+      targetMuscle: newVid.targetMuscle,
+      equipment: newVid.equipment,
+      level: newVid.level,
+      description: newVid.description,
+      descriptionTamil: newVid.descriptionTamil,
+      tips: newVid.tips
+    }).then(res => {
+      if (res.data?.success && res.data.video) {
+        setVideos(prev => [res.data.video, ...prev.filter(v => (v._id || v.id) !== (res.data.video._id || res.data.video.id) && (v._id || v.id) !== newVid.id)]);
+      }
+    }).catch(err => {
+      console.warn('Failed to sync exercise video to backend:', err);
+    });
+
     setVideos(prev => [newVid, ...prev]);
     setShowAddExerciseModal(false);
-    Alert.alert('Success', `"${newVid.title}" has been added to the exercise video catalog!`);
+    Alert.alert('Success', `"${newVid.title}" has been added to the exercise video catalog and synced with website!`);
   };
 
   const handleQuickApproveVideoReq = async (reqId: string) => {
@@ -2727,11 +2764,11 @@ export const TrainerProgramsScreen: React.FC<{ initialSection?: ProgramSectionKe
         {pendingWorkoutRequests.length > 0 && (
           <View style={styles.wpPendingCard}>
             <View style={styles.wpPendingHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, marginRight: 8 }}>
                 <View style={styles.wpPingDotContainer}>
                   <View style={styles.wpPingDot} />
                 </View>
-                <Text style={styles.wpPendingTitle}>
+                <Text style={[styles.wpPendingTitle, { flex: 1 }]}>
                   Pending Customer Workout Requests ({pendingWorkoutRequests.length})
                 </Text>
               </View>
@@ -3102,9 +3139,9 @@ export const TrainerProgramsScreen: React.FC<{ initialSection?: ProgramSectionKe
         {/* Pending Customer Diet Requests Banner */}
         {pendingDietRequests.length > 0 && (
           <View style={styles.dpPendingBanner}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Ionicons name="time" size={16} color="#D97706" />
+            <View style={styles.dpPendingHeaderRow}>
+              <View style={styles.dpPendingTitleBox}>
+                <Ionicons name="time" size={15} color="#D97706" style={{ marginTop: 1 }} />
                 <Text style={styles.dpPendingTitle}>
                   Pending Customer Diet Plan Approvals ({pendingDietRequests.length})
                 </Text>
@@ -4119,8 +4156,8 @@ export const TrainerProgramsScreen: React.FC<{ initialSection?: ProgramSectionKe
             <Ionicons name="arrow-back" size={20} color={COLORS.textDark} />
             <Text style={styles.backBtnText}>Programs</Text>
           </TouchableOpacity>
-          <Text style={styles.subNavTitle} numberOfLines={1}>{activeMod?.title}</Text>
-          <View style={{ width: 60 }} />
+          <Text style={styles.subNavTitle} numberOfLines={1} ellipsizeMode="tail">{activeMod?.title}</Text>
+          <View style={{ width: 32 }} />
         </View>
 
         {activeSection === 'exercises' && renderExercises()}
@@ -5979,24 +6016,35 @@ export const TrainerProgramsScreen: React.FC<{ initialSection?: ProgramSectionKe
             <View style={[styles.modalContent, { maxHeight: '88%' }]}>
               {/* Modal Header */}
               <View style={styles.cwpModalHeader}>
-                <View style={{ flex: 1 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <View style={styles.cwpModalHeaderContent}>
+                  <View style={styles.cwpBadgeRow}>
                     <View style={styles.cwpBadgePill}>
                       <Text style={styles.cwpBadgePillText}>
                         {cwpPlanType === 'workout' ? 'CUSTOMER WORKPLAN COMPLETED LOG' : 'CUSTOMER DIET PLAN COMPLETED LOG'}
                       </Text>
                     </View>
-                    <Text style={{ fontSize: 11, color: '#64748B', fontWeight: '600' }}>
-                      • {cwpModalSelectedDay === 'all' ? 'All Days' : cwpModalSelectedDay + ' Routine'}
-                    </Text>
+                    <View style={styles.cwpDayBadgePill}>
+                      <Text style={styles.cwpDayBadgePillText}>
+                        {cwpModalSelectedDay === 'all' ? 'All Days' : cwpModalSelectedDay + ' Routine'}
+                      </Text>
+                    </View>
                   </View>
-                  <Text style={styles.modalTitle}>{cwpSelectedCustomer?.customer?.name || 'Customer Progress'}</Text>
-                  <Text style={{ fontSize: 12, color: '#64748B' }}>
+                  <Text style={styles.modalTitle} numberOfLines={1}>
+                    {cwpSelectedCustomer?.customer?.name || 'Customer Progress'}
+                  </Text>
+                  <Text style={styles.cwpCustomerSubText} numberOfLines={1}>
                     {cwpSelectedCustomer?.customer?.email} • {cwpSelectedCustomer?.customer?.fitnessGoal || 'Weight Loss'}
                   </Text>
                 </View>
-                <TouchableOpacity onPress={() => setCwpSelectedCustomer(null)} style={{ padding: 4 }}>
-                  <Ionicons name="close" size={22} color="#64748B" />
+                <TouchableOpacity 
+                  onPress={() => setCwpSelectedCustomer(null)} 
+                  style={styles.cwpCloseBtn}
+                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                  activeOpacity={0.7}
+                  accessibilityLabel="Close customer workplan inspection"
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="close" size={20} color="#475569" />
                 </TouchableOpacity>
               </View>
 
@@ -6411,11 +6459,13 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
+    gap: 8,
   },
   backBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    paddingRight: 6,
   },
   backBtnText: {
     fontSize: 13,
@@ -6423,9 +6473,11 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
   subNavTitle: {
+    flex: 1,
     fontSize: 15,
     fontWeight: '800',
     color: '#111827',
+    marginLeft: 6,
   },
   subScroll: {
     flex: 1,
@@ -7337,21 +7389,42 @@ const styles = StyleSheet.create({
     borderColor: '#FDE68A',
     borderRadius: 16,
     padding: 12,
+    gap: 8,
+    overflow: 'hidden',
+  },
+  dpPendingHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 2,
+  },
+  dpPendingTitleBox: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: 6,
+    marginRight: 4,
   },
   dpPendingTitle: {
+    flex: 1,
     fontSize: 12,
     fontWeight: '800',
     color: '#92400E',
+    lineHeight: 16,
   },
   dpPendingBadge: {
     backgroundColor: '#FEF3C7',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    paddingHorizontal: 7,
+    paddingVertical: 2.5,
     borderRadius: 8,
+    alignSelf: 'flex-start',
+    flexShrink: 0,
   },
   dpPendingBadgeText: {
-    fontSize: 9,
+    fontSize: 9.5,
     fontWeight: '800',
     color: '#B45309',
   },
@@ -8065,10 +8138,52 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#FFFFFF',
+  },
+  cwpModalHeaderContent: {
+    flex: 1,
+    marginRight: 12,
+  },
+  cwpBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 6,
+  },
+  cwpDayBadgePill: {
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  cwpDayBadgePillText: {
+    fontSize: 10,
+    color: '#475569',
+    fontWeight: '700',
+  },
+  cwpCustomerSubText: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  cwpCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   cwpModalDaySectionLabel: {
     fontSize: 10,

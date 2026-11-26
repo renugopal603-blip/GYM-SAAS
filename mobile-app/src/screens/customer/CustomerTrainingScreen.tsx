@@ -190,6 +190,9 @@ export const CustomerTrainingScreen: React.FC<{ initialSubTab?: string }> = ({ i
     const year = currentDate.getFullYear();
     const month = currentDate.getMonth();
 
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
     const firstDayIndex = new Date(year, month, 1).getDay(); // 0 for Sunday
     const daysInCurrentMonth = new Date(year, month + 1, 0).getDate();
     const daysInPrevMonth = new Date(year, month, 0).getDate();
@@ -200,6 +203,7 @@ export const CustomerTrainingScreen: React.FC<{ initialSubTab?: string }> = ({ i
       dateString: string;
       isoString: string;
       dateObj: Date;
+      isPast: boolean;
     }> = [];
 
     // Previous month trailing days
@@ -208,6 +212,7 @@ export const CustomerTrainingScreen: React.FC<{ initialSubTab?: string }> = ({ i
       const prevM = month === 0 ? 11 : month - 1;
       const prevY = month === 0 ? year - 1 : year;
       const dateObj = new Date(prevY, prevM, d);
+      dateObj.setHours(0, 0, 0, 0);
       const mm = String(prevM + 1).padStart(2, '0');
       const dd = String(d).padStart(2, '0');
       days.push({
@@ -216,12 +221,14 @@ export const CustomerTrainingScreen: React.FC<{ initialSubTab?: string }> = ({ i
         dateString: `${mm}/${dd}/${prevY}`,
         isoString: `${prevY}-${mm}-${dd}`,
         dateObj,
+        isPast: dateObj.getTime() < today.getTime(),
       });
     }
 
     // Current month days
     for (let d = 1; d <= daysInCurrentMonth; d++) {
       const dateObj = new Date(year, month, d);
+      dateObj.setHours(0, 0, 0, 0);
       const mm = String(month + 1).padStart(2, '0');
       const dd = String(d).padStart(2, '0');
       days.push({
@@ -230,6 +237,7 @@ export const CustomerTrainingScreen: React.FC<{ initialSubTab?: string }> = ({ i
         dateString: `${mm}/${dd}/${year}`,
         isoString: `${year}-${mm}-${dd}`,
         dateObj,
+        isPast: dateObj.getTime() < today.getTime(),
       });
     }
 
@@ -240,6 +248,7 @@ export const CustomerTrainingScreen: React.FC<{ initialSubTab?: string }> = ({ i
       const nextM = month === 11 ? 0 : month + 1;
       const nextY = month === 11 ? year + 1 : year;
       const dateObj = new Date(nextY, nextM, d);
+      dateObj.setHours(0, 0, 0, 0);
       const mm = String(nextM + 1).padStart(2, '0');
       const dd = String(d).padStart(2, '0');
       days.push({
@@ -248,13 +257,23 @@ export const CustomerTrainingScreen: React.FC<{ initialSubTab?: string }> = ({ i
         dateString: `${mm}/${dd}/${nextY}`,
         isoString: `${nextY}-${mm}-${dd}`,
         dateObj,
+        isPast: dateObj.getTime() < today.getTime(),
       });
     }
 
     return days;
   };
 
+  const isCurrentOrPastMonth = (() => {
+    const today = new Date();
+    return (
+      calendarDate.getFullYear() < today.getFullYear() ||
+      (calendarDate.getFullYear() === today.getFullYear() && calendarDate.getMonth() <= today.getMonth())
+    );
+  })();
+
   const handlePrevMonth = () => {
+    if (isCurrentOrPastMonth) return;
     setCalendarDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
   };
 
@@ -262,7 +281,8 @@ export const CustomerTrainingScreen: React.FC<{ initialSubTab?: string }> = ({ i
     setCalendarDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
   };
 
-  const handleSelectDay = (dayItem: { dateString: string; isoString: string; dateObj: Date }) => {
+  const handleSelectDay = (dayItem: { dateString: string; isoString: string; dateObj: Date; isPast?: boolean }) => {
+    if (dayItem.isPast) return;
     setSelectedDateDisplay(dayItem.dateString);
     setSelectedDateValue(dayItem.isoString);
     setCalendarDate(dayItem.dateObj);
@@ -548,6 +568,20 @@ export const CustomerTrainingScreen: React.FC<{ initialSubTab?: string }> = ({ i
     if (!selectedDateDisplay) {
       Alert.alert('Select Date', 'Please select a session date.');
       return;
+    }
+
+    const todayMidnight = new Date();
+    todayMidnight.setHours(0, 0, 0, 0);
+    if (selectedDateValue) {
+      const parts = selectedDateValue.split('-');
+      if (parts.length === 3) {
+        const pickedDate = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        pickedDate.setHours(0, 0, 0, 0);
+        if (pickedDate.getTime() < todayMidnight.getTime()) {
+          Alert.alert('Invalid Date', 'Cannot book sessions on past dates. Please select today or a future date.');
+          return;
+        }
+      }
     }
 
     if (!selectedTimeSlot) {
@@ -1740,11 +1774,12 @@ export const CustomerTrainingScreen: React.FC<{ initialSubTab?: string }> = ({ i
 
               <View style={styles.calendarArrowsRow}>
                 <TouchableOpacity 
-                  style={styles.calendarArrowBtn} 
+                  style={[styles.calendarArrowBtn, isCurrentOrPastMonth && { opacity: 0.25 }]} 
                   onPress={handlePrevMonth}
+                  disabled={isCurrentOrPastMonth}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="arrow-up" size={18} color="#475569" />
+                  <Ionicons name="arrow-up" size={18} color={isCurrentOrPastMonth ? "#94A3B8" : "#475569"} />
                 </TouchableOpacity>
                 <TouchableOpacity 
                   style={styles.calendarArrowBtn} 
@@ -1767,11 +1802,13 @@ export const CustomerTrainingScreen: React.FC<{ initialSubTab?: string }> = ({ i
             <View style={styles.calendarGrid}>
               {getCalendarDays(calendarDate).map((dayItem, idx) => {
                 const isSelected = selectedDateValue === dayItem.isoString;
+                const isPast = dayItem.isPast;
                 return (
                   <TouchableOpacity
                     key={`${dayItem.isoString}-${idx}`}
-                    style={styles.calendarDayCell}
-                    onPress={() => handleSelectDay(dayItem)}
+                    style={[styles.calendarDayCell, isPast && { opacity: 0.28 }]}
+                    onPress={() => !isPast && handleSelectDay(dayItem)}
+                    disabled={isPast}
                     activeOpacity={0.7}
                   >
                     {isSelected ? (
@@ -1782,6 +1819,7 @@ export const CustomerTrainingScreen: React.FC<{ initialSubTab?: string }> = ({ i
                       <Text style={[
                         styles.calendarDayText,
                         !dayItem.isCurrentMonth && styles.calendarDayTextMuted,
+                        isPast && { color: '#94A3B8' },
                       ]}>
                         {dayItem.day}
                       </Text>

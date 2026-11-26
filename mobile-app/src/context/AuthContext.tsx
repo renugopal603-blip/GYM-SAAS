@@ -25,6 +25,14 @@ export interface MobileUser {
   weight?: number;
   height?: number;
   fitnessGoal?: string;
+  notificationPreferences?: {
+    workouts?: boolean;
+    diet?: boolean;
+    bookings?: boolean;
+    messages?: boolean;
+    store?: boolean;
+    announcements?: boolean;
+  };
 }
 
 interface AuthContextType {

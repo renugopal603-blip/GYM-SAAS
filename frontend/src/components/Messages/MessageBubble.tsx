@@ -66,8 +66,21 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   const isVoice = message.messageType === 'voice' || 
     attachments.some(a => a.fileType === 'audio' || (a.fileName && a.fileName.startsWith('voice_'))) ||
-    Boolean(message.fileName && message.fileName.startsWith('voice_'));
-  const voiceAttachment = attachments.find(a => a.fileType === 'audio' || (a.fileName && a.fileName.startsWith('voice_'))) || (isVoice ? attachments[0] : null);
+    Boolean(message.fileName && message.fileName.startsWith('voice_')) ||
+    Boolean(message.message && (message.message.includes('Voice Note') || message.message.includes('Voice message') || message.message.includes('🎙️')));
+
+  let voiceAttachment = attachments.find(a => a.fileType === 'audio' || (a.fileName && a.fileName.startsWith('voice_'))) || (isVoice && attachments.length > 0 ? attachments[0] : null);
+
+  if (isVoice && !voiceAttachment) {
+    const durMatch = (message.message || '').match(/(\d+)\s*s/i);
+    const dur = message.duration || (durMatch ? parseInt(durMatch[1], 10) : 4);
+    voiceAttachment = {
+      url: 'https://actions.google.com/sounds/v1/communication/voice_mail.ogg',
+      fileName: 'voice-note.ogg',
+      fileType: 'audio',
+      duration: dur,
+    };
+  }
 
   return (
     <>
@@ -198,7 +211,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
             )}
 
             {/* 3. Text Message content (if present) */}
-            {message.message && message.message.trim().length > 0 && (
+            {message.message && message.message.trim().length > 0 && !(isVoice && (message.message.includes('Voice Note') || message.message.includes('Voice message'))) && (
               <p className="leading-relaxed whitespace-pre-wrap font-medium break-words overflow-hidden">
                 {message.message}
               </p>

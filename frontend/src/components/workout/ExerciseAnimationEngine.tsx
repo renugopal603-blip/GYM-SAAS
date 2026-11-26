@@ -42,10 +42,11 @@ export const ExerciseAnimationEngine: React.FC<ExerciseAnimationEngineProps> = (
   const isOverheadPress = exLower.includes('press') && (exLower.includes('overhead') || exLower.includes('shoulder'));
   const isLunge = exLower.includes('lunge');
   const isTwist = exLower.includes('twist');
+  const isTricep = exLower.includes('tricep') || exLower.includes('pushdown') || exLower.includes('push-down') || exLower.includes('extension');
 
   // Default natural perspective: Side profile for Squat/Deadlift/Plank/Pushup/Bench/Lunge, Front for Curls/Press/Pullup/Twist
   const initialAngle: 'front' | 'side' = (isSquat || isDeadlift || isPushUp || isBenchPress || isPlank || isLunge) ? 'side' : 'front';
-  const hasMultipleViews = isSquat || isCurl;
+  const hasMultipleViews = true;
 
   const [isPlaying, setIsPlaying] = useState(isPlayingExternal !== undefined ? isPlayingExternal : autoPlay);
   const [speed, setSpeed] = useState<number>(1.0);
@@ -319,9 +320,127 @@ export const ExerciseAnimationEngine: React.FC<ExerciseAnimationEngineProps> = (
       const centerX = width / 2;
 
       // =====================================================================
+      // 0. CABLE TRICEP PUSHDOWN (SIDE & FRONT PROFILE DEMONSTRATION)
+      // =====================================================================
+      if (isTricep) {
+        const shoulderY = floorY - 175;
+        const hipY = floorY - 105;
+
+        if (viewAngle === 'side') {
+          // --- BIOMECHANICAL SIDE VIEW ---
+          const torsoX = centerX - 10;
+          const hipX = torsoX - 14;
+          const shoulderX = torsoX + 6;
+
+          drawHead(shoulderX + 8, shoulderY - 24, 15, true);
+          drawLimb(shoulderX - 4, shoulderY - 8, shoulderX, shoulderY, 8, false);
+          drawLimb(shoulderX, shoulderY, hipX, hipY, 14, false);
+
+          // Staggered stance legs
+          const frontFootX = torsoX + 26;
+          const backFootX = torsoX - 32;
+          drawLimb(hipX - 6, hipY, torsoX - 20, floorY - 50, 10, false, 0.5);
+          drawLimb(torsoX - 20, floorY - 50, backFootX, floorY, 9, false, 0.5);
+          drawLimb(hipX + 4, hipY, torsoX + 10, floorY - 50, 11, false);
+          drawLimb(torsoX + 10, floorY - 50, frontFootX, floorY, 10, false);
+
+          // Cable pulley at top right
+          const pulleyX = centerX + 56;
+          const pulleyY = floorY - 212;
+
+          // Elbow locked at ribs
+          const elbowX = shoulderX + 2;
+          const elbowY = shoulderY + 44;
+
+          // Forearm extending down to lockout
+          const forearmLen = 44;
+          const pushAngle = 0.82 + t * 0.98;
+          const handX = elbowX + Math.cos(pushAngle) * forearmLen;
+          const handY = elbowY + Math.sin(pushAngle) * forearmLen;
+
+          // Far arm
+          drawLimb(shoulderX - 6, shoulderY, elbowX - 6, elbowY, 10, true, 0.5);
+          drawLimb(elbowX - 6, elbowY, handX - 4, handY, 7, false, 0.5);
+
+          // Near arm (active neon tricep glow)
+          drawLimb(shoulderX, shoulderY, elbowX, elbowY, 11, true);
+          drawLimb(elbowX, elbowY, handX, handY, 8, false);
+
+          // Cable wire
+          ctx.strokeStyle = '#06B6D4';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(pulleyX, pulleyY);
+          ctx.lineTo(handX, handY);
+          ctx.stroke();
+
+          // Cable attachment handle
+          ctx.fillStyle = '#0284C7';
+          ctx.fillRect(handX - 12, handY - 2.5, 24, 5);
+
+          if (showFormGuides && !compact) {
+            ctx.fillStyle = '#0284C7';
+            ctx.font = 'bold 10px sans-serif';
+            ctx.fillText('Elbows Pinned at Ribs', elbowX + 14, elbowY - 6);
+            if (t > 0.65) {
+              ctx.fillStyle = '#15803D';
+              ctx.fillText('Full Lockout', handX - 40, handY + 14);
+            }
+          }
+        } else {
+          // --- FRONT PROFILE VIEW ---
+          const shoulderSpan = 24;
+          const sL = centerX - shoulderSpan;
+          const sR = centerX + shoulderSpan;
+          const hL = centerX - 14;
+          const hR = centerX + 14;
+
+          drawHead(centerX, shoulderY - 26, 15, false);
+          drawLimb(centerX, shoulderY - 10, centerX, shoulderY, 8, false);
+          drawLimb(sL, shoulderY, sR, shoulderY, 12, false);
+          drawLimb(centerX, shoulderY, centerX, hipY, 14, false);
+          drawLimb(hL, hipY, hR, hipY, 12, false);
+
+          const kneeY = floorY - 50;
+          drawLimb(hL, hipY, centerX - 20, kneeY, 11, false);
+          drawLimb(centerX - 20, kneeY, centerX - 18, floorY, 10, false);
+          drawLimb(hR, hipY, centerX + 20, kneeY, 11, false);
+          drawLimb(centerX + 20, kneeY, centerX + 18, floorY, 10, false);
+
+          const elbowY = shoulderY + 44;
+          drawLimb(sL, shoulderY, sL + 2, elbowY, 11, true);
+          drawLimb(sR, shoulderY, sR - 2, elbowY, 11, true);
+
+          const handY = elbowY + 10 + t * 36;
+          const handSpread = 10 + t * 14;
+          const handX_L = centerX - handSpread;
+          const handX_R = centerX + handSpread;
+
+          drawLimb(sL + 2, elbowY, handX_L, handY, 8, false);
+          drawLimb(sR - 2, elbowY, handX_R, handY, 8, false);
+
+          // Cable line & bar
+          ctx.strokeStyle = '#06B6D4';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(centerX, floorY - 215);
+          ctx.lineTo((handX_L + handX_R) / 2, handY);
+          ctx.stroke();
+
+          ctx.fillStyle = '#0284C7';
+          ctx.fillRect((handX_L + handX_R) / 2 - 20, handY - 2.5, 40, 5);
+
+          if (showFormGuides && !compact) {
+            ctx.fillStyle = '#0284C7';
+            ctx.font = 'bold 10px sans-serif';
+            ctx.fillText('Arms Tucked In', centerX - 36, elbowY - 14);
+          }
+        }
+
+      // =====================================================================
       // 1. DUMBBELL BICEP CURLS: PROPER FORM (ELBOWS PINNED, CURL TO CHEST)
       // =====================================================================
-      if (isCurl) {
+      } else if (isCurl) {
         const shoulderY = floorY - 175;
         const hipY = floorY - 105;
 
@@ -787,27 +906,50 @@ export const ExerciseAnimationEngine: React.FC<ExerciseAnimationEngineProps> = (
 
       } else {
         // --- 10. GENERAL / DYNAMIC RESISTANCE MOVEMENT ---
-        const dip = t * 35;
-        const hipY = floorY - 110 + dip;
-        const shoulderY = floorY - 180 + dip;
+        if (viewAngle === 'side') {
+          const dip = t * 30;
+          const hipY = floorY - 105 + dip;
+          const shoulderY = floorY - 175 + dip;
+          const torsoX = centerX - 10;
 
-        drawHead(centerX, shoulderY - 26, 15, false);
-        drawLimb(centerX - 24, shoulderY, centerX + 24, shoulderY, 12, false);
-        drawLimb(centerX, shoulderY, centerX, hipY, 14, true);
+          drawHead(torsoX + 8, shoulderY - 24, 15, true);
+          drawLimb(torsoX, shoulderY, torsoX - 6, hipY, 14, true);
 
-        // BOTH LEGS
-        const kneeY = floorY - 50;
-        drawLimb(centerX - 14, hipY, centerX - 24, kneeY, 11, false);
-        drawLimb(centerX - 24, kneeY, centerX - 20, floorY, 10, false);
+          // Legs in side stance
+          drawLimb(torsoX - 10, hipY, torsoX - 16, floorY - 50, 10, false, 0.5);
+          drawLimb(torsoX - 16, floorY - 50, torsoX - 22, floorY, 9, false, 0.5);
+          drawLimb(torsoX - 2, hipY, torsoX + 6, floorY - 50, 11, false);
+          drawLimb(torsoX + 6, floorY - 50, torsoX + 16, floorY, 10, false);
 
-        drawLimb(centerX + 14, hipY, centerX + 24, kneeY, 11, false);
-        drawLimb(centerX + 24, kneeY, centerX + 20, floorY, 10, false);
+          // Arms in side plane
+          const armReach = t * 24;
+          drawLimb(torsoX - 6, shoulderY, torsoX + 12 + armReach, shoulderY + 36, 8, false, 0.5);
+          drawDumbbell(torsoX + 12 + armReach, shoulderY + 36, 0);
+          drawLimb(torsoX + 6, shoulderY, torsoX + 22 + armReach, shoulderY + 38, 9, false);
+          drawDumbbell(torsoX + 22 + armReach, shoulderY + 38, 0);
+        } else {
+          const dip = t * 35;
+          const hipY = floorY - 110 + dip;
+          const shoulderY = floorY - 180 + dip;
 
-        // BOTH ARMS
-        drawLimb(centerX - 24, shoulderY, centerX - 34, shoulderY + 40, 9, false);
-        drawLimb(centerX + 24, shoulderY, centerX + 34, shoulderY + 40, 9, false);
-        drawDumbbell(centerX - 34, shoulderY + 40, 0);
-        drawDumbbell(centerX + 34, shoulderY + 40, 0);
+          drawHead(centerX, shoulderY - 26, 15, false);
+          drawLimb(centerX - 24, shoulderY, centerX + 24, shoulderY, 12, false);
+          drawLimb(centerX, shoulderY, centerX, hipY, 14, true);
+
+          // BOTH LEGS
+          const kneeY = floorY - 50;
+          drawLimb(centerX - 14, hipY, centerX - 24, kneeY, 11, false);
+          drawLimb(centerX - 24, kneeY, centerX - 20, floorY, 10, false);
+
+          drawLimb(centerX + 14, hipY, centerX + 24, kneeY, 11, false);
+          drawLimb(centerX + 24, kneeY, centerX + 20, floorY, 10, false);
+
+          // BOTH ARMS
+          drawLimb(centerX - 24, shoulderY, centerX - 34, shoulderY + 40, 9, false);
+          drawLimb(centerX + 24, shoulderY, centerX + 34, shoulderY + 40, 9, false);
+          drawDumbbell(centerX - 34, shoulderY + 40, 0);
+          drawDumbbell(centerX + 34, shoulderY + 40, 0);
+        }
       }
 
       if (running) {
@@ -899,16 +1041,20 @@ export const ExerciseAnimationEngine: React.FC<ExerciseAnimationEngineProps> = (
           <div className="absolute top-2.5 right-2.5 flex flex-wrap items-center justify-end gap-1.5 z-20 max-w-[calc(100%-180px)] sm:max-w-[calc(100%-230px)]">
             {headerActions}
 
-            {/* View Angle Switcher: Only displayed if exercise has front & side view implementations */}
+            {/* View Angle Switcher: Displays for all exercises */}
             {hasMultipleViews && (
               <button
                 type="button"
                 onClick={() => setViewAngle(prev => prev === 'front' ? 'side' : 'front')}
-                className="px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-1 bg-slate-900/90 hover:bg-black text-white border border-slate-700 backdrop-blur-md cursor-pointer shadow-xs active:scale-95"
-                title={viewAngle === 'front' ? 'Switch to Side Profile' : 'Switch to Front View'}
+                className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all flex items-center gap-1 border backdrop-blur-md cursor-pointer shadow-xs active:scale-95 ${
+                  viewAngle === 'side'
+                    ? 'bg-[#EA580C] text-white border-[#C2410C] hover:bg-[#C2410C]'
+                    : 'bg-slate-900/90 hover:bg-black text-white border-slate-700'
+                }`}
+                title={viewAngle === 'front' ? 'Switch to Side Profile' : 'Switch to Front Profile'}
               >
-                <Compass size={11} className="text-[#EA580C]" />
-                <span className="hidden sm:inline">{viewAngle === 'front' ? 'Side View' : 'Front View'}</span>
+                <Compass size={11} className={viewAngle === 'side' ? 'text-white' : 'text-[#EA580C]'} />
+                <span className="hidden sm:inline">{viewAngle === 'front' ? 'Side Profile' : 'Front Profile'}</span>
                 <span className="sm:hidden">{viewAngle === 'front' ? 'Side' : 'Front'}</span>
               </button>
             )}

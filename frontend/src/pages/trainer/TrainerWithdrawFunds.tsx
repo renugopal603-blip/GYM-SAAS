@@ -1,6 +1,15 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { IndianRupee, AlertCircle, CheckCircle, Clock } from 'lucide-react';
 import api from '../../utils/api';
+import {
+  isValidBankName,
+  sanitizeBankName,
+  isValidAccountNumber,
+  sanitizeAccountNumber,
+  isValidIfscCode,
+  sanitizeIfscCode,
+  isValidUpiId
+} from '../../utils/validation';
 
 const WITHDRAWAL_METHODS = ['Bank Transfer', 'UPI'];
 
@@ -56,6 +65,30 @@ const TrainerWithdrawFunds = () => {
     if (amount > (data?.trainer?.availableBalance || 0)) {
       showToast('Amount exceeds available balance', 'error');
       return;
+    }
+
+    if (form.withdrawalMethod === 'Bank Transfer') {
+      const bName = (form.bankDetails?.bankName || '').trim();
+      if (bName && !isValidBankName(bName)) {
+        showToast('Bank Name must contain only uppercase letters and spaces (e.g. HDFC BANK, SBI)', 'error');
+        return;
+      }
+      const accNum = (form.bankDetails?.accountNumber || '').trim();
+      if (!accNum || !isValidAccountNumber(accNum)) {
+        showToast('Bank account number must be between 10 and 19 digits', 'error');
+        return;
+      }
+      const ifsc = (form.bankDetails?.ifscCode || '').trim().toUpperCase();
+      if (!ifsc || !isValidIfscCode(ifsc)) {
+        showToast('IFSC code must be 11 characters matching standard RBI format (e.g. HDFC0001234)', 'error');
+        return;
+      }
+    } else if (form.withdrawalMethod === 'UPI') {
+      const upi = (form.upiDetails?.upiId || '').trim();
+      if (!upi || !isValidUpiId(upi)) {
+        showToast('Please enter a valid UPI ID (e.g. name@bank)', 'error');
+        return;
+      }
     }
 
     setSubmitting(true);
@@ -152,9 +185,9 @@ const TrainerWithdrawFunds = () => {
                   <h3 className="text-xs font-bold text-[#64748B] uppercase tracking-wider">Bank Details</h3>
                   <div className="grid grid-cols-2 gap-4">
                     <input type="text" placeholder="Account Holder Name" required className="col-span-2 w-full px-3 py-2 border rounded-lg outline-none focus:border-[#F8FAFC] text-sm" value={form.bankDetails.accountHolder} onChange={e => setForm({ ...form, bankDetails: { ...form.bankDetails, accountHolder: e.target.value } })} />
-                    <input type="text" placeholder="Bank Name" required className="col-span-2 w-full px-3 py-2 border rounded-lg outline-none focus:border-[#F8FAFC] text-sm" value={form.bankDetails.bankName} onChange={e => setForm({ ...form, bankDetails: { ...form.bankDetails, bankName: e.target.value } })} />
-                    <input type="text" placeholder="Account Number (9-18 digits)" required maxLength={18} inputMode="numeric" className="w-full px-3 py-2 border rounded-lg outline-none focus:border-[#F8FAFC] text-sm font-mono" value={form.bankDetails.accountNumber} onChange={e => setForm({ ...form, bankDetails: { ...form.bankDetails, accountNumber: e.target.value.replace(/\D/g, '').slice(0, 18) } })} />
-                    <input type="text" placeholder="IFSC Code (11 chars)" required maxLength={11} className="w-full px-3 py-2 border rounded-lg outline-none focus:border-[#F8FAFC] text-sm uppercase font-mono" value={form.bankDetails.ifscCode} onChange={e => setForm({ ...form, bankDetails: { ...form.bankDetails, ifscCode: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 11) } })} />
+                    <input type="text" placeholder="Bank Name (e.g. HDFC BANK, SBI)" required className="col-span-2 w-full px-3 py-2 border rounded-lg outline-none focus:border-[#F8FAFC] text-sm uppercase" value={form.bankDetails.bankName} onChange={e => setForm({ ...form, bankDetails: { ...form.bankDetails, bankName: sanitizeBankName(e.target.value) } })} />
+                    <input type="text" placeholder="Account Number (10-19 digits)" required maxLength={19} inputMode="numeric" className="w-full px-3 py-2 border rounded-lg outline-none focus:border-[#F8FAFC] text-sm font-mono" value={form.bankDetails.accountNumber} onChange={e => setForm({ ...form, bankDetails: { ...form.bankDetails, accountNumber: sanitizeAccountNumber(e.target.value) } })} />
+                    <input type="text" placeholder="IFSC Code (11 chars)" required maxLength={11} className="w-full px-3 py-2 border rounded-lg outline-none focus:border-[#F8FAFC] text-sm uppercase font-mono" value={form.bankDetails.ifscCode} onChange={e => setForm({ ...form, bankDetails: { ...form.bankDetails, ifscCode: sanitizeIfscCode(e.target.value) } })} />
                   </div>
                 </div>
               )}

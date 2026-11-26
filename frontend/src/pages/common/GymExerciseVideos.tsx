@@ -259,13 +259,39 @@ export const GymExerciseVideos = () => {
   useEffect(() => {
     fetchClients();
     fetchPendingRequests();
+    fetchCustomVideos();
   }, []);
+
+  const fetchCustomVideos = async () => {
+    try {
+      const res = await api.get('/gym-exercise-videos');
+      if (res.data?.success && Array.isArray(res.data.videos)) {
+        setCustomVideos(res.data.videos);
+        try {
+          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(res.data.videos));
+        } catch (e) {}
+      }
+    } catch (err) {
+      console.warn('Could not load backend gym exercise videos, using local cache:', err);
+    }
+  };
 
   const fetchClients = async () => {
     try {
       const res = await api.get('/trainer-plans/clients');
-      if (res.data?.success && res.data.clients) {
+      if (res.data?.success && Array.isArray(res.data.clients) && res.data.clients.length > 0) {
         setClients(res.data.clients);
+        return;
+      }
+    } catch (err) {
+      console.warn('Could not load from /trainer-plans/clients, trying /users:', err);
+    }
+
+    try {
+      const res = await api.get('/users?role=MEMBER');
+      const list = res.data?.users || res.data?.members || (Array.isArray(res.data) ? res.data : []);
+      if (Array.isArray(list) && list.length > 0) {
+        setClients(list);
       }
     } catch (err) {
       console.error('Failed to load clients:', err);
@@ -305,6 +331,9 @@ export const GymExerciseVideos = () => {
 
   const openApproveModal = (video: ExerciseVideo) => {
     setApproveModalVideo(video);
+    if (clients.length > 0 && !selectedClientId) {
+      setSelectedClientId(clients[0]._id);
+    }
     setCoachNotes(video.tips?.[0] || 'Watch video demonstration and execute with strict form.');
     setApprovalSuccess('');
   };
@@ -457,6 +486,30 @@ export const GymExerciseVideos = () => {
       isCustom: true
     };
 
+    // Sync with backend API
+    api.post('/gym-exercise-videos', {
+      title: newExercise.title,
+      titleTamil: newExercise.titleTamil,
+      language: newExercise.language,
+      category: newExercise.category,
+      youtubeId: newExercise.youtubeId,
+      videoUrl: newExercise.videoUrl,
+      thumbnailUrl: newExercise.thumbnailUrl,
+      duration: newExercise.duration,
+      targetMuscle: newExercise.targetMuscle,
+      equipment: newExercise.equipment,
+      level: newExercise.level,
+      description: newExercise.description,
+      descriptionTamil: newExercise.descriptionTamil,
+      tips: newExercise.tips
+    }).then(res => {
+      if (res.data?.success && res.data.video) {
+        setCustomVideos(prev => [res.data.video, ...prev.filter(v => v.id !== res.data.video.id && v.id !== newExercise.id)]);
+      }
+    }).catch(err => {
+      console.error('Failed to sync exercise video to backend:', err);
+    });
+
     const updated = [newExercise, ...customVideos];
     setCustomVideos(updated);
     try {
@@ -475,6 +528,7 @@ export const GymExerciseVideos = () => {
   const handleDeleteCustomExercise = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (window.confirm('Are you sure you want to remove this manually added exercise?')) {
+      api.delete(`/gym-exercise-videos/${id}`).catch(() => null);
       const updated = customVideos.filter(v => v.id !== id);
       setCustomVideos(updated);
       try {
@@ -1165,11 +1219,14 @@ export const GymExerciseVideos = () => {
                   required
                 >
                   <option value="">-- Choose a customer --</option>
-                  {clients.map(client => (
-                    <option key={client._id} value={client._id}>
-                      {client.firstName} {client.lastName} ({client.email}) {client.fitnessGoal ? `• Goal: ${client.fitnessGoal}` : ''}
-                    </option>
-                  ))}
+                  {clients.map(client => {
+                    const clientName = client.name || `${client.firstName || ''} ${client.lastName || ''}`.trim() || client.email || 'Gym Member';
+                    return (
+                      <option key={client._id} value={client._id}>
+                        {clientName} {client.email ? `(${client.email})` : ''} {client.fitnessGoal ? `• Goal: ${client.fitnessGoal}` : ''}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 

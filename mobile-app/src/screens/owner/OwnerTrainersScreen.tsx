@@ -21,7 +21,18 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
-import { sanitizeTenDigitPhone } from '../../utils/phoneUtils';
+import {
+  sanitizeTenDigitPhone,
+  sanitizeBankName,
+  isValidBankName,
+  sanitizeAccountNumber,
+  isValidAccountNumber,
+  sanitizeIfscCode,
+  isValidIfscCode,
+  sanitizeUtrNumber,
+  isValidUtrNumber,
+  isValidUpiId
+} from '../../utils/phoneUtils';
 import { api } from '../../api/client';
 import { FileDownloader } from '../../utils/fileDownloader';
 
@@ -844,22 +855,50 @@ export const OwnerTrainersScreen: React.FC<{ initialTab?: 'trainers' | 'hiring' 
     }
 
     if (processPaymentForm.paymentMethod === 'Bank Transfer') {
-      if (processPaymentForm.accountNumber && processPaymentForm.accountNumber.length < 9) {
-        Alert.alert('Validation Error', 'Bank account number must be at least 9 digits (9–18 digits).');
+      const bName = (processPaymentForm.bankName || '').trim();
+      if (!bName) {
+        Alert.alert('Validation Error', 'Please enter a valid Bank Name.');
         return;
       }
-      if (processPaymentForm.ifscCode && processPaymentForm.ifscCode.length < 11) {
-        Alert.alert('Validation Error', 'IFSC code must be exactly 11 characters.');
+      if (!isValidBankName(bName)) {
+        Alert.alert('Validation Error', 'Bank Name must contain only uppercase letters and spaces (e.g. HDFC BANK, SBI, ICICI BANK).');
+        return;
+      }
+
+      const accNum = (processPaymentForm.accountNumber || '').trim();
+      if (!accNum || !isValidAccountNumber(accNum)) {
+        Alert.alert('Validation Error', 'Bank account number must be between 10 and 19 digits.');
+        return;
+      }
+
+      const ifsc = (processPaymentForm.ifscCode || '').trim();
+      if (!isValidIfscCode(ifsc)) {
+        Alert.alert('Validation Error', 'Please enter a valid 11-character IFSC Code (e.g. HDFC0001234). The 5th character must be 0.');
         return;
       }
     }
 
-    if (['Bank Transfer', 'UPI'].includes(processPaymentForm.paymentMethod) && !processPaymentForm.transactionId.trim()) {
-      Alert.alert(
-        'Transaction ID Required',
-        `Please enter the ${processPaymentForm.paymentMethod === 'UPI' ? 'UPI Reference / UTR Number' : 'Bank UTR / Transaction ID'} to confirm this payment.`
-      );
-      return;
+    if (processPaymentForm.paymentMethod === 'UPI') {
+      const upi = (processPaymentForm.upiId || '').trim();
+      if (!upi || !isValidUpiId(upi)) {
+        Alert.alert('Validation Error', 'Please enter a valid Trainer UPI ID / VPA (e.g. trainer@ybl or 9876543210@paytm).');
+        return;
+      }
+    }
+
+    if (['Bank Transfer', 'UPI'].includes(processPaymentForm.paymentMethod)) {
+      const utr = (processPaymentForm.transactionId || '').trim();
+      if (!utr) {
+        Alert.alert(
+          'Transaction ID Required',
+          `Please enter the ${processPaymentForm.paymentMethod === 'UPI' ? 'UPI Reference / UTR Number' : 'Bank UTR / Transaction ID'} to confirm this payment.`
+        );
+        return;
+      }
+      if (!isValidUtrNumber(utr)) {
+        Alert.alert('Validation Error', 'Transaction / UTR Reference ID must be between 6 and 22 alphanumeric characters.');
+        return;
+      }
     }
 
     try {
@@ -872,6 +911,14 @@ export const OwnerTrainersScreen: React.FC<{ initialTab?: 'trainers' | 'hiring' 
         paymentDate: processPaymentForm.paymentDate,
         notes: processPaymentForm.notes
       };
+      if (processPaymentForm.paymentMethod === 'Bank Transfer') {
+        payload.bankName = processPaymentForm.bankName;
+        payload.accountNumber = processPaymentForm.accountNumber;
+        payload.ifscCode = processPaymentForm.ifscCode;
+        payload.accountHolder = processPaymentForm.accountHolder;
+      } else if (processPaymentForm.paymentMethod === 'UPI') {
+        payload.upiId = processPaymentForm.upiId;
+      }
       if (processPaymentForm.transactionId.trim()) {
         payload.transactionId = processPaymentForm.transactionId.trim();
       }
@@ -3641,35 +3688,38 @@ export const OwnerTrainersScreen: React.FC<{ initialTab?: 'trainers' | 'hiring' 
                     value={processPaymentForm.accountHolder}
                     onChangeText={(v) => setProcessPaymentForm({ ...processPaymentForm, accountHolder: v })}
                   />
-                  <Text style={styles.inputLabel}>Bank Name</Text>
+                  <Text style={styles.inputLabel}>Bank Name *</Text>
                   <TextInput
                     style={styles.modalInput}
-                    placeholder="e.g. HDFC Bank, SBI, ICICI"
+                    placeholder="e.g. HDFC BANK, SBI, ICICI"
                     placeholderTextColor={COLORS.textMuted}
+                    autoCapitalize="characters"
                     value={processPaymentForm.bankName}
-                    onChangeText={(v) => setProcessPaymentForm({ ...processPaymentForm, bankName: v })}
+                    onChangeText={(v) => setProcessPaymentForm({ ...processPaymentForm, bankName: sanitizeBankName(v) })}
                   />
                   <View style={styles.twoColRow}>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.inputLabel}>Account Number</Text>
+                      <Text style={styles.inputLabel}>Account Number *</Text>
                       <TextInput
                         style={styles.modalInput}
-                        placeholder="9-18 digits"
+                        placeholder="10-19 digits"
                         placeholderTextColor={COLORS.textMuted}
                         value={processPaymentForm.accountNumber}
-                        onChangeText={(v) => setProcessPaymentForm({ ...processPaymentForm, accountNumber: v.replace(/\D/g, '').slice(0, 18) })}
+                        onChangeText={(v) => setProcessPaymentForm({ ...processPaymentForm, accountNumber: sanitizeAccountNumber(v) })}
                         keyboardType="numeric"
+                        maxLength={19}
                       />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.inputLabel}>IFSC Code</Text>
+                      <Text style={styles.inputLabel}>IFSC Code *</Text>
                       <TextInput
                         style={styles.modalInput}
                         placeholder="HDFC0001234"
                         placeholderTextColor={COLORS.textMuted}
                         value={processPaymentForm.ifscCode}
-                        onChangeText={(v) => setProcessPaymentForm({ ...processPaymentForm, ifscCode: v.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 11) })}
+                        onChangeText={(v) => setProcessPaymentForm({ ...processPaymentForm, ifscCode: sanitizeIfscCode(v) })}
                         autoCapitalize="characters"
+                        maxLength={11}
                       />
                     </View>
                   </View>
@@ -3679,8 +3729,9 @@ export const OwnerTrainersScreen: React.FC<{ initialTab?: 'trainers' | 'hiring' 
                     placeholder="e.g. UTR202609298877"
                     placeholderTextColor={COLORS.textMuted}
                     value={processPaymentForm.transactionId}
-                    onChangeText={(v) => setProcessPaymentForm({ ...processPaymentForm, transactionId: v.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 22) })}
+                    onChangeText={(v) => setProcessPaymentForm({ ...processPaymentForm, transactionId: sanitizeUtrNumber(v) })}
                     autoCapitalize="characters"
+                    maxLength={22}
                   />
                 </View>
               )}

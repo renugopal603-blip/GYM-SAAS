@@ -733,26 +733,36 @@ export const OwnerFinancesScreen: React.FC<{ initialTab?: 'analytics' | 'payment
             </View>
 
             {/* REVENUE CHANNEL DRILL-DOWN SUB-TABS */}
-            <View style={styles.channelTabsRow}>
-              {[
-                { key: 'overview', label: 'Financial Overview' },
-                { key: 'members', label: `Members (${membersBreakdown.count || 6})` },
-                { key: 'trainers', label: `Trainers (${trainersBreakdown.count || 1})` },
-                { key: 'orders', label: `Store Orders (${analyticsSummary.totalOrdersCount})` },
-              ].map((tab) => {
-                const isActive = channelTab === tab.key;
-                return (
-                  <TouchableOpacity
-                    key={tab.key}
-                    style={[styles.channelTabBtn, isActive && styles.channelTabBtnActive]}
-                    onPress={() => setChannelTab(tab.key as any)}
-                  >
-                    <Text style={[styles.channelTabText, isActive && styles.channelTabTextActive]}>
-                      {tab.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
+            <View style={styles.channelTabsContainer}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.channelTabsContent}
+              >
+                {[
+                  { key: 'overview', label: 'Financial Overview' },
+                  { key: 'members', label: `Members (${membersBreakdown.count || 6})` },
+                  { key: 'trainers', label: `Trainers (${trainersBreakdown.count || 1})` },
+                  { key: 'orders', label: `Store Orders (${analyticsSummary.totalOrdersCount})` },
+                ].map((tab) => {
+                  const isActive = channelTab === tab.key;
+                  return (
+                    <TouchableOpacity
+                      key={tab.key}
+                      style={[styles.channelTabBtn, isActive && styles.channelTabBtnActive]}
+                      onPress={() => setChannelTab(tab.key as any)}
+                      activeOpacity={0.7}
+                    >
+                      <Text 
+                        style={[styles.channelTabText, isActive && styles.channelTabTextActive]}
+                        numberOfLines={1}
+                      >
+                        {tab.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
             </View>
 
             {/* TAB CONTENT: MEMBERS REVENUE DETAIL */}
@@ -1720,11 +1730,22 @@ const styles = StyleSheet.create({
     color: '#111827',
   },
   // Channel Tabs
+  channelTabsContainer: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
+    marginBottom: 10,
+  },
   channelTabsRow: {
     flexDirection: 'row',
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
     marginBottom: 10,
+  },
+  channelTabsContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingRight: 16,
   },
   channelTabBtn: {
     paddingVertical: 8,

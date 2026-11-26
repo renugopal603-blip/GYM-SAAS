@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../api/client';
+import { setGlobalUnreadCount } from '../../services/notificationService';
 import { CustomerStoreScreen } from './CustomerStoreScreen';
 import { CustomerRewardsPerformanceScreen } from './CustomerRewardsPerformanceScreen';
 import { CustomerReferralsScreen } from './CustomerReferralsScreen';
@@ -26,6 +27,7 @@ import { CustomerAIFitnessScreen } from './CustomerAIFitnessScreen';
 import { CustomerMessagesScreen } from './CustomerMessagesScreen';
 import { CustomerTrainerFeedbackScreen } from './CustomerTrainerFeedbackScreen';
 import { CustomerTrainerPlanScreen } from './CustomerTrainerPlanScreen';
+import { CustomerSettingsScreen } from './CustomerSettingsScreen';
 
 export type MoreItemKey = 
   | 'none'
@@ -39,7 +41,8 @@ export type MoreItemKey =
   | 'messages'
   | 'profile'
   | 'membership'
-  | 'notifications';
+  | 'notifications'
+  | 'settings';
 
 const DEFAULT_NOTIFICATIONS = [
   {
@@ -47,6 +50,7 @@ const DEFAULT_NOTIFICATIONS = [
     title: 'New Message from Naveen',
     message: 'Hi',
     read: false,
+    isRead: false,
     createdAt: '2026-11-05T10:30:00.000Z',
   },
   {
@@ -54,6 +58,7 @@ const DEFAULT_NOTIFICATIONS = [
     title: 'Order Preparing',
     message: 'Your order ORD-MVM7Y6AEI9KD is now "Preparing".',
     read: false,
+    isRead: false,
     createdAt: '2026-11-04T15:20:00.000Z',
   },
   {
@@ -61,6 +66,7 @@ const DEFAULT_NOTIFICATIONS = [
     title: 'Order Confirmed',
     message: 'Your order ORD-MVM7Y6AEI9KD is now "Confirmed".',
     read: true,
+    isRead: true,
     createdAt: '2026-11-04T12:00:00.000Z',
   },
   {
@@ -68,6 +74,7 @@ const DEFAULT_NOTIFICATIONS = [
     title: 'Order Out for Delivery',
     message: 'Your order ORD-MVM7Y6AEI9KD is now "Out for Delivery".',
     read: true,
+    isRead: true,
     createdAt: '2026-11-04T17:45:00.000Z',
   },
 ];
@@ -114,7 +121,12 @@ export const CustomerMoreScreen: React.FC<{
       } else if (section === 'notifications') {
         const res = await api.get('/notifications');
         const list = res.data?.notifications || (Array.isArray(res.data) ? res.data : []);
-        setNotifications(list.length > 0 ? list : DEFAULT_NOTIFICATIONS);
+        const finalNotifications = list.length > 0 ? list : DEFAULT_NOTIFICATIONS;
+        setNotifications(finalNotifications);
+        const unread = typeof res.data?.unreadCount === 'number'
+          ? res.data.unreadCount
+          : finalNotifications.filter((n: any) => !(n.read || n.isRead)).length;
+        setGlobalUnreadCount(unread);
       } else if (section === 'messages') {
         const res = await api.get('/direct-messages/contacts').catch(() => api.get('/direct-messages')).catch(() => ({ data: { messages: [] } }));
         const list = res.data?.contacts || res.data?.messages || (Array.isArray(res.data) ? res.data : []);
@@ -171,6 +183,7 @@ export const CustomerMoreScreen: React.FC<{
     { key: 'profile' as MoreItemKey, title: 'Profile', icon: 'person-outline', desc: 'Personal metrics & account settings' },
     { key: 'membership' as MoreItemKey, title: 'Membership', icon: 'card-outline', badge: 'Plan', desc: 'Plan details, renewal & perks' },
     { key: 'notifications' as MoreItemKey, title: 'Notifications', icon: 'notifications-outline', desc: 'Check-in alerts & reminders' },
+    { key: 'settings' as MoreItemKey, title: 'Settings', icon: 'settings-outline', desc: 'Account security, alerts & legal terms' },
   ];
 
 /* ---------------- SUB VIEWS ---------------- */
@@ -437,15 +450,39 @@ const AIAssistantView: React.FC<{ user: any }> = ({ user }) => {
     };
   };
 
+  const unreadCount = notifications.filter(n => !(n.read || n.isRead)).length;
+
+  const handleMarkAllAsRead = async () => {
+    try {
+      // 1. Optimistically mark all notifications read in local state
+      setNotifications(prev =>
+        prev.map(item => ({ ...item, read: true, isRead: true }))
+      );
+      // 2. Clear global unread badge on notification bell immediately
+      setGlobalUnreadCount(0);
+      // 3. Persist read state across database
+      await api.put('/notifications/mark-all-read').catch(() => api.patch('/notifications/mark-all-read'));
+    } catch (err) {
+      console.log('[CustomerMore] Mark all read error:', err);
+    }
+  };
+
   const handleNotificationPress = (n: any) => {
     // Mark as read in local state
-    setNotifications(prev =>
-      prev.map(item => (item._id === n._id ? { ...item, read: true } : item))
-    );
-    if (n._id) {
-      api.put(`/notifications/${n._id}/read`).catch(() => {});
+    setNotifications(prev => {
+      const updated = prev.map(item =>
+        (item._id === n._id || (n.title === item.title && n.createdAt === item.createdAt))
+          ? { ...item, read: true, isRead: true }
+          : item
+      );
+      const remainingUnread = updated.filter(item => !(item.read || item.isRead)).length;
+      setGlobalUnreadCount(remainingUnread);
+      return updated;
+    });
+    if (n._id && !String(n._id).startsWith('notif_')) {
+      api.put(`/notifications/${n._id}/read`).catch(() => api.patch(`/notifications/${n._id}/read`)).catch(() => {});
     }
-    setSelectedNotif(n);
+    setSelectedNotif({ ...n, read: true, isRead: true });
   };
 
   const handleNotificationAction = (n: any) => {
@@ -482,10 +519,11 @@ const AIAssistantView: React.FC<{ user: any }> = ({ user }) => {
           ) : (
             notifications.map((n, i) => {
               const meta = getNotificationCategory(n.title, n.message || n.body);
+              const isItemRead = Boolean(n.read || n.isRead);
               return (
                 <TouchableOpacity
                   key={n._id || i}
-                  style={[styles.notifCard, !n.read && styles.notifCardUnread]}
+                  style={[styles.notifCard, !isItemRead && styles.notifCardUnread]}
                   onPress={() => handleNotificationPress(n)}
                   activeOpacity={0.7}
                 >
@@ -495,6 +533,7 @@ const AIAssistantView: React.FC<{ user: any }> = ({ user }) => {
                   <View style={styles.notifInfo}>
                     <View style={styles.notifTopRow}>
                       <Text style={styles.notifTitle} numberOfLines={1}>{n.title}</Text>
+                      {!isItemRead && <View style={styles.notifUnreadDot} />}
                     </View>
                     <Text style={styles.notifBody}>{n.message || n.body}</Text>
                     <Text style={styles.notifTime}>
@@ -619,6 +658,31 @@ const AIAssistantView: React.FC<{ user: any }> = ({ user }) => {
             <Text style={styles.backBtnText}>{activeSection === 'notifications' ? 'Close' : 'More'}</Text>
           </TouchableOpacity>
           <Text style={styles.subHeaderTitle} numberOfLines={1}>{activeItem?.title}</Text>
+          {activeSection === 'notifications' && (
+            <TouchableOpacity
+              style={[
+                styles.markAllReadHeaderBtn,
+                unreadCount === 0 && styles.markAllReadHeaderBtnDisabled,
+              ]}
+              onPress={handleMarkAllAsRead}
+              activeOpacity={0.7}
+              disabled={unreadCount === 0}
+              accessibilityLabel="Mark all notifications as read"
+              accessibilityRole="button"
+            >
+              <Ionicons 
+                name="checkmark-done" 
+                size={14} 
+                color={unreadCount > 0 ? '#EA580C' : '#94A3B8'} 
+              />
+              <Text style={[
+                styles.markAllReadHeaderBtnText,
+                unreadCount === 0 && styles.markAllReadHeaderBtnDisabledText,
+              ]}>
+                Mark all as read
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {activeSection === 'ai-fitness' && <CustomerAIFitnessScreen />}
@@ -632,6 +696,7 @@ const AIAssistantView: React.FC<{ user: any }> = ({ user }) => {
         {activeSection === 'profile' && <CustomerProfileScreen />}
         {activeSection === 'membership' && <CustomerMembershipScreen onNavigateTab={onNavigateTab} />}
         {activeSection === 'notifications' && renderNotifications()}
+        {activeSection === 'settings' && <CustomerSettingsScreen onNavigateTab={onNavigateTab} />}
       </View>
     );
   }
@@ -745,6 +810,29 @@ const styles = StyleSheet.create({
   backBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   backBtnText: { fontSize: 13, fontWeight: '700', color: COLORS.textDark },
   subHeaderTitle: { fontSize: 14, fontWeight: '800', color: COLORS.textDark, flex: 1 },
+  markAllReadHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: '#FFEDD5',
+  },
+  markAllReadHeaderBtnDisabled: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
+  },
+  markAllReadHeaderBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#EA580C',
+  },
+  markAllReadHeaderBtnDisabledText: {
+    color: '#94A3B8',
+  },
   subContainer: { flex: 1 },
   subScroll: { flex: 1 },
   subScrollContent: { padding: 14, paddingBottom: 110 },
@@ -976,6 +1064,13 @@ const styles = StyleSheet.create({
   notifBody: { fontSize: 10, color: COLORS.textMuted, marginTop: 2, lineHeight: 15 },
   notifTime: { fontSize: 9, color: COLORS.textMuted, marginTop: 4 },
   notifTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 },
+  notifUnreadDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#EA580C',
+    marginLeft: 6,
+  },
   notifPillBtn: { borderWidth: 1, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10 },
   notifPillBtnText: { fontSize: 10, fontWeight: '800' },
   notifModalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 },

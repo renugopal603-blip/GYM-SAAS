@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useLocation } from 'react-router-dom';
 import {
   Clock, Calendar as CalendarIcon, Video, Loader2, CheckCircle2,
-  X, AlertTriangle, Users, RefreshCw, Filter, FileText, LogOut, Eye, Star
+  X, AlertTriangle, Users, RefreshCw, FileText, LogOut, Eye, Star
 } from 'lucide-react';
 import api from '../../utils/api';
 import TrainerSchedulingTabs from '../../components/Trainer/TrainerSchedulingTabs';
@@ -193,18 +193,6 @@ const TrainerSessionBookings = () => {
         <div>
           <h1 className="text-3xl font-bold text-[#111827] tracking-tight">Session Bookings</h1>
           <p className="text-[#64748B] mt-1 text-sm">Manage customer booking requests  -  approve or reject incoming sessions.</p>
-        </div>
-      </div>
-
-      <div className="bg-[#F8FAFC] border border-[#F8FAFC] rounded-2xl p-4 flex items-start gap-3">
-        <div className="p-2 bg-[#FFF7ED] rounded-xl shrink-0">
-          <Filter size={16} className="text-[#EA580C]" />
-        </div>
-        <div className="text-sm text-[#64748B]">
-          <span className="font-bold text-[#111827]">Workflow: </span>
-          Customer books ? <span className="font-bold text-amber-700">Pending</span> ? You{' '}
-          <span className="font-bold text-[#EA580C]">Approve</span> or <span className="font-bold text-rose-700">Reject</span> ?
-          Approved online bookings appear automatically in <span className="font-bold text-[#EA580C]">Online Sessions</span>.
         </div>
       </div>
 

@@ -8,6 +8,17 @@ import { AuthRequest } from '../middlewares/auth';
 import TrainerWithdrawal from '../models/TrainerWithdrawal';
 import GymCommissionWithdrawal from '../models/GymCommissionWithdrawal';
 import Notification from '../models/Notification';
+import { 
+  isValidBankName, 
+  sanitizeBankName, 
+  isValidAccountNumber, 
+  sanitizeAccountNumber, 
+  isValidIfscCode, 
+  sanitizeIfscCode, 
+  isValidUtrNumber, 
+  sanitizeUtrNumber, 
+  isValidUpiId 
+} from '../utils/validation';
 
 const resolveGymId = async (req: AuthRequest): Promise<string | undefined> => {
   if (req.user?.gymId) return req.user.gymId.toString();
@@ -70,6 +81,22 @@ export const setTrainerFee = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ success: false, message: 'Commission percentage cannot exceed 100%' });
     }
 
+    if (paymentMethod === 'Bank Transfer') {
+      if (bankName && !isValidBankName(bankName)) {
+        return res.status(400).json({ success: false, message: 'Bank Name must contain only uppercase letters and spaces (e.g. HDFC BANK, SBI, ICICI BANK)' });
+      }
+      if (accountNumber && !isValidAccountNumber(accountNumber)) {
+        return res.status(400).json({ success: false, message: 'Bank account number must be between 10 and 19 numeric digits' });
+      }
+      if (ifscCode && !isValidIfscCode(ifscCode)) {
+        return res.status(400).json({ success: false, message: 'IFSC code must be 11 characters matching standard RBI format (e.g. HDFC0001234)' });
+      }
+    } else if (paymentMethod === 'UPI') {
+      if (upiId && !isValidUpiId(upiId)) {
+        return res.status(400).json({ success: false, message: 'Please enter a valid UPI ID (e.g. name@bank)' });
+      }
+    }
+
     // Verify trainer belongs to the gym
     const trainerQuery: any = { _id: trainerId };
     if (gymId) trainerQuery.gymId = gymId;
@@ -107,7 +134,12 @@ export const setTrainerFee = async (req: AuthRequest, res: Response) => {
       commissionType: commissionType || 'Percentage',
       commissionValue: parsedCommissionValue,
       netAmount,
-      bankDetails: paymentMethod === 'Bank Transfer' ? { accountHolder, bankName, accountNumber, ifscCode } : undefined,
+      bankDetails: paymentMethod === 'Bank Transfer' ? { 
+        accountHolder: accountHolder?.trim(), 
+        bankName: sanitizeBankName(bankName), 
+        accountNumber: sanitizeAccountNumber(accountNumber), 
+        ifscCode: sanitizeIfscCode(ifscCode) 
+      } : undefined,
       upiDetails: paymentMethod === 'UPI' ? { upiId, upiName } : undefined,
       status: status || 'Active',
       notes,
@@ -317,10 +349,63 @@ export const processPayment = async (req: AuthRequest, res: Response) => {
     const gymId = (await resolveGymId(req)) || req.user?.gymId;
     const userId = (req.user as any)?.id || (req.user as any)?._id;
     const branchId = (req.user as any)?.branchId;
-    const { trainerId, trainerFeeId, amount, paymentMethod, transactionId, paymentDate, paymentProof, notes } = req.body;
+    let { trainerId, trainerFeeId, amount, paymentMethod, transactionId, paymentDate, paymentProof, notes, bankName, accountNumber, ifscCode, upiId } = req.body;
 
-    if (!trainerId || !trainerFeeId || !amount || !paymentMethod || !paymentDate) {
+    if (typeof trainerId === 'object' && trainerId !== null) {
+      trainerId = (trainerId as any)._id || (trainerId as any).id;
+    }
+
+    if (paymentMethod === 'UPI / QR' || paymentMethod === 'upi') {
+      paymentMethod = 'UPI';
+    }
+
+    if (!trainerId || !amount || !paymentMethod || !paymentDate) {
       return res.status(400).json({ success: false, message: 'All required fields must be provided' });
+    }
+
+    if (paymentMethod === 'Bank Transfer') {
+      if (bankName && !isValidBankName(bankName)) {
+        return res.status(400).json({ success: false, message: 'Bank Name must contain only uppercase letters and spaces (e.g. HDFC BANK, SBI, ICICI BANK)' });
+      }
+      if (accountNumber && !isValidAccountNumber(accountNumber)) {
+        return res.status(400).json({ success: false, message: 'Bank account number must be between 10 and 19 numeric digits' });
+      }
+      if (ifscCode && !isValidIfscCode(ifscCode)) {
+        return res.status(400).json({ success: false, message: 'IFSC code must be 11 characters matching standard RBI format (e.g. HDFC0001234)' });
+      }
+    } else if (paymentMethod === 'UPI') {
+      if (upiId && !isValidUpiId(upiId)) {
+        return res.status(400).json({ success: false, message: 'Please enter a valid UPI ID (e.g. name@bank)' });
+      }
+    }
+
+    if (['Bank Transfer', 'UPI'].includes(paymentMethod)) {
+      if (transactionId) {
+        transactionId = sanitizeUtrNumber(transactionId);
+        if (!isValidUtrNumber(transactionId)) {
+          return res.status(400).json({ success: false, message: 'Bank UTR / Transaction Reference ID must be between 6 and 22 alphanumeric characters' });
+        }
+      }
+    }
+
+    if (!trainerFeeId) {
+      const activeFee = await TrainerFee.findOne({ trainerId, status: 'Active' }) || await TrainerFee.findOne({ trainerId });
+      if (activeFee) {
+        trainerFeeId = activeFee._id;
+      } else {
+        const newFee = await TrainerFee.create({
+          gymId,
+          branchId,
+          trainerId,
+          trainingType: 'General Training',
+          feeAmount: amount,
+          billingCycle: 'Monthly',
+          effectiveFrom: paymentDate || new Date(),
+          paymentMethod: paymentMethod || 'Cash',
+          status: 'Active'
+        });
+        trainerFeeId = newFee._id;
+      }
     }
 
     if (transactionId) {
@@ -644,6 +729,28 @@ export const requestWithdrawal = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ success: false, message: 'Withdrawal method is required' });
     }
 
+    if (withdrawalMethod === 'Bank Transfer') {
+      if (!bankDetails) {
+        return res.status(400).json({ success: false, message: 'Bank details are required for Bank Transfer' });
+      }
+      if (bankDetails.bankName && !isValidBankName(bankDetails.bankName)) {
+        return res.status(400).json({ success: false, message: 'Bank Name must contain only uppercase letters and spaces' });
+      }
+      if (bankDetails.accountNumber && !isValidAccountNumber(bankDetails.accountNumber)) {
+        return res.status(400).json({ success: false, message: 'Bank account number must be between 10 and 19 digits' });
+      }
+      if (bankDetails.ifscCode && !isValidIfscCode(bankDetails.ifscCode)) {
+        return res.status(400).json({ success: false, message: 'IFSC code must be 11 characters matching standard RBI format' });
+      }
+      bankDetails.bankName = sanitizeBankName(bankDetails.bankName);
+      bankDetails.accountNumber = sanitizeAccountNumber(bankDetails.accountNumber);
+      bankDetails.ifscCode = sanitizeIfscCode(bankDetails.ifscCode);
+    } else if (withdrawalMethod === 'UPI') {
+      if (!upiDetails?.upiId || !isValidUpiId(upiDetails.upiId)) {
+        return res.status(400).json({ success: false, message: 'Please enter a valid UPI ID (e.g. name@bank)' });
+      }
+    }
+
     const withdrawal = new TrainerWithdrawal({
       gymId: trainer.gymId,
       branchId: trainer.branchId,
@@ -924,6 +1031,28 @@ export const requestGymCommissionWithdrawal = async (req: AuthRequest, res: Resp
 
     if (!withdrawalMethod || !['Bank Transfer', 'UPI'].includes(withdrawalMethod)) {
       return res.status(400).json({ success: false, message: 'Valid withdrawal method is required (Bank Transfer or UPI)' });
+    }
+
+    if (withdrawalMethod === 'Bank Transfer') {
+      if (!bankDetails) {
+        return res.status(400).json({ success: false, message: 'Bank details are required for Bank Transfer' });
+      }
+      if (bankDetails.bankName && !isValidBankName(bankDetails.bankName)) {
+        return res.status(400).json({ success: false, message: 'Bank Name must contain only uppercase letters and spaces' });
+      }
+      if (bankDetails.accountNumber && !isValidAccountNumber(bankDetails.accountNumber)) {
+        return res.status(400).json({ success: false, message: 'Bank account number must be between 10 and 19 digits' });
+      }
+      if (bankDetails.ifscCode && !isValidIfscCode(bankDetails.ifscCode)) {
+        return res.status(400).json({ success: false, message: 'IFSC code must be 11 characters matching standard RBI format' });
+      }
+      bankDetails.bankName = sanitizeBankName(bankDetails.bankName);
+      bankDetails.accountNumber = sanitizeAccountNumber(bankDetails.accountNumber);
+      bankDetails.ifscCode = sanitizeIfscCode(bankDetails.ifscCode);
+    } else if (withdrawalMethod === 'UPI') {
+      if (!upiDetails?.upiId || !isValidUpiId(upiDetails.upiId)) {
+        return res.status(400).json({ success: false, message: 'Please enter a valid UPI ID (e.g. name@bank)' });
+      }
     }
 
     const query: any = {};

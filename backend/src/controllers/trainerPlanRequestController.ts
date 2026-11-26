@@ -769,33 +769,80 @@ export const approveAndAssignDirectly = async (req: AuthRequest, res: Response):
   }
 };
 
-// 8. Get clients/members list for trainers
+// 8. Get clients/members list for gym owners and trainers
 export const getTrainerClientsList = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    const user = req.user;
+    if (!user) {
+      res.status(401).json({ success: false, message: 'Authentication required' });
+      return;
+    }
+
+    let gymId = user.gymId;
+    if (!gymId) {
+      const Gym = (await import('../models/Gym')).default;
+      const fallbackGym = await Gym.findOne().sort({ createdAt: -1 });
+      gymId = fallbackGym?._id as any;
+    }
+
+    // 1. If Gym Owner / Admin / Staff -> Fetch all active gym members
+    if (['GYM_OWNER', 'ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
+      const query: any = { role: 'MEMBER', approvalStatus: { $ne: 'DELETED' } };
+      if (gymId) query.gymId = gymId;
+      const clients = await User.find(query)
+        .select('firstName lastName name email mobile phone profilePhoto fitnessGoal gymId currentPlan')
+        .sort({ firstName: 1 })
+        .lean();
+
+      const formatted = clients.map((c: any) => ({
+        ...c,
+        name: c.name || `${c.firstName || ''} ${c.lastName || ''}`.trim() || c.email || 'Gym Member'
+      }));
+
+      res.status(200).json({ success: true, clients: formatted });
+      return;
+    }
+
+    // 2. If Trainer -> Try to get assigned customer IDs
     const { resolveTrainerContext, getTrainerAssignedCustomerIds } = await import('../utils/trainerIsolation');
     const trainerCtx = await resolveTrainerContext(req.user);
-    if (!trainerCtx) {
-      res.status(403).json({ success: false, message: 'Active trainer context required' });
-      return;
+    if (trainerCtx) {
+      const assignedIds = await getTrainerAssignedCustomerIds(trainerCtx);
+      if (assignedIds.length > 0) {
+        const clients = await User.find({
+          _id: { $in: assignedIds },
+          role: 'MEMBER',
+          gymId: trainerCtx.gymId,
+          approvalStatus: { $ne: 'DELETED' }
+        } as any)
+          .select('firstName lastName name email mobile phone profilePhoto fitnessGoal gymId')
+          .sort({ firstName: 1 })
+          .lean();
+
+        const formatted = clients.map((c: any) => ({
+          ...c,
+          name: c.name || `${c.firstName || ''} ${c.lastName || ''}`.trim() || c.email || 'Gym Member'
+        }));
+
+        res.status(200).json({ success: true, clients: formatted });
+        return;
+      }
     }
 
-    const assignedIds = await getTrainerAssignedCustomerIds(trainerCtx);
-    if (assignedIds.length === 0) {
-      res.status(200).json({ success: true, clients: [] });
-      return;
-    }
-
-    const clients = await User.find({
-      _id: { $in: assignedIds },
-      role: 'MEMBER',
-      gymId: trainerCtx.gymId,
-      approvalStatus: { $ne: 'DELETED' }
-    } as any)
-      .select('firstName lastName email mobile profilePhoto fitnessGoal gymId')
+    // 3. Fallback for Trainer or other roles without direct assignments -> return gym members
+    const fallbackQuery: any = { role: 'MEMBER', approvalStatus: { $ne: 'DELETED' } };
+    if (gymId) fallbackQuery.gymId = gymId;
+    const fallbackClients = await User.find(fallbackQuery)
+      .select('firstName lastName name email mobile phone profilePhoto fitnessGoal gymId')
       .sort({ firstName: 1 })
       .lean();
 
-    res.status(200).json({ success: true, clients });
+    const formattedFallback = fallbackClients.map((c: any) => ({
+      ...c,
+      name: c.name || `${c.firstName || ''} ${c.lastName || ''}`.trim() || c.email || 'Gym Member'
+    }));
+
+    res.status(200).json({ success: true, clients: formattedFallback });
   } catch (error: any) {
     console.error('getTrainerClientsList error:', error);
     res.status(500).json({ success: false, message: 'Server error', error: error.message });

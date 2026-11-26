@@ -193,6 +193,8 @@ const GymAdminMembers = () => {
             emergencyRelation: u.emergencyContact?.relationship,
             height: u.height,
             weight: u.weight,
+            city: u.city,
+            pinCode: u.pinCode,
             membership,
             membershipHistory,
             originalUser: u,
@@ -844,7 +846,10 @@ const GymAdminMembers = () => {
                 </div>
                 <div>
                   <p className="text-xs font-bold text-[#64748B] uppercase tracking-wider mb-1">City & PIN</p>
-                  <p className="font-semibold text-[#111827]">{selectedMember.originalUser?.city || 'Not specified'} - {selectedMember.originalUser?.pinCode || ''}</p>
+                  <p className="font-semibold text-[#111827]">
+                    {selectedMember.city || selectedMember.originalUser?.city || 'Not specified'}
+                    {(selectedMember.pinCode || selectedMember.originalUser?.pinCode) ? ` - ${selectedMember.pinCode || selectedMember.originalUser?.pinCode}` : ''}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs font-bold text-[#64748B] uppercase tracking-wider mb-1">Height / Weight</p>

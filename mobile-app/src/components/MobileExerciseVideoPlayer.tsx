@@ -94,11 +94,25 @@ export const MobileExerciseVideoPlayer: React.FC<MobileExerciseVideoPlayerProps>
           <View style={styles.topToggleGroup}>
             <TouchableOpacity
               onPress={() => setViewAngle(v => (v === 'front' ? 'side' : 'front'))}
-              style={styles.toggleChip}
+              style={[
+                styles.toggleChip,
+                viewAngle === 'side' && { backgroundColor: '#EA580C', borderColor: '#C2410C' },
+              ]}
               activeOpacity={0.8}
             >
-              <Ionicons name="compass-outline" size={12} color="#EA580C" />
-              <Text style={styles.toggleChipText}>{viewAngle === 'front' ? 'Side Profile' : 'Front View'}</Text>
+              <Ionicons
+                name="compass-outline"
+                size={12}
+                color={viewAngle === 'side' ? '#FFFFFF' : '#EA580C'}
+              />
+              <Text
+                style={[
+                  styles.toggleChipText,
+                  viewAngle === 'side' && { color: '#FFFFFF', fontWeight: '800' },
+                ]}
+              >
+                {viewAngle === 'front' ? 'Side Profile' : 'Front Profile'}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>

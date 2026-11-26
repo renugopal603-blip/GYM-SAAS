@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import { AuthRequest } from '../middlewares/auth';
 import User, { Role, ApprovalStatus, SubscriptionStatus } from '../models/User';
 import Gym, { GymStatus } from '../models/Gym';
 import Trainer from '../models/Trainer';
@@ -1362,6 +1363,55 @@ export const sendGymOwnerExpiryWarning = async (req: Request, res: Response): Pr
   } catch (error: any) {
     console.error('Error sending gym owner expiry warning:', error);
     res.status(500).json({ success: false, message: error.message || 'Failed to send expiry warning' });
+  }
+};
+
+export const changePassword = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const authReq = req as AuthRequest;
+    const userId = authReq.user?.id || (authReq.user as any)?._id;
+    if (!userId) {
+      res.status(401).json({ success: false, message: 'Unauthorized: login required' });
+      return;
+    }
+
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      res.status(400).json({ success: false, message: 'Current password and new password are required' });
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      res.status(400).json({ success: false, message: 'New password must be at least 6 characters' });
+      return;
+    }
+
+    if (confirmPassword && newPassword !== confirmPassword) {
+      res.status(400).json({ success: false, message: 'New password and confirmation do not match' });
+      return;
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      res.status(404).json({ success: false, message: 'User not found' });
+      return;
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!isMatch) {
+      res.status(400).json({ success: false, message: 'Current password is incorrect' });
+      return;
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    user.passwordHash = await bcrypt.hash(newPassword, salt);
+    await user.save();
+
+    res.status(200).json({ success: true, message: 'Password changed successfully' });
+  } catch (error: any) {
+    console.error('Error in changePassword:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to change password' });
   }
 };
 

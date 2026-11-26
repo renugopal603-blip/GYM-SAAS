@@ -298,7 +298,7 @@ export const GymSmartAssistant: React.FC<GymSmartAssistantProps> = ({
           >
             <MaterialCommunityIcons
               name="robot-outline"
-              size={18}
+              size={15}
               color={COLORS.white}
             />
           </TouchableOpacity>
@@ -324,7 +324,7 @@ export const GymSmartAssistant: React.FC<GymSmartAssistantProps> = ({
               >
                 <MaterialCommunityIcons
                   name="robot-outline"
-                  size={20}
+                  size={15}
                   color={COLORS.white}
                 />
                 <Text style={styles.fabText}>Smart Assistant</Text>
@@ -336,7 +336,7 @@ export const GymSmartAssistant: React.FC<GymSmartAssistantProps> = ({
               activeOpacity={0.7}
               accessibilityLabel="Tuck assistant to side"
             >
-              <MaterialCommunityIcons name="close" size={14} color="#64748B" />
+              <MaterialCommunityIcons name="close" size={11} color="#64748B" />
             </TouchableOpacity>
           </View>
         </View>
@@ -857,18 +857,18 @@ export const GymSmartAssistant: React.FC<GymSmartAssistantProps> = ({
 const styles = StyleSheet.create({
   fabOuterAnchor: {
     position: 'absolute',
-    right: 14,
+    right: 10,
     zIndex: 90,
   },
   fabRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
   },
   tuckBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#CBD5E1',
@@ -876,47 +876,51 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.12,
     shadowRadius: 2,
     elevation: 2,
   },
   tuckedTab: {
     backgroundColor: '#C2410C',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderTopLeftRadius: 16,
-    borderBottomLeftRadius: 16,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderTopLeftRadius: 12,
+    borderBottomLeftRadius: 12,
     borderWidth: 1,
     borderRightWidth: 0,
     borderColor: '#FFEDD5',
     shadowColor: '#C2410C',
     shadowOffset: { width: -2, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 4,
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    elevation: 3,
   },
   fabHalo: {
-    padding: 4,
+    padding: 2,
     borderRadius: 999,
-    backgroundColor: 'rgba(249, 115, 22, 0.25)',
-    ...SHADOWS.md,
+    backgroundColor: 'rgba(249, 115, 22, 0.18)',
+    shadowColor: '#C2410C',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 3,
+    elevation: 3,
   },
   fabButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 5,
     backgroundColor: '#C2410C',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingVertical: 5.5,
+    paddingHorizontal: 10,
     borderRadius: 999,
-    borderWidth: 2,
+    borderWidth: 1.5,
     borderColor: '#FFEDD5',
   },
   fabText: {
     color: '#FFFFFF',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
-    letterSpacing: -0.2,
+    letterSpacing: -0.1,
   },
   minimizedBar: {
     position: 'absolute',

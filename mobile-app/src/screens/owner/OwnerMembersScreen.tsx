@@ -22,6 +22,8 @@ import { useAuth } from '../../context/AuthContext';
 import { sanitizeTenDigitPhone, isValidTenDigitPhone, sanitizeSixDigitPinCode, isValidSixDigitPinCode } from '../../utils/phoneUtils';
 import { api } from '../../api/client';
 import { FileDownloader } from '../../utils/fileDownloader';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 
 export const OwnerMembersScreen: React.FC<{ initialSection?: 'members' | 'enquiries' }> = ({ initialSection = 'members' }) => {
   const { user } = useAuth();
@@ -70,6 +72,40 @@ export const OwnerMembersScreen: React.FC<{ initialSection?: 'members' | 'enquir
   const [editEmergencyRelation, setEditEmergencyRelation] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
+  // Add Member Options Selector (Web parity: New Customer vs Bulk Import)
+  const [addMemberSelectorModalVisible, setAddMemberSelectorModalVisible] = useState(false);
+
+  // Bulk Import state (Matching Web GymAdminImportCustomers.tsx)
+  const [bulkImportModalVisible, setBulkImportModalVisible] = useState(false);
+  const [importStep, setImportStep] = useState<'upload' | 'validating' | 'preview' | 'importing' | 'result'>('upload');
+  const [selectedImportFile, setSelectedImportFile] = useState<{
+    name: string;
+    size?: number;
+    uri: string;
+    mimeType?: string;
+  } | null>(null);
+  const [importValidationResult, setImportValidationResult] = useState<{
+    summary: {
+      totalRows: number;
+      validRows: number;
+      existingRows: number;
+      invalidRows: number;
+      duplicatesInFile?: number;
+    };
+    rows: any[];
+    fileName: string;
+  } | null>(null);
+  const [importRows, setImportRows] = useState<any[]>([]);
+  const [existingDuplicateAction, setExistingDuplicateAction] = useState<'skip' | 'update'>('update');
+  const [importResultSummary, setImportResultSummary] = useState<{
+    totalProcessed: number;
+    newCustomers: number;
+    updatedCustomers: number;
+    skippedCount: number;
+  } | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [isExecutingImport, setIsExecutingImport] = useState(false);
+
   // Add Member Modal state (5-step Web parity form)
   const [addMemberModalVisible, setAddMemberModalVisible] = useState(false);
   const [addStep, setAddStep] = useState<1 | 2 | 3 | 4 | 5>(1);
@@ -83,6 +119,8 @@ export const OwnerMembersScreen: React.FC<{ initialSection?: 'members' | 'enquir
   const [newMemberStartDate, setNewMemberStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [newMemberDuration, setNewMemberDuration] = useState<'1 Day' | '1 Month' | '3 Months' | '6 Months' | '1 Year'>('1 Month');
   const [newMemberTrainer, setNewMemberTrainer] = useState('Unassigned');
+  const [newMemberCity, setNewMemberCity] = useState('');
+  const [newMemberPinCode, setNewMemberPinCode] = useState('');
   const [newMemberHeight, setNewMemberHeight] = useState('');
   const [newMemberWeight, setNewMemberWeight] = useState('');
   const [newMemberFitnessGoal, setNewMemberFitnessGoal] = useState('General Fitness');
@@ -309,20 +347,20 @@ export const OwnerMembersScreen: React.FC<{ initialSection?: 'members' | 'enquir
           expiryBadge,
           isTrial: isTrialAccount,
           customerType: u.customerType === 'NEW_CUSTOMER' ? 'New Customer' : 'Existing Customer',
-          gender: u.gender || 'Not Specified',
-          dob: u.dateOfBirth ? formatDateOnly(u.dateOfBirth) : 'Not Specified',
-          rawDob: u.dateOfBirth || '',
-          height: u.height ? `${u.height} cm` : 'Not specified',
-          rawHeight: u.height || '',
-          weight: u.weight ? `${u.weight} kg` : 'Not specified',
-          rawWeight: u.weight || '',
-          city: u.city || 'Not specified',
-          pinCode: u.pinCode || '',
-          fitnessGoal: u.fitnessGoal || 'General Fitness',
-          experienceLevel: u.experienceLevel || 'Beginner',
-          preferredTraining: u.preferredTraining || 'General Fitness',
-          preferredWorkoutTime: u.preferredWorkoutTime || 'Morning (06:00 AM - 08:00 AM)',
-          trainer: u.trainer || 'Unassigned',
+          gender: u.gender || u.originalUser?.gender || 'Not Specified',
+          dob: u.dateOfBirth ? formatDateOnly(u.dateOfBirth) : (u.dob ? formatDateOnly(u.dob) : (u.originalUser?.dateOfBirth ? formatDateOnly(u.originalUser.dateOfBirth) : 'Not Specified')),
+          rawDob: u.dateOfBirth || u.dob || u.originalUser?.dateOfBirth || '',
+          height: (u.height !== undefined && u.height !== null && u.height !== '') ? (String(u.height).includes('cm') ? String(u.height) : `${u.height} cm`) : (u.originalUser?.height ? `${u.originalUser.height} cm` : 'Not specified'),
+          rawHeight: u.height || u.originalUser?.height || '',
+          weight: (u.weight !== undefined && u.weight !== null && u.weight !== '') ? (String(u.weight).includes('kg') ? String(u.weight) : `${u.weight} kg`) : (u.originalUser?.weight ? `${u.originalUser.weight} kg` : 'Not specified'),
+          rawWeight: u.weight || u.originalUser?.weight || '',
+          city: u.city || u.originalUser?.city || 'Not specified',
+          pinCode: u.pinCode || u.pincode || u.originalUser?.pinCode || '',
+          fitnessGoal: u.fitnessGoal || u.originalUser?.fitnessGoal || (Array.isArray(u.fitnessGoals) && u.fitnessGoals[0]) || 'General Fitness',
+          experienceLevel: u.experienceLevel || u.originalUser?.experienceLevel || 'Beginner',
+          preferredTraining: u.preferredTraining || u.originalUser?.preferredTraining || 'General Fitness',
+          preferredWorkoutTime: u.preferredWorkoutTime || u.originalUser?.preferredWorkoutTime || 'Morning (06:00 AM - 08:00 AM)',
+          trainer: u.trainer || u.assignedTrainer?.name || u.originalUser?.trainer || 'Unassigned',
           lastLogin: u.lastLogin ? formatDateTime(u.lastLogin) : 'Never',
           emergencyName: u.emergencyContact?.name || 'N/A',
           emergencyPhone: u.emergencyContact?.mobile || 'N/A',
@@ -763,9 +801,10 @@ export const OwnerMembersScreen: React.FC<{ initialSection?: 'members' | 'enquir
         await api.put(`/users/${selectedMember.id}/status`, { status: apiStatus }).catch(() => { });
       }
 
-      setMembers(prev => prev.map(m => m.id === selectedMember.id ? {
-        ...m,
+      const updatedMemberData = {
         name: editName.trim(),
+        firstName,
+        lastName,
         phone: editPhone.trim() || 'N/A',
         email: editEmail.trim() || 'N/A',
         plan: editPlan,
@@ -784,10 +823,21 @@ export const OwnerMembersScreen: React.FC<{ initialSection?: 'members' | 'enquir
         emergencyName: editEmergencyName || 'N/A',
         emergencyPhone: editEmergencyPhone || 'N/A',
         emergencyRelation: editEmergencyRelation || 'N/A'
+      };
+
+      setMembers(prev => prev.map(m => m.id === selectedMember.id ? {
+        ...m,
+        ...updatedMemberData
       } : m));
+
+      setSelectedMember((prev: any) => prev ? {
+        ...prev,
+        ...updatedMemberData
+      } : null);
 
       setEditMemberModalVisible(false);
       Alert.alert('Member Updated', 'All member profile details saved successfully.');
+      fetchMembersAndEnquiries();
     } catch (err: any) {
       Alert.alert('Update Failed', err.response?.data?.message || 'Could not save member updates.');
     } finally {
@@ -807,6 +857,8 @@ export const OwnerMembersScreen: React.FC<{ initialSection?: 'members' | 'enquir
     setNewMemberStartDate(new Date().toISOString().split('T')[0]);
     setNewMemberDuration('1 Month');
     setNewMemberTrainer('Unassigned');
+    setNewMemberCity('');
+    setNewMemberPinCode('');
     setNewMemberHeight('');
     setNewMemberWeight('');
     setNewMemberFitnessGoal('General Fitness');
@@ -816,6 +868,333 @@ export const OwnerMembersScreen: React.FC<{ initialSection?: 'members' | 'enquir
     setNewMemberEmergencyRelation('Spouse');
     setNewMemberCreateAccount(true);
     setNewMemberSendWelcome(true);
+  };
+
+  // Open Add Member Options (Selector Modal)
+  const openAddMemberSelector = () => {
+    setAddMemberSelectorModalVisible(true);
+  };
+
+  const openBulkImportModal = () => {
+    setSelectedImportFile(null);
+    setImportValidationResult(null);
+    setImportRows([]);
+    setImportStep('upload');
+    setImportError(null);
+    setImportResultSummary(null);
+    setExistingDuplicateAction('update');
+    setIsExecutingImport(false);
+    setBulkImportModalVisible(true);
+  };
+
+  const handlePickImportFile = async () => {
+    try {
+      setImportError(null);
+      const res = await DocumentPicker.getDocumentAsync({
+        type: [
+          'text/csv',
+          'text/comma-separated-values',
+          'application/vnd.ms-excel',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          '*/*'
+        ],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+
+      if (!res.canceled && res.assets && res.assets.length > 0) {
+        const file = res.assets[0];
+        const lowerName = (file.name || '').toLowerCase();
+        if (!lowerName.endsWith('.csv') && !lowerName.endsWith('.xlsx') && !lowerName.endsWith('.xls')) {
+          Alert.alert('Unsupported File', 'Please select a valid CSV (.csv) or Excel (.xlsx, .xls) spreadsheet.');
+          return;
+        }
+        setSelectedImportFile({
+          name: file.name,
+          size: file.size,
+          uri: file.uri,
+          mimeType: file.mimeType || (lowerName.endsWith('.csv') ? 'text/csv' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
+        });
+      }
+    } catch (err: any) {
+      console.warn('Document picking cancelled or failed:', err);
+    }
+  };
+
+  const handleDownloadSampleCsv = async () => {
+    try {
+      const headers = ['Full Name', 'Mobile Number', 'Email', 'Plan', 'Gender', 'City', 'PIN Code'];
+      const sampleRows = [
+        ['Ramesh Sharma', '9876543210', 'ramesh@gmail.com', 'Starter', 'Male', 'Chennai', '600001'],
+        ['Priya Sundaram', '9876543211', 'priya@gmail.com', 'Pro', 'Female', 'Bangalore', '560001']
+      ];
+      await FileDownloader.downloadCSV('sample_members_bulk_template', headers, sampleRows);
+    } catch (err: any) {
+      Alert.alert('Download Notice', 'Sample CSV headers: Full Name, Mobile Number, Email, Plan, Gender, City, PIN Code');
+    }
+  };
+
+  const parseClientCsv = (csvText: string, existingMembers: any[]) => {
+    const lines = csvText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if (lines.length < 2) {
+      return {
+        summary: { totalRows: 0, validRows: 0, existingRows: 0, invalidRows: 0, duplicatesInFile: 0 },
+        rows: []
+      };
+    }
+
+    const headerCols = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, '').toLowerCase());
+    
+    const findCol = (...keywords: string[]) => {
+      return headerCols.findIndex(col => keywords.some(k => col.includes(k)));
+    };
+
+    const nameIdx = findCol('name', 'full name', 'member', 'customer');
+    const mobileIdx = findCol('mobile', 'phone', 'contact', 'cell');
+    const emailIdx = findCol('email', 'mail');
+    const planIdx = findCol('plan', 'package', 'membership');
+    const genderIdx = findCol('gender', 'sex');
+    const dobIdx = findCol('dob', 'birth', 'date of birth');
+    const cityIdx = findCol('city', 'location');
+    const pinIdx = findCol('pin', 'postal', 'zip');
+
+    const rows: any[] = [];
+    let validCount = 0;
+    let existingCount = 0;
+    let invalidCount = 0;
+    const seenMobiles = new Set<string>();
+
+    for (let i = 1; i < lines.length; i++) {
+      const rawLine = lines[i];
+      const values: string[] = [];
+      let insideQuotes = false;
+      let currentVal = '';
+      for (let c = 0; c < rawLine.length; c++) {
+        const char = rawLine[c];
+        if (char === '"' || char === "'") {
+          insideQuotes = !insideQuotes;
+        } else if (char === ',' && !insideQuotes) {
+          values.push(currentVal.trim().replace(/^["']|["']$/g, ''));
+          currentVal = '';
+        } else {
+          currentVal += char;
+        }
+      }
+      values.push(currentVal.trim().replace(/^["']|["']$/g, ''));
+
+      const name = (nameIdx >= 0 && values[nameIdx]) ? values[nameIdx] : `Member ${i}`;
+      const rawMobile = (mobileIdx >= 0 && values[mobileIdx]) ? values[mobileIdx] : '';
+      const cleanMobile = rawMobile.replace(/\D/g, '').slice(-10);
+      const email = (emailIdx >= 0 && values[emailIdx]) ? values[emailIdx] : '';
+      const plan = (planIdx >= 0 && values[planIdx]) ? values[planIdx] : 'Starter';
+      const gender = (genderIdx >= 0 && values[genderIdx]) ? values[genderIdx] : 'Male';
+      const dob = (dobIdx >= 0 && values[dobIdx]) ? values[dobIdx] : '';
+      const city = (cityIdx >= 0 && values[cityIdx]) ? values[cityIdx] : '';
+      const pinCode = (pinIdx >= 0 && values[pinIdx]) ? values[pinIdx] : '';
+
+      const errors: string[] = [];
+      if (!name || name.trim().length === 0) {
+        errors.push('Name is required');
+      }
+      if (!cleanMobile || cleanMobile.length !== 10) {
+        errors.push('Valid 10-digit mobile required');
+      }
+      if (seenMobiles.has(cleanMobile)) {
+        errors.push('Duplicate mobile number in file');
+      } else if (cleanMobile) {
+        seenMobiles.add(cleanMobile);
+      }
+
+      let status: 'valid' | 'existing' | 'invalid' = 'valid';
+      if (errors.length > 0) {
+        status = 'invalid';
+        invalidCount++;
+      } else {
+        const isExisting = existingMembers.some(
+          m => (cleanMobile && (m.phone?.replace(/\D/g, '').slice(-10) === cleanMobile)) ||
+               (email && m.email && m.email.toLowerCase() === email.toLowerCase())
+        );
+        if (isExisting) {
+          status = 'existing';
+          existingCount++;
+        } else {
+          validCount++;
+        }
+      }
+
+      rows.push({
+        rowNumber: i + 1,
+        data: {
+          name,
+          firstName: name.split(' ')[0] || name,
+          lastName: name.split(' ').slice(1).join(' ') || '',
+          mobile: cleanMobile,
+          email: email || undefined,
+          plan,
+          gender,
+          dob,
+          city,
+          pinCode,
+        },
+        status,
+        errors,
+        action: status === 'existing' ? 'update' : (status === 'valid' ? 'import' : 'none'),
+      });
+    }
+
+    return {
+      summary: {
+        totalRows: lines.length - 1,
+        validRows: validCount,
+        existingRows: existingCount,
+        invalidRows: invalidCount,
+        duplicatesInFile: 0,
+      },
+      rows,
+    };
+  };
+
+  const handleValidateImport = async () => {
+    if (!selectedImportFile) return;
+    setImportStep('validating');
+    setImportError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', {
+        uri: selectedImportFile.uri,
+        name: selectedImportFile.name,
+        type: selectedImportFile.mimeType || 'text/csv',
+      } as any);
+
+      const res = await api.post('/import/validate', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      const { summary, rows, fileName } = res.data;
+      setImportValidationResult({ summary, rows: rows || [], fileName: fileName || selectedImportFile.name });
+      setImportRows(rows || []);
+      setImportStep('preview');
+    } catch (apiErr: any) {
+      console.warn('Server validation notice, checking local CSV fallback:', apiErr);
+      if (selectedImportFile.name.toLowerCase().endsWith('.csv')) {
+        try {
+          const fileContent = await FileSystem.readAsStringAsync(selectedImportFile.uri);
+          const parsed = parseClientCsv(fileContent, members);
+          if (parsed.rows.length === 0) {
+            setImportError('The CSV file has no member rows or could not be read.');
+            setImportStep('upload');
+            return;
+          }
+          setImportValidationResult({
+            summary: parsed.summary,
+            rows: parsed.rows,
+            fileName: selectedImportFile.name,
+          });
+          setImportRows(parsed.rows);
+          setImportStep('preview');
+          return;
+        } catch (csvErr: any) {
+          console.error('CSV parse error:', csvErr);
+        }
+      }
+      setImportError(apiErr.response?.data?.message || 'Failed to validate spreadsheet. Please verify columns and try again.');
+      setImportStep('upload');
+    }
+  };
+
+  const handleExecuteImport = async () => {
+    setIsExecutingImport(true);
+    setImportStep('importing');
+    setImportError(null);
+
+    const activeRows = importRows.map(r => {
+      if (r.status === 'existing') {
+        return { ...r, action: existingDuplicateAction };
+      }
+      return r;
+    });
+
+    try {
+      const res = await api.post('/import/execute', {
+        fileName: importValidationResult?.fileName || selectedImportFile?.name || 'import.csv',
+        rows: activeRows,
+      });
+
+      const data = res.data;
+      setImportResultSummary({
+        totalProcessed: data.totalProcessed || activeRows.length,
+        newCustomers: data.newCustomers ?? (importValidationResult?.summary.validRows || 0),
+        updatedCustomers: data.updatedCustomers ?? (existingDuplicateAction === 'update' ? (importValidationResult?.summary.existingRows || 0) : 0),
+        skippedCount: data.skippedCount ?? (existingDuplicateAction === 'skip' ? (importValidationResult?.summary.existingRows || 0) : 0),
+      });
+      setImportStep('result');
+      fetchMembersAndEnquiries();
+    } catch (err: any) {
+      try {
+        let createdCount = 0;
+        let updatedCount = 0;
+        let skippedCount = 0;
+
+        for (const row of activeRows) {
+          if (row.status === 'invalid') continue;
+          if (row.status === 'existing' && existingDuplicateAction === 'skip') {
+            skippedCount++;
+            continue;
+          }
+          const rowData = row.data || row;
+          const phone = rowData.mobile || rowData.phone;
+          const name = rowData.name || `${rowData.firstName || ''} ${rowData.lastName || ''}`.trim() || 'Imported Member';
+          const email = rowData.email;
+
+          if (row.status === 'existing' && existingDuplicateAction === 'update') {
+            const existing = members.find(m => m.phone === phone || (email && m.email === email));
+            if (existing) {
+              await api.put(`/users/${existing.id}`, {
+                name,
+                mobile: phone,
+                email,
+                subscriptionPlan: rowData.plan || existing.plan,
+                gender: rowData.gender,
+                dateOfBirth: rowData.dob,
+                city: rowData.city,
+                pinCode: rowData.pinCode,
+              }).catch(() => null);
+              updatedCount++;
+            }
+          } else {
+            await api.post('/users', {
+              name,
+              mobile: phone,
+              email: email || `member_${Date.now()}_${Math.random().toString(36).substring(7)}@gymora.com`,
+              subscriptionPlan: rowData.plan || 'Starter',
+              gender: rowData.gender,
+              dateOfBirth: rowData.dob,
+              city: rowData.city,
+              pinCode: rowData.pinCode,
+              role: 'MEMBER',
+              gymId: user?.gymId,
+              branchId: user?.branchId,
+            }).catch(() => null);
+            createdCount++;
+          }
+        }
+
+        setImportResultSummary({
+          totalProcessed: activeRows.length,
+          newCustomers: createdCount,
+          updatedCustomers: updatedCount,
+          skippedCount,
+        });
+        setImportStep('result');
+        fetchMembersAndEnquiries();
+      } catch (fallbackErr: any) {
+        setImportError(err.response?.data?.message || 'Import execution failed. Please try again.');
+        setImportStep('preview');
+      }
+    } finally {
+      setIsExecutingImport(false);
+    }
   };
 
   const openAddMemberModal = () => {
@@ -863,6 +1242,8 @@ export const OwnerMembersScreen: React.FC<{ initialSection?: 'members' | 'enquir
         dateOfBirth: newMemberDob || undefined,
         height: newMemberHeight ? Number(newMemberHeight) : undefined,
         weight: newMemberWeight ? Number(newMemberWeight) : undefined,
+        city: newMemberCity.trim() || undefined,
+        pinCode: newMemberPinCode.trim() || undefined,
         fitnessGoal: newMemberFitnessGoal,
         experienceLevel: newMemberFitnessLevel,
         trainer: newMemberTrainer !== 'Unassigned' ? newMemberTrainer : undefined,
@@ -910,8 +1291,8 @@ export const OwnerMembersScreen: React.FC<{ initialSection?: 'members' | 'enquir
         rawHeight: newMemberHeight || '',
         weight: newMemberWeight ? `${newMemberWeight} kg` : 'Not specified',
         rawWeight: newMemberWeight || '',
-        city: 'Not specified',
-        pinCode: '',
+        city: newMemberCity.trim() || 'Not specified',
+        pinCode: newMemberPinCode.trim() || '',
         fitnessGoal: newMemberFitnessGoal || 'General Fitness',
         experienceLevel: newMemberFitnessLevel || 'Beginner',
         preferredTraining: newMemberFitnessGoal || 'General Fitness',
@@ -1131,7 +1512,7 @@ export const OwnerMembersScreen: React.FC<{ initialSection?: 'members' | 'enquir
               <TouchableOpacity
                 style={styles.headerAddBtn}
                 activeOpacity={0.85}
-                onPress={openAddMemberModal}
+                onPress={openAddMemberSelector}
               >
                 <Ionicons name="add" size={18} color={COLORS.white} />
                 <Text style={styles.headerAddBtnText}>Add Member</Text>
@@ -2262,6 +2643,425 @@ export const OwnerMembersScreen: React.FC<{ initialSection?: 'members' | 'enquir
         </View>
       </Modal>
 
+      {/* 1. ADD MEMBER SELECTION MODAL (Matching Web AddMemberSelectorModal.tsx) */}
+      <Modal
+        visible={addMemberSelectorModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setAddMemberSelectorModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.selectorModalCard}>
+            <View style={styles.selectorModalHeader}>
+              <View style={{ flex: 1, paddingRight: 8 }}>
+                <Text style={styles.selectorModalTitle}>Add Member</Text>
+                <Text style={styles.selectorModalSub}>Select the type of member you want to add.</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.modalCloseBtn}
+                onPress={() => setAddMemberSelectorModalVisible(false)}
+              >
+                <Ionicons name="close" size={22} color={COLORS.textMedium} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.selectorOptionsContainer}>
+              {/* Option 1: New Customer */}
+              <TouchableOpacity
+                style={styles.selectorOptionCard}
+                activeOpacity={0.75}
+                onPress={() => {
+                  setAddMemberSelectorModalVisible(false);
+                  resetAddMemberForm();
+                  setAddMemberModalVisible(true);
+                }}
+              >
+                <View style={styles.selectorOptionIconCircle}>
+                  <Ionicons name="person-add" size={24} color="#EA580C" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={styles.selectorOptionTitle}>New Customer</Text>
+                    <Ionicons name="chevron-forward" size={16} color="#94A3B8" />
+                  </View>
+                  <Text style={styles.selectorOptionDesc}>
+                    A new person joining this gym for the first time. Go through the full registration and account creation flow.
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* Option 2: Bulk Import (Excel / CSV) */}
+              <TouchableOpacity
+                style={[styles.selectorOptionCard, { borderColor: '#E2E8F0' }]}
+                activeOpacity={0.75}
+                onPress={() => {
+                  setAddMemberSelectorModalVisible(false);
+                  openBulkImportModal();
+                }}
+              >
+                <View style={[styles.selectorOptionIconCircle, { backgroundColor: '#F0FDF4' }]}>
+                  <Ionicons name="document-text" size={24} color="#16A34A" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={styles.selectorOptionTitle}>Bulk Import (Excel / CSV)</Text>
+                      <View style={styles.bulkBadge}>
+                        <Text style={styles.bulkBadgeText}>Excel / CSV</Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color="#94A3B8" />
+                  </View>
+                  <Text style={styles.selectorOptionDesc}>
+                    Import multiple existing customers at once from an Excel or CSV file. Supports up to 5,000 rows with full validation and duplicate detection.
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 2. BULK IMPORT (EXCEL / CSV) MODAL (Matching Web GymAdminImportCustomers.tsx) */}
+      <Modal
+        visible={bulkImportModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setBulkImportModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCardLarge, { paddingBottom: Math.max(16, insets.bottom + 8) }]}>
+            {/* Header */}
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text style={styles.modalTitle}>Bulk Import Members</Text>
+                  <View style={styles.bulkBadge}>
+                    <Text style={styles.bulkBadgeText}>Excel / CSV</Text>
+                  </View>
+                </View>
+                <Text style={styles.modalSubtitle}>Batch import existing customers with validation</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.modalCloseBtn}
+                onPress={() => setBulkImportModalVisible(false)}
+              >
+                <Ionicons name="close" size={22} color={COLORS.textMedium} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Error banner if any */}
+            {importError && (
+              <View style={styles.importErrorBanner}>
+                <Ionicons name="alert-circle" size={16} color="#B91C1C" />
+                <Text style={styles.importErrorBannerText}>{importError}</Text>
+              </View>
+            )}
+
+            {/* Content Based on Step */}
+            {importStep === 'upload' && (
+              <ScrollView style={styles.modalScrollView} showsVerticalScrollIndicator={false}>
+                {/* File Dropzone / Selector */}
+                <TouchableOpacity
+                  style={styles.fileDropzoneCard}
+                  activeOpacity={0.8}
+                  onPress={handlePickImportFile}
+                >
+                  <View style={styles.fileDropzoneIconBox}>
+                    <Ionicons
+                      name={selectedImportFile ? "document-attach" : "cloud-upload-outline"}
+                      size={36}
+                      color={selectedImportFile ? "#16A34A" : "#EA580C"}
+                    />
+                  </View>
+
+                  {selectedImportFile ? (
+                    <View style={{ alignItems: 'center', paddingHorizontal: 16 }}>
+                      <Text style={styles.selectedFileName} numberOfLines={1}>{selectedImportFile.name}</Text>
+                      {selectedImportFile.size ? (
+                        <Text style={styles.selectedFileSize}>
+                          {(selectedImportFile.size / 1024).toFixed(1)} KB • Ready to validate
+                        </Text>
+                      ) : null}
+                      <View style={styles.changeFilePill}>
+                        <Text style={styles.changeFilePillText}>Tap to change file</Text>
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={{ alignItems: 'center', paddingHorizontal: 16 }}>
+                      <Text style={styles.fileDropzoneTitle}>Choose Excel or CSV File</Text>
+                      <Text style={styles.fileDropzoneSub}>
+                        Supports .csv, .xlsx, and .xls files (up to 5,000 rows)
+                      </Text>
+                      <View style={styles.browseBtn}>
+                        <Ionicons name="folder-open-outline" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                        <Text style={styles.browseBtnText}>Browse Files</Text>
+                      </View>
+                    </View>
+                  )}
+                </TouchableOpacity>
+
+                {/* Sample Format / Template Box */}
+                <View style={styles.templateGuideCard}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Ionicons name="information-circle-outline" size={16} color="#0284C7" />
+                      <Text style={styles.templateGuideTitle}>Spreadsheet Format Guide</Text>
+                    </View>
+                    <TouchableOpacity onPress={handleDownloadSampleCsv}>
+                      <Text style={styles.downloadTemplateLink}>Download Template</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={styles.templateGuideText}>
+                    Required columns: <Text style={{ fontWeight: '700' }}>Full Name, Mobile Number</Text> (10 digits).
+                  </Text>
+                  <Text style={styles.templateGuideText}>
+                    Optional columns: <Text style={{ fontWeight: '700' }}>Email, Membership Plan, Gender, Date of Birth, City, PIN Code</Text>.
+                  </Text>
+                </View>
+              </ScrollView>
+            )}
+
+            {importStep === 'validating' && (
+              <View style={styles.importLoadingState}>
+                <ActivityIndicator size="large" color="#EA580C" />
+                <Text style={styles.importLoadingTitle}>Validating Spreadsheet…</Text>
+                <Text style={styles.importLoadingSub}>Checking customer rows, format integrity, and existing gym duplicates</Text>
+              </View>
+            )}
+
+            {importStep === 'preview' && (
+              <ScrollView style={styles.modalScrollView} showsVerticalScrollIndicator={false}>
+                {/* Summary stat cards */}
+                <View style={styles.importStatGrid}>
+                  <View style={styles.importStatCard}>
+                    <Text style={styles.importStatLabel}>Total Rows</Text>
+                    <Text style={styles.importStatValue}>{importValidationResult?.summary.totalRows || importRows.length}</Text>
+                  </View>
+                  <View style={[styles.importStatCard, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}>
+                    <Text style={[styles.importStatLabel, { color: '#16A34A' }]}>Ready (New)</Text>
+                    <Text style={[styles.importStatValue, { color: '#15803D' }]}>{importValidationResult?.summary.validRows || 0}</Text>
+                  </View>
+                  <View style={[styles.importStatCard, { backgroundColor: '#FFFBEB', borderColor: '#FDE68A' }]}>
+                    <Text style={[styles.importStatLabel, { color: '#D97706' }]}>Duplicates</Text>
+                    <Text style={[styles.importStatValue, { color: '#B45309' }]}>{importValidationResult?.summary.existingRows || 0}</Text>
+                  </View>
+                  <View style={[styles.importStatCard, { backgroundColor: '#FEF2F2', borderColor: '#FECACA' }]}>
+                    <Text style={[styles.importStatLabel, { color: '#DC2626' }]}>Invalid</Text>
+                    <Text style={[styles.importStatValue, { color: '#B91C1C' }]}>{importValidationResult?.summary.invalidRows || 0}</Text>
+                  </View>
+                </View>
+
+                {/* Duplicate Handling Option if duplicates detected */}
+                {(importValidationResult?.summary.existingRows || 0) > 0 && (
+                  <View style={styles.duplicateHandleBox}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                      <Ionicons name="copy-outline" size={16} color="#D97706" />
+                      <Text style={styles.duplicateHandleTitle}>Existing Customer Action:</Text>
+                    </View>
+                    <View style={styles.duplicateActionToggleRow}>
+                      <TouchableOpacity
+                        style={[
+                          styles.duplicateActionBtn,
+                          existingDuplicateAction === 'update' && styles.duplicateActionBtnActive
+                        ]}
+                        onPress={() => setExistingDuplicateAction('update')}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={15}
+                          color={existingDuplicateAction === 'update' ? '#FFFFFF' : '#64748B'}
+                        />
+                        <Text style={[
+                          styles.duplicateActionBtnText,
+                          existingDuplicateAction === 'update' && styles.duplicateActionBtnTextActive
+                        ]}>
+                          Update Existing
+                        </Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.duplicateActionBtn,
+                          existingDuplicateAction === 'skip' && styles.duplicateActionBtnActive
+                        ]}
+                        onPress={() => setExistingDuplicateAction('skip')}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons
+                          name="close-circle"
+                          size={15}
+                          color={existingDuplicateAction === 'skip' ? '#FFFFFF' : '#64748B'}
+                        />
+                        <Text style={[
+                          styles.duplicateActionBtnText,
+                          existingDuplicateAction === 'skip' && styles.duplicateActionBtnTextActive
+                        ]}>
+                          Skip Existing
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                    <Text style={styles.duplicateHelpText}>
+                      {existingDuplicateAction === 'update'
+                        ? 'Existing members with matching phone/email will have their plan & info updated.'
+                        : 'Existing members will be safely ignored without overwriting database records.'}
+                    </Text>
+                  </View>
+                )}
+
+                {/* Row preview table list */}
+                <Text style={styles.rowPreviewHeader}>Parsed Rows Preview ({importRows.length} rows)</Text>
+                {importRows.slice(0, 30).map((r, idx) => {
+                  const data = r.data || r;
+                  const isExisting = r.status === 'existing';
+                  const isValid = r.status === 'valid';
+                  const isInvalid = r.status === 'invalid';
+
+                  return (
+                    <View key={idx} style={styles.previewRowCard}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <View style={{ flex: 1, marginRight: 8 }}>
+                          <Text style={styles.previewRowName}>
+                            #{r.rowNumber || idx + 1} {data.name || 'Unnamed Member'}
+                          </Text>
+                          <Text style={styles.previewRowDetails}>
+                            📞 {data.mobile || 'No Mobile'} {data.email ? `• ✉️ ${data.email}` : ''}
+                          </Text>
+                          {data.plan ? (
+                            <Text style={styles.previewRowSubPlan}>Plan: {data.plan}</Text>
+                          ) : null}
+                          {isInvalid && r.errors && r.errors.length > 0 ? (
+                            <Text style={styles.previewRowErrorText}>⚠ {r.errors.join(', ')}</Text>
+                          ) : null}
+                        </View>
+
+                        <View style={[
+                          styles.previewStatusBadge,
+                          isValid && { backgroundColor: '#DCFCE7' },
+                          isExisting && { backgroundColor: '#FEF3C7' },
+                          isInvalid && { backgroundColor: '#FEE2E2' }
+                        ]}>
+                          <Text style={[
+                            styles.previewStatusBadgeText,
+                            isValid && { color: '#15803D' },
+                            isExisting && { color: '#B45309' },
+                            isInvalid && { color: '#B91C1C' }
+                          ]}>
+                            {isValid ? 'Ready to Import' : isExisting ? (existingDuplicateAction === 'update' ? 'Will Update' : 'Will Skip') : 'Invalid Error'}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                  );
+                })}
+
+                {importRows.length > 30 && (
+                  <Text style={styles.moreRowsNotice}>
+                    + {importRows.length - 30} more rows ready to process
+                  </Text>
+                )}
+              </ScrollView>
+            )}
+
+            {importStep === 'importing' && (
+              <View style={styles.importLoadingState}>
+                <ActivityIndicator size="large" color="#16A34A" />
+                <Text style={styles.importLoadingTitle}>Importing Members…</Text>
+                <Text style={styles.importLoadingSub}>Saving customer accounts and assigning memberships in database</Text>
+              </View>
+            )}
+
+            {importStep === 'result' && (
+              <View style={styles.importResultBox}>
+                <View style={styles.resultSuccessIconCircle}>
+                  <Ionicons name="checkmark" size={38} color="#FFFFFF" />
+                </View>
+                <Text style={styles.resultSuccessTitle}>Bulk Import Completed!</Text>
+                <Text style={styles.resultSuccessSub}>
+                  Your spreadsheet records have been successfully processed into the gym database.
+                </Text>
+
+                <View style={styles.resultStatsRow}>
+                  <View style={styles.resultStatBox}>
+                    <Text style={styles.resultStatNum}>{importResultSummary?.newCustomers ?? 0}</Text>
+                    <Text style={styles.resultStatDesc}>New Added</Text>
+                  </View>
+                  <View style={styles.resultStatBox}>
+                    <Text style={[styles.resultStatNum, { color: '#D97706' }]}>{importResultSummary?.updatedCustomers ?? 0}</Text>
+                    <Text style={styles.resultStatDesc}>Updated</Text>
+                  </View>
+                  <View style={styles.resultStatBox}>
+                    <Text style={[styles.resultStatNum, { color: '#64748B' }]}>{importResultSummary?.skippedCount ?? 0}</Text>
+                    <Text style={styles.resultStatDesc}>Skipped</Text>
+                  </View>
+                </View>
+              </View>
+            )}
+
+            {/* Modal Actions Footer */}
+            <View style={styles.modalActions}>
+              {importStep === 'upload' && (
+                <>
+                  <TouchableOpacity
+                    style={styles.modalCancelBtn}
+                    onPress={() => setBulkImportModalVisible(false)}
+                  >
+                    <Text style={styles.modalCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.modalSubmitBtn, !selectedImportFile && { opacity: 0.5 }]}
+                    onPress={handleValidateImport}
+                    disabled={!selectedImportFile}
+                  >
+                    <Ionicons name="analytics-outline" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.modalSubmitText}>Validate File</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+
+              {importStep === 'preview' && (
+                <>
+                  <TouchableOpacity
+                    style={styles.modalCancelBtn}
+                    onPress={() => setImportStep('upload')}
+                  >
+                    <Text style={styles.modalCancelText}>Change File</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.modalSubmitBtn,
+                      { backgroundColor: '#16A34A' },
+                      (importValidationResult?.summary.validRows === 0 && (existingDuplicateAction === 'skip' || importValidationResult?.summary.existingRows === 0)) && { opacity: 0.5 }
+                    ]}
+                    onPress={handleExecuteImport}
+                    disabled={isExecutingImport || (importValidationResult?.summary.validRows === 0 && (existingDuplicateAction === 'skip' || importValidationResult?.summary.existingRows === 0))}
+                  >
+                    <Ionicons name="cloud-upload" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                    <Text style={styles.modalSubmitText}>
+                      Execute Import ({((importValidationResult?.summary.validRows || 0) + (existingDuplicateAction === 'update' ? (importValidationResult?.summary.existingRows || 0) : 0))} Members)
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              )}
+
+              {importStep === 'result' && (
+                <TouchableOpacity
+                  style={[styles.modalSubmitBtn, { flex: 1, backgroundColor: COLORS.primary }]}
+                  onPress={() => {
+                    setBulkImportModalVisible(false);
+                    fetchMembersAndEnquiries();
+                  }}
+                >
+                  <Ionicons name="checkmark-done" size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.modalSubmitText}>Done & View Members</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* 5-STEP ADD / REGISTER MEMBER MODAL (Matching Web RegisterNewMemberModal.tsx) */}
       <Modal
         visible={addMemberModalVisible}
@@ -2382,6 +3182,31 @@ export const OwnerMembersScreen: React.FC<{ initialSection?: 'members' | 'enquir
                     value={newMemberDob}
                     onChangeText={setNewMemberDob}
                   />
+
+                  <View style={{ flexDirection: 'row', gap: 10 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.inputLabel}>City (Optional)</Text>
+                      <TextInput
+                        style={styles.modalInput}
+                        placeholder="e.g. Chennai"
+                        placeholderTextColor={COLORS.textMuted}
+                        value={newMemberCity}
+                        onChangeText={setNewMemberCity}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.inputLabel}>PIN Code (Optional)</Text>
+                      <TextInput
+                        style={styles.modalInput}
+                        placeholder="e.g. 600001"
+                        placeholderTextColor={COLORS.textMuted}
+                        value={newMemberPinCode}
+                        onChangeText={(txt) => setNewMemberPinCode(sanitizeSixDigitPinCode(txt))}
+                        keyboardType="number-pad"
+                        maxLength={6}
+                      />
+                    </View>
+                  </View>
                 </View>
               )}
 
@@ -4040,5 +4865,399 @@ const styles = StyleSheet.create({
     color: '#C2410C',
     marginBottom: 6,
     textTransform: 'uppercase',
+  },
+
+  // Selector Modal
+  selectorModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 20,
+    width: '100%',
+    maxWidth: 480,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.16,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  selectorModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  selectorModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  selectorModalSub: {
+    fontSize: 13,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  selectorOptionsContainer: {
+    paddingTop: 16,
+    gap: 12,
+  },
+  selectorOptionCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    gap: 14,
+  },
+  selectorOptionIconCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: '#FFF7ED',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectorOptionTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  selectorOptionDesc: {
+    fontSize: 12,
+    color: '#64748B',
+    lineHeight: 17,
+    marginTop: 4,
+  },
+  bulkBadge: {
+    backgroundColor: '#DCFCE7',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  bulkBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#15803D',
+  },
+
+  // Bulk Import
+  importErrorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    padding: 10,
+    borderRadius: 10,
+    marginBottom: 12,
+    gap: 8,
+  },
+  importErrorBannerText: {
+    fontSize: 12,
+    color: '#B91C1C',
+    fontWeight: '600',
+    flex: 1,
+  },
+  fileDropzoneCard: {
+    backgroundColor: '#FAFAFA',
+    borderWidth: 2,
+    borderColor: '#E2E8F0',
+    borderStyle: 'dashed',
+    borderRadius: 18,
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  fileDropzoneIconBox: {
+    width: 64,
+    height: 64,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  fileDropzoneTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 4,
+  },
+  fileDropzoneSub: {
+    fontSize: 12,
+    color: '#64748B',
+    textAlign: 'center',
+    marginBottom: 14,
+  },
+  browseBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#C2410C',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 10,
+  },
+  browseBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  selectedFileName: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0F172A',
+    textAlign: 'center',
+  },
+  selectedFileSize: {
+    fontSize: 12,
+    color: '#16A34A',
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  changeFilePill: {
+    marginTop: 10,
+    backgroundColor: '#E2E8F0',
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 8,
+  },
+  changeFilePillText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#334155',
+  },
+  templateGuideCard: {
+    backgroundColor: '#F0F9FF',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+    borderRadius: 14,
+    padding: 14,
+  },
+  templateGuideTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0369A1',
+  },
+  downloadTemplateLink: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#0284C7',
+    textDecorationLine: 'underline',
+  },
+  templateGuideText: {
+    fontSize: 12,
+    color: '#0C4A6E',
+    lineHeight: 18,
+    marginTop: 2,
+  },
+  importLoadingState: {
+    paddingVertical: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  importLoadingTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginTop: 14,
+  },
+  importLoadingSub: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 4,
+    textAlign: 'center',
+    maxWidth: 280,
+  },
+  importStatGrid: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 14,
+  },
+  importStatCard: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+  },
+  importStatLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748B',
+    marginBottom: 2,
+  },
+  importStatValue: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  duplicateHandleBox: {
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 14,
+  },
+  duplicateHandleTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#92400E',
+  },
+  duplicateActionToggleRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 6,
+  },
+  duplicateActionBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  duplicateActionBtnActive: {
+    backgroundColor: '#D97706',
+    borderColor: '#B45309',
+  },
+  duplicateActionBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  duplicateActionBtnTextActive: {
+    color: '#FFFFFF',
+  },
+  duplicateHelpText: {
+    fontSize: 11,
+    color: '#B45309',
+    marginTop: 2,
+  },
+  rowPreviewHeader: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 8,
+  },
+  previewRowCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+  },
+  previewRowName: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  previewRowDetails: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  previewRowSubPlan: {
+    fontSize: 11,
+    color: '#EA580C',
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  previewRowErrorText: {
+    fontSize: 11,
+    color: '#DC2626',
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  previewStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  previewStatusBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  moreRowsNotice: {
+    textAlign: 'center',
+    fontSize: 12,
+    color: '#64748B',
+    paddingVertical: 8,
+    fontStyle: 'italic',
+  },
+  importResultBox: {
+    alignItems: 'center',
+    paddingVertical: 24,
+  },
+  resultSuccessIconCircle: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#16A34A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    shadowColor: '#16A34A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  resultSuccessTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 6,
+  },
+  resultSuccessSub: {
+    fontSize: 13,
+    color: '#64748B',
+    textAlign: 'center',
+    maxWidth: 280,
+    lineHeight: 18,
+    marginBottom: 20,
+  },
+  resultStatsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  resultStatBox: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  resultStatNum: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#15803D',
+  },
+  resultStatDesc: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '700',
+    marginTop: 2,
   },
 });

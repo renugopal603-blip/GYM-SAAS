@@ -369,6 +369,56 @@ export const updateUser = async (req: Request, res: Response): Promise<void> => 
       }
     }
 
+    // Sanitize personal & physical profile fields so empty values do not cause cast/validation failures
+    if (updateData.dateOfBirth === '' || updateData.dateOfBirth === null) {
+      delete updateData.dateOfBirth;
+      unsetFields.dateOfBirth = 1;
+    } else if (updateData.dateOfBirth) {
+      const d = new Date(updateData.dateOfBirth);
+      if (!isNaN(d.getTime())) {
+        updateData.dateOfBirth = d;
+      } else {
+        delete updateData.dateOfBirth;
+      }
+    }
+
+    if (updateData.dob) {
+      if (!updateData.dateOfBirth) {
+        const d = new Date(updateData.dob);
+        if (!isNaN(d.getTime())) {
+          updateData.dateOfBirth = d;
+        }
+      }
+      delete updateData.dob;
+    }
+
+    if (updateData.height === '' || updateData.height === null) {
+      delete updateData.height;
+      unsetFields.height = 1;
+    } else if (updateData.height !== undefined) {
+      const h = Number(String(updateData.height).replace(/[^\d.]/g, ''));
+      if (!isNaN(h) && h > 0) updateData.height = h;
+      else delete updateData.height;
+    }
+
+    if (updateData.weight === '' || updateData.weight === null) {
+      delete updateData.weight;
+      unsetFields.weight = 1;
+    } else if (updateData.weight !== undefined) {
+      const w = Number(String(updateData.weight).replace(/[^\d.]/g, ''));
+      if (!isNaN(w) && w > 0) updateData.weight = w;
+      else delete updateData.weight;
+    }
+
+    if (updateData.trainer !== undefined) {
+      if (!updateData.trainer || updateData.trainer === 'Unassigned') {
+        delete updateData.trainer;
+        unsetFields.trainer = 1;
+      } else {
+        updateData.trainer = String(updateData.trainer).trim();
+      }
+    }
+
     if (gymData && user.gymId) {
       // Handle nested location data correctly if provided
       const updateGymObj: any = { ...gymData };
@@ -531,7 +581,38 @@ export const deleteUser = async (req: Request, res: Response): Promise<void> => 
 
 export const createUser = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { firstName, lastName, name, email, mobile, phone, role, subscriptionPlan, branchId } = req.body;
+    const {
+      firstName,
+      lastName,
+      name,
+      email,
+      mobile,
+      phone,
+      role,
+      subscriptionPlan,
+      branchId,
+      gender,
+      dateOfBirth,
+      dob,
+      height,
+      weight,
+      city,
+      pinCode,
+      pincode,
+      fitnessGoal,
+      fitnessGoals,
+      experienceLevel,
+      preferredTraining,
+      preferredWorkoutTime,
+      emergencyContact,
+      customerType,
+      trainer,
+      assignedTrainer,
+      subscriptionStatus,
+      subscriptionExpiry,
+      subscriptionStartDate,
+      approvalStatus,
+    } = req.body;
     const gymId = req.body.gymId || req.user?.gymId;
     const finalEmail = (email || `member_${Date.now()}@gymora.com`).trim().toLowerCase();
     const finalPhone = mobile || phone || '';
@@ -559,6 +640,33 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
     const fName = firstName || nameParts[0] || 'Member';
     const lName = lastName || nameParts.slice(1).join(' ') || '';
 
+    // Parse Date of Birth safely
+    let parsedDob: Date | undefined;
+    const rawDob = dateOfBirth || dob;
+    if (rawDob) {
+      const d = new Date(rawDob);
+      if (!isNaN(d.getTime())) {
+        parsedDob = d;
+      }
+    }
+
+    // Parse Height and Weight safely
+    let parsedHeight: number | undefined;
+    if (height !== undefined && height !== null && height !== '') {
+      const h = Number(String(height).replace(/[^\d.]/g, ''));
+      if (!isNaN(h) && h > 0) parsedHeight = h;
+    }
+
+    let parsedWeight: number | undefined;
+    if (weight !== undefined && weight !== null && weight !== '') {
+      const w = Number(String(weight).replace(/[^\d.]/g, ''));
+      if (!isNaN(w) && w > 0) parsedWeight = w;
+    }
+
+    const finalCity = city ? String(city).trim() : undefined;
+    const finalPinCode = (pinCode || pincode) ? String(pinCode || pincode).trim() : undefined;
+    const finalTrainer = trainer && trainer !== 'Unassigned' ? String(trainer).trim() : undefined;
+
     const user = new User({
       firstName: fName,
       lastName: lName,
@@ -568,11 +676,28 @@ export const createUser = async (req: AuthRequest, res: Response): Promise<void>
       role: role || Role.MEMBER,
       gymId,
       branchId: branchId || req.user?.branchId,
-      approvalStatus: 'APPROVED',
+      approvalStatus: approvalStatus || 'APPROVED',
       isActive: true,
       subscriptionPlan: subscriptionPlan || 'Annual Pass',
-      subscriptionStatus: SubscriptionStatus.ACTIVE,
-      paymentStatus: 'Approved'
+      subscriptionStatus: subscriptionStatus || SubscriptionStatus.ACTIVE,
+      subscriptionExpiry: subscriptionExpiry ? new Date(subscriptionExpiry) : undefined,
+      subscriptionStartDate: subscriptionStartDate ? new Date(subscriptionStartDate) : undefined,
+      paymentStatus: 'Approved',
+      gender: gender || undefined,
+      dateOfBirth: parsedDob,
+      height: parsedHeight,
+      weight: parsedWeight,
+      city: finalCity,
+      pinCode: finalPinCode,
+      fitnessGoal: fitnessGoal || (Array.isArray(fitnessGoals) ? fitnessGoals[0] : undefined),
+      fitnessGoals: fitnessGoals || (fitnessGoal ? [fitnessGoal] : undefined),
+      experienceLevel: experienceLevel || undefined,
+      preferredTraining: preferredTraining || undefined,
+      preferredWorkoutTime: preferredWorkoutTime || undefined,
+      emergencyContact: emergencyContact || undefined,
+      customerType: customerType || 'NEW_CUSTOMER',
+      trainer: finalTrainer,
+      assignedTrainer: assignedTrainer || undefined,
     });
 
     await user.save();

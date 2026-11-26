@@ -69,6 +69,7 @@ export interface IUser extends Document {
   profilePhoto?: string;
   city?: string;
   pinCode?: string;
+  trainer?: string;
 
   // Fitness details
   height?: number; // cm
@@ -78,6 +79,16 @@ export interface IUser extends Document {
   experienceLevel?: 'Beginner' | 'Intermediate' | 'Advanced';
   preferredTraining?: 'Offline' | 'Online' | 'Hybrid';
   preferredWorkoutTime?: string;
+
+  // Notification Preferences
+  notificationPreferences?: {
+    workouts?: boolean;
+    diet?: boolean;
+    bookings?: boolean;
+    messages?: boolean;
+    store?: boolean;
+    announcements?: boolean;
+  };
 
   // Emergency contact
   emergencyContact?: {
@@ -156,8 +167,18 @@ const userSchema = new Schema<IUser>(
     fitnessGoal: { type: String },
     fitnessGoals: [{ type: String }],
     experienceLevel: { type: String, enum: ['Beginner', 'Intermediate', 'Advanced'] },
-    preferredTraining: { type: String, enum: ['Offline', 'Online', 'Hybrid'] },
+    preferredTraining: { type: String },
     preferredWorkoutTime: { type: String },
+    trainer: { type: String, trim: true },
+
+    notificationPreferences: {
+      workouts: { type: Boolean, default: true },
+      diet: { type: Boolean, default: true },
+      bookings: { type: Boolean, default: true },
+      messages: { type: Boolean, default: true },
+      store: { type: Boolean, default: true },
+      announcements: { type: Boolean, default: true },
+    },
 
     emergencyContact: {
       name: { type: String },

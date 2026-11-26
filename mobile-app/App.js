@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Platform, StatusBar as RNStatusBar, ActivityIndicator, Text, BackHandler, Alert, Linking } from 'react-native';
+import { View, StyleSheet, Platform, StatusBar as RNStatusBar, ActivityIndicator, Text, BackHandler, Alert, Linking, AppState } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
@@ -9,6 +9,7 @@ import { COLORS } from './src/constants/theme';
 import { Header } from './src/components/Header';
 import { BottomTabBar } from './src/components/BottomTabBar';
 import { GymSmartAssistant } from './src/components/GymSmartAssistant';
+import { initNotifications, syncAndPushNewNotifications, registerNotificationResponseListener } from './src/services/notificationService';
 
 // Auth Screen
 import { AuthEntryScreen } from './src/screens/auth/AuthEntryScreen';
@@ -201,6 +202,48 @@ const MainAppContent = () => {
       navigateTo(tab, sub);
     }
   };
+
+  // System-level Native Push Notifications Setup & Listener
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    // 1. Initialize notification channels & system permissions
+    initNotifications();
+
+    // 2. Initial sync of unread notifications from backend
+    syncAndPushNewNotifications(activeRole);
+
+    // 3. Periodic background/active sync for new notification events (every 30 seconds)
+    const interval = setInterval(() => {
+      syncAndPushNewNotifications(activeRole);
+    }, 30000);
+
+    // 4. Immediate sync when app comes into active view
+    const appStateSub = AppState.addEventListener('change', nextState => {
+      if (nextState === 'active') {
+        syncAndPushNewNotifications(activeRole);
+      }
+    });
+
+    // 5. Native push notification banner tap handler (deep links directly to relevant screen)
+    const notifSub = registerNotificationResponseListener((tab, sub) => {
+      if (activeRole === 'CUSTOMER') {
+        handleCustomerNavigate(tab, sub);
+      } else if (activeRole === 'TRAINER') {
+        handleTrainerNavigate(tab, sub);
+      } else if (activeRole === 'GYM_OWNER') {
+        handleOwnerNavigate(tab, sub);
+      } else {
+        navigateTo(tab, sub);
+      }
+    });
+
+    return () => {
+      clearInterval(interval);
+      appStateSub?.remove?.();
+      notifSub?.remove?.();
+    };
+  }, [isAuthenticated, activeRole]);
 
   const handleBottomTabSelect = (tabKey) => {
     if (tabKey === activeTab && !activeSub) return;

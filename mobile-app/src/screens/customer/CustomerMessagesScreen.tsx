@@ -18,6 +18,14 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../api/client';
+import {
+  playVoiceNote,
+  stopVoicePlayback,
+  startVoiceRecording,
+  stopVoiceRecording,
+  isVoiceNoteMessage,
+  extractVoiceDuration,
+} from '../../services/voiceAudioService';
 
 interface TrainerContact {
   id: string;
@@ -48,11 +56,14 @@ interface ChatMessage {
   createdAt: string;
   isMine: boolean;
   type?: 'text' | 'voice' | 'attachment';
+  duration?: number;
+  attachmentUrl?: string;
   attachment?: {
     name: string;
     size?: number;
     uri?: string;
     type: 'image' | 'document' | 'video' | 'audio' | 'other';
+    duration?: number;
   };
 }
 
@@ -151,8 +162,49 @@ export const CustomerMessagesScreen: React.FC = () => {
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [attachmentModalVisible, setAttachmentModalVisible] = useState(false);
+  const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
+  const [voiceProgress, setVoiceProgress] = useState<Record<string, number>>({});
 
   const scrollViewRef = useRef<any>(null);
+  const recordingRef = useRef<any>(null);
+
+  // Stop voice playback on unmount
+  useEffect(() => {
+    return () => {
+      stopVoicePlayback();
+    };
+  }, []);
+
+  const handleTogglePlayVoice = (msg: ChatMessage) => {
+    if (playingVoiceId === msg.id) {
+      stopVoicePlayback();
+      setPlayingVoiceId(null);
+    } else {
+      setPlayingVoiceId(msg.id);
+      setVoiceProgress((prev) => ({ ...prev, [msg.id]: 0 }));
+      const audioUri = msg.attachment?.uri || msg.attachmentUrl;
+      playVoiceNote(
+        msg.id,
+        audioUri,
+        (sec) => {
+          setVoiceProgress((prev) => ({ ...prev, [msg.id]: sec }));
+        },
+        () => {
+          setPlayingVoiceId(null);
+          setVoiceProgress((prev) => ({ ...prev, [msg.id]: 0 }));
+        }
+      );
+    }
+  };
+
+  const handleCancelRecording = async () => {
+    setIsRecording(false);
+    setRecordingSeconds(0);
+    if (recordingRef.current) {
+      await stopVoiceRecording(recordingRef.current);
+      recordingRef.current = null;
+    }
+  };
 
   // Voice recording timer
   useEffect(() => {
@@ -202,6 +254,17 @@ export const CustomerMessagesScreen: React.FC = () => {
           const attUrl = firstAtt?.url || m.attachmentUrl;
           const isImg = (firstAtt?.fileType === 'image') || (m.fileType === 'image') || (m.messageType === 'image') || (m.message === '📷 Photo attached');
 
+          const isVoice = isVoiceNoteMessage({
+            text: m.message,
+            messageType: m.messageType,
+            attachments: m.attachments,
+          });
+          const duration = extractVoiceDuration({
+            duration: m.duration,
+            message: m.message,
+            attachments: m.attachments,
+          });
+
           return {
             id: m._id || 'msg_' + Math.random(),
             senderId: sId,
@@ -209,12 +272,15 @@ export const CustomerMessagesScreen: React.FC = () => {
             text: m.message || '',
             createdAt: new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase(),
             isMine,
-            type: m.messageType || 'text',
-            attachment: (firstAtt || attUrl || isImg) ? {
-              name: firstAtt?.fileName || m.fileName || (isImg ? 'Photo.jpg' : 'Attachment'),
+            type: isVoice ? 'voice' : (m.messageType || 'text'),
+            duration,
+            attachmentUrl: attUrl,
+            attachment: (firstAtt || attUrl || isImg || isVoice) ? {
+              name: firstAtt?.fileName || m.fileName || (isImg ? 'Photo.jpg' : isVoice ? 'voice_note.m4a' : 'Attachment'),
               size: firstAtt?.fileSize || m.fileSize,
-              uri: attUrl || 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=600',
-              type: isImg ? 'image' : (firstAtt?.fileType || m.fileType || 'document'),
+              uri: attUrl,
+              type: isImg ? 'image' : isVoice ? 'audio' : (firstAtt?.fileType || m.fileType || 'document'),
+              duration,
             } : undefined
           };
         });
@@ -507,13 +573,122 @@ export const CustomerMessagesScreen: React.FC = () => {
     setAttachmentModalVisible(true);
   };
 
-  const handleToggleVoiceRecording = () => {
+  const handleSendVoiceMessage = async (audioUri: string | null, duration: number) => {
+    if (sending) return;
+    const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase();
+    const displayContent = `🎙️ [Voice Note • ${duration}s]`;
+    let finalAudioUrl = audioUri || '';
+
+    const newMsg: ChatMessage = {
+      id: 'msg_' + Date.now(),
+      senderId: user?._id || user?.id || 'user_renugopal',
+      senderName: userName,
+      text: displayContent,
+      createdAt: nowTime,
+      isMine: true,
+      type: 'voice',
+      duration,
+      attachmentUrl: finalAudioUrl,
+      attachment: {
+        name: `voice_${Date.now()}.m4a`,
+        uri: finalAudioUrl,
+        type: 'audio',
+        duration,
+      },
+    };
+
+    setConversations((prev) => ({
+      ...prev,
+      [selectedTrainer.id]: [...(prev[selectedTrainer.id] || []), newMsg],
+    }));
+
+    setTrainers((prev) =>
+      prev.map((t) => (t.id === selectedTrainer.id ? { ...t, lastMsg: displayContent, lastMsgTime: nowTime } : t))
+    );
+
+    try {
+      setSending(true);
+
+      if (audioUri && audioUri.startsWith('file:')) {
+        try {
+          const formData = new FormData();
+          formData.append('file', {
+            uri: audioUri,
+            name: `voice_${Date.now()}.m4a`,
+            type: 'audio/m4a',
+          } as any);
+          formData.append('isVoice', 'true');
+          formData.append('duration', String(duration));
+
+          const uploadRes = await api.post('/direct-messages/upload', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+
+          if (uploadRes.data?.success && uploadRes.data?.attachment?.url) {
+            finalAudioUrl = uploadRes.data.attachment.url;
+            newMsg.attachmentUrl = finalAudioUrl;
+            if (newMsg.attachment) newMsg.attachment.uri = finalAudioUrl;
+          }
+        } catch (uploadErr) {
+          console.warn('[CustomerMessages] Voice upload warning:', uploadErr);
+        }
+      }
+
+      await api.post('/direct-messages/send', {
+        receiverId: selectedTrainer._id || selectedTrainer.id,
+        recipientId: selectedTrainer._id || selectedTrainer.id,
+        message: displayContent,
+        content: displayContent,
+        messageType: 'voice',
+        duration,
+        attachmentUrl: finalAudioUrl,
+        fileName: `voice_${Date.now()}.m4a`,
+        fileType: 'audio',
+        fileSize: 1024 * duration,
+        attachments: [
+          {
+            url: finalAudioUrl || 'voice_recording',
+            fileName: `voice_${Date.now()}.m4a`,
+            fileType: 'audio',
+            mimeType: 'audio/m4a',
+            fileSize: 1024 * duration,
+            duration,
+          },
+        ],
+      });
+
+      fetchHistory(selectedTrainer.id);
+    } catch (err) {
+      console.warn('Send voice message notice:', err);
+    } finally {
+      setSending(false);
+    }
+
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 150);
+  };
+
+  const handleToggleVoiceRecording = async () => {
     if (!isRecording) {
+      const rec = await startVoiceRecording();
+      if (!rec) {
+        Alert.alert('Microphone Notice', 'Please allow microphone permissions to record voice notes.');
+        return;
+      }
+      recordingRef.current = rec;
       setIsRecording(true);
+      setRecordingSeconds(0);
     } else {
       setIsRecording(false);
-      const audioDuration = `${recordingSeconds}s`;
-      handleSendMessage(`🎙️ [Voice Note • ${audioDuration}]`);
+      const rec = recordingRef.current;
+      recordingRef.current = null;
+      let recordedUri: string | null = null;
+      if (rec) {
+        recordedUri = await stopVoiceRecording(rec);
+      }
+      const dur = recordingSeconds > 0 ? recordingSeconds : 4;
+      await handleSendVoiceMessage(recordedUri, dur);
     }
   };
 
@@ -637,6 +812,11 @@ export const CustomerMessagesScreen: React.FC = () => {
             </View>
           ) : (
             currentMessages.map((msg) => {
+              const isVoice = isVoiceNoteMessage(msg);
+              const isPlayingThis = playingVoiceId === msg.id;
+              const currentProgress = voiceProgress[msg.id] || 0;
+              const totalDur = extractVoiceDuration(msg);
+
               if (msg.isMine) {
                 // User Message Bubble (Right aligned, Orange-brown background matching web #C2410C)
                 return (
@@ -647,49 +827,95 @@ export const CustomerMessagesScreen: React.FC = () => {
                         <Text style={styles.myAvatarText}>{userInitial}</Text>
                       </View>
                     </View>
-                    <View style={styles.myMessageBubble}>
-                      {/* Attached Image or File Preview */}
-                      {msg.attachment && (
-                        <View style={styles.attachmentInBubble}>
-                          {msg.attachment.type === 'image' && msg.attachment.uri ? (
-                            <Image
-                              source={{ uri: msg.attachment.uri }}
-                              style={styles.bubbleAttachmentImage}
-                              resizeMode="cover"
+                    <View style={[styles.myMessageBubble, isVoice && styles.myVoiceBubble]}>
+                      {isVoice ? (
+                        <View style={styles.voiceNoteInnerRow}>
+                          <TouchableOpacity
+                            style={styles.voicePlayBtnMine}
+                            onPress={() => handleTogglePlayVoice(msg)}
+                            activeOpacity={0.8}
+                          >
+                            <Ionicons
+                              name={isPlayingThis ? 'pause' : 'play'}
+                              size={18}
+                              color="#EA580C"
                             />
-                          ) : (
-                            <View style={styles.bubbleFileCard}>
-                              <View style={styles.bubbleFileIconBadge}>
-                                <Ionicons
-                                  name={
-                                    msg.attachment.type === 'document'
-                                      ? 'document-text'
-                                      : msg.attachment.type === 'video'
-                                      ? 'videocam'
-                                      : 'attach'
-                                  }
-                                  size={18}
-                                  color="#EA580C"
+                          </TouchableOpacity>
+
+                          <View style={{ flex: 1, marginHorizontal: 8 }}>
+                            <View style={styles.voiceWaveTrack}>
+                              {[12, 20, 14, 26, 18, 22, 16, 24, 15, 19, 13, 25, 17, 21].map((h, bIdx) => {
+                                const isPlayed = isPlayingThis && (bIdx / 14) <= (currentProgress / totalDur);
+                                return (
+                                  <View
+                                    key={bIdx}
+                                    style={[
+                                      styles.voiceWaveBar,
+                                      {
+                                        height: h,
+                                        backgroundColor: isPlayed ? '#FFFFFF' : 'rgba(255,255,255,0.4)',
+                                      },
+                                    ]}
+                                  />
+                                );
+                              })}
+                            </View>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 3 }}>
+                              <Text style={styles.voiceDurationTextMine}>
+                                {isPlayingThis ? `0:0${currentProgress}` : `0:${totalDur < 10 ? '0' + totalDur : totalDur}`}
+                              </Text>
+                              <Text style={styles.voiceTagTextMine}>
+                                {isPlayingThis ? 'Playing...' : 'Voice Note'}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                      ) : (
+                        <>
+                          {/* Attached Image or File Preview */}
+                          {msg.attachment && (
+                            <View style={styles.attachmentInBubble}>
+                              {msg.attachment.type === 'image' && msg.attachment.uri ? (
+                                <Image
+                                  source={{ uri: msg.attachment.uri }}
+                                  style={styles.bubbleAttachmentImage}
+                                  resizeMode="cover"
                                 />
-                              </View>
-                              <View style={{ flex: 1 }}>
-                                <Text style={styles.bubbleFileName} numberOfLines={1}>
-                                  {msg.attachment.name}
-                                </Text>
-                                {!!msg.attachment.size && (
-                                  <Text style={styles.bubbleFileSize}>
-                                    {formatFileSize(msg.attachment.size)}
-                                  </Text>
-                                )}
-                              </View>
+                              ) : (
+                                <View style={styles.bubbleFileCard}>
+                                  <View style={styles.bubbleFileIconBadge}>
+                                    <Ionicons
+                                      name={
+                                        msg.attachment.type === 'document'
+                                          ? 'document-text'
+                                          : msg.attachment.type === 'video'
+                                          ? 'videocam'
+                                          : 'attach'
+                                      }
+                                      size={18}
+                                      color="#EA580C"
+                                    />
+                                  </View>
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={styles.bubbleFileName} numberOfLines={1}>
+                                      {msg.attachment.name}
+                                    </Text>
+                                    {!!msg.attachment.size && (
+                                      <Text style={styles.bubbleFileSize}>
+                                        {formatFileSize(msg.attachment.size)}
+                                      </Text>
+                                    )}
+                                  </View>
+                                </View>
+                              )}
                             </View>
                           )}
-                        </View>
+                          {!!msg.text && msg.text !== '📷 Photo attached' && (
+                            <Text style={styles.myMessageText}>{msg.text}</Text>
+                          )}
+                        </>
                       )}
-                      {!!msg.text && msg.text !== '📷 Photo attached' && (
-                        <Text style={styles.myMessageText}>{msg.text}</Text>
-                      )}
-                      <Text style={styles.myMessageTime}>{msg.createdAt}</Text>
+                      <Text style={isVoice ? styles.myVoiceMessageTime : styles.myMessageTime}>{msg.createdAt}</Text>
                     </View>
                   </View>
                 );
@@ -703,36 +929,82 @@ export const CustomerMessagesScreen: React.FC = () => {
                       </View>
                       <Text style={styles.trainerSenderLabel}>{selectedTrainer.name} ({selectedTrainer.role})</Text>
                     </View>
-                    <View style={styles.trainerMessageBubble}>
-                      {msg.attachment && (
-                        <View style={styles.attachmentInBubbleTrainer}>
-                          {msg.attachment.type === 'image' && msg.attachment.uri ? (
-                            <Image
-                              source={{ uri: msg.attachment.uri }}
-                              style={styles.bubbleAttachmentImage}
-                              resizeMode="cover"
+                    <View style={[styles.trainerMessageBubble, isVoice && styles.trainerVoiceBubble]}>
+                      {isVoice ? (
+                        <View style={styles.voiceNoteInnerRow}>
+                          <TouchableOpacity
+                            style={styles.voicePlayBtnTrainer}
+                            onPress={() => handleTogglePlayVoice(msg)}
+                            activeOpacity={0.8}
+                          >
+                            <Ionicons
+                              name={isPlayingThis ? 'pause' : 'play'}
+                              size={18}
+                              color="#FFFFFF"
                             />
-                          ) : (
-                            <View style={styles.bubbleFileCardTrainer}>
-                              <Ionicons name="document-text" size={18} color="#EA580C" />
-                              <View style={{ flex: 1 }}>
-                                <Text style={styles.bubbleFileNameTrainer} numberOfLines={1}>
-                                  {msg.attachment.name}
-                                </Text>
-                                {!!msg.attachment.size && (
-                                  <Text style={styles.bubbleFileSizeTrainer}>
-                                    {formatFileSize(msg.attachment.size)}
-                                  </Text>
-                                )}
-                              </View>
+                          </TouchableOpacity>
+
+                          <View style={{ flex: 1, marginHorizontal: 8 }}>
+                            <View style={styles.voiceWaveTrack}>
+                              {[12, 20, 14, 26, 18, 22, 16, 24, 15, 19, 13, 25, 17, 21].map((h, bIdx) => {
+                                const isPlayed = isPlayingThis && (bIdx / 14) <= (currentProgress / totalDur);
+                                return (
+                                  <View
+                                    key={bIdx}
+                                    style={[
+                                      styles.voiceWaveBar,
+                                      {
+                                        height: h,
+                                        backgroundColor: isPlayed ? '#EA580C' : '#CBD5E1',
+                                      },
+                                    ]}
+                                  />
+                                );
+                              })}
+                            </View>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 3 }}>
+                              <Text style={styles.voiceDurationTextTrainer}>
+                                {isPlayingThis ? `0:0${currentProgress}` : `0:${totalDur < 10 ? '0' + totalDur : totalDur}`}
+                              </Text>
+                              <Text style={styles.voiceTagTextTrainer}>
+                                {isPlayingThis ? 'Playing...' : 'Voice Note'}
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                      ) : (
+                        <>
+                          {msg.attachment && (
+                            <View style={styles.attachmentInBubbleTrainer}>
+                              {msg.attachment.type === 'image' && msg.attachment.uri ? (
+                                <Image
+                                  source={{ uri: msg.attachment.uri }}
+                                  style={styles.bubbleAttachmentImage}
+                                  resizeMode="cover"
+                                />
+                              ) : (
+                                <View style={styles.bubbleFileCardTrainer}>
+                                  <Ionicons name="document-text" size={18} color="#EA580C" />
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={styles.bubbleFileNameTrainer} numberOfLines={1}>
+                                      {msg.attachment.name}
+                                    </Text>
+                                    {!!msg.attachment.size && (
+                                      <Text style={styles.bubbleFileSizeTrainer}>
+                                        {formatFileSize(msg.attachment.size)}
+                                      </Text>
+                                    )}
+                                  </View>
+                                </View>
+                              )}
                             </View>
                           )}
-                        </View>
+                          {!!msg.text && msg.text !== '📷 Photo attached' && (
+                            <Text style={styles.trainerMessageText}>{msg.text}</Text>
+                          )}
+                        </>
                       )}
-                      {!!msg.text && msg.text !== '📷 Photo attached' && (
-                        <Text style={styles.trainerMessageText}>{msg.text}</Text>
-                      )}
-                      <Text style={styles.trainerMessageTime}>{msg.createdAt}</Text>
+                      <Text style={isVoice ? styles.trainerVoiceMessageTime : styles.trainerMessageTime}>{msg.createdAt}</Text>
                     </View>
                   </View>
                 );
@@ -746,7 +1018,7 @@ export const CustomerMessagesScreen: React.FC = () => {
           <View style={styles.recordingIndicatorBar}>
             <View style={styles.recordingPulseDot} />
             <Text style={styles.recordingTimerText}>Recording Voice Note: {recordingSeconds}s</Text>
-            <TouchableOpacity onPress={() => setIsRecording(false)} style={styles.recordingCancelBtn}>
+            <TouchableOpacity onPress={handleCancelRecording} style={styles.recordingCancelBtn}>
               <Text style={styles.recordingCancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -1220,6 +1492,89 @@ const styles = StyleSheet.create({
     color: '#FED7AA',
     alignSelf: 'flex-end',
     marginTop: 4,
+  },
+  myVoiceBubble: {
+    minWidth: 220,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  trainerVoiceBubble: {
+    minWidth: 220,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  voiceNoteInnerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  voicePlayBtnMine: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  voicePlayBtnTrainer: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#EA580C',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#EA580C',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  voiceWaveTrack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    height: 28,
+  },
+  voiceWaveBar: {
+    width: 3,
+    borderRadius: 2,
+  },
+  voiceDurationTextMine: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  voiceTagTextMine: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.85)',
+  },
+  voiceDurationTextTrainer: {
+    fontSize: 10.5,
+    fontWeight: '800',
+    color: '#111827',
+  },
+  voiceTagTextTrainer: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#EA580C',
+  },
+  myVoiceMessageTime: {
+    fontSize: 9,
+    color: '#FED7AA',
+    alignSelf: 'flex-end',
+    marginTop: 2,
+  },
+  trainerVoiceMessageTime: {
+    fontSize: 9,
+    color: '#94A3B8',
+    alignSelf: 'flex-end',
+    marginTop: 2,
   },
 
   /* Trainer Message */

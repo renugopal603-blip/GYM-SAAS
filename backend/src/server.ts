@@ -44,6 +44,7 @@ import performanceRoutes from './routes/performanceRoutes';
 import referralRoutes from './routes/referralRoutes';
 import hiringRoutes from './routes/hiringRoutes';
 import attendanceRoutes from './routes/attendanceRoutes';
+import gymExerciseVideoRoutes from './routes/gymExerciseVideoRoutes';
 
 dotenv.config();
 
@@ -177,6 +178,7 @@ app.use('/api/performance', performanceRoutes);
 app.use('/api/referrals', referralRoutes);
 app.use('/api/hiring', hiringRoutes);
 app.use('/api/attendance', attendanceRoutes);
+app.use('/api/gym-exercise-videos', gymExerciseVideoRoutes);
 
 app.get('/', (req, res) => {
   res.status(200).json({

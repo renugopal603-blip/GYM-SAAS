@@ -128,6 +128,11 @@ export const createExercise = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
+    if (!videoUrl || !String(videoUrl).trim()) {
+      res.status(400).json({ success: false, message: 'Demo Video / Animation URL is required' });
+      return;
+    }
+
     const exercise = new Exercise({
       gymId,
       gymOwnerId: user.id,

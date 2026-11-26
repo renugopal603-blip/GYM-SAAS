@@ -15,7 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../api/client';
-import { sanitizeTenDigitPhone, isValidTenDigitPhone } from '../../utils/phoneUtils';
+import { sanitizeTenDigitPhone, isValidTenDigitPhone, sanitizeSixDigitPinCode } from '../../utils/phoneUtils';
 
 export const OwnerDashboardScreen: React.FC<{ 
   onNavigateTab: (tab: string, sub?: string) => void;
@@ -59,6 +59,12 @@ export const OwnerDashboardScreen: React.FC<{
   const [newMemberPhone, setNewMemberPhone] = useState('');
   const [newMemberEmail, setNewMemberEmail] = useState('');
   const [newMemberPlan, setNewMemberPlan] = useState('Gold Annual');
+  const [newMemberGender, setNewMemberGender] = useState<'Male' | 'Female' | 'Other'>('Male');
+  const [newMemberDob, setNewMemberDob] = useState('');
+  const [newMemberCity, setNewMemberCity] = useState('');
+  const [newMemberPinCode, setNewMemberPinCode] = useState('');
+  const [newMemberHeight, setNewMemberHeight] = useState('');
+  const [newMemberWeight, setNewMemberWeight] = useState('');
   const [isSubmittingMember, setIsSubmittingMember] = useState(false);
 
   const [remindedList, setRemindedList] = useState<string[]>([]);
@@ -459,7 +465,13 @@ export const OwnerDashboardScreen: React.FC<{
         role: 'MEMBER',
         subscriptionPlan: newMemberPlan,
         gymId: user?.gymId,
-        branchId: user?.branchId
+        branchId: user?.branchId,
+        gender: newMemberGender,
+        dateOfBirth: newMemberDob || undefined,
+        height: newMemberHeight ? Number(newMemberHeight) : undefined,
+        weight: newMemberWeight ? Number(newMemberWeight) : undefined,
+        city: newMemberCity.trim() || undefined,
+        pinCode: newMemberPinCode.trim() || undefined,
       }).catch(() => null);
 
       const enrolledMember = {
@@ -475,6 +487,12 @@ export const OwnerDashboardScreen: React.FC<{
       setNewMemberName('');
       setNewMemberPhone('');
       setNewMemberEmail('');
+      setNewMemberGender('Male');
+      setNewMemberDob('');
+      setNewMemberCity('');
+      setNewMemberPinCode('');
+      setNewMemberHeight('');
+      setNewMemberWeight('');
       setAddMemberModalVisible(false);
 
       Alert.alert(
@@ -558,7 +576,6 @@ export const OwnerDashboardScreen: React.FC<{
               </View>
             </View>
             <Text style={styles.kpiValue}>{stats.totalMembers}</Text>
-            <Text style={styles.kpiTrendPositive}>Active database count →</Text>
           </TouchableOpacity>
 
           {/* 2. Active Trainers -> Trainers Screen */}
@@ -574,7 +591,6 @@ export const OwnerDashboardScreen: React.FC<{
               </View>
             </View>
             <Text style={styles.kpiValue}>{stats.activeTrainers}</Text>
-            <Text style={[styles.kpiTrendPositive, { color: '#15803D' }]}>Staff coaches →</Text>
           </TouchableOpacity>
 
           {/* 3. Pending Bookings -> Session Bookings Screen */}
@@ -590,7 +606,6 @@ export const OwnerDashboardScreen: React.FC<{
               </View>
             </View>
             <Text style={styles.kpiValue}>{stats.pendingBookings}</Text>
-            <Text style={[styles.kpiTrendPositive, { color: '#B45309' }]}>Awaiting confirmation →</Text>
           </TouchableOpacity>
 
           {/* 4. Store Revenue -> Sales History Screen */}
@@ -606,7 +621,6 @@ export const OwnerDashboardScreen: React.FC<{
               </View>
             </View>
             <Text style={styles.kpiValue}>₹{stats.monthlyRevenue.toLocaleString('en-IN')}</Text>
-            <Text style={styles.kpiTrendPositive}>View Sales History →</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -980,50 +994,126 @@ export const OwnerDashboardScreen: React.FC<{
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.inputLabel}>Full Name *</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="e.g. Ramesh Chandra"
-              placeholderTextColor={COLORS.textMuted}
-              value={newMemberName}
-              onChangeText={setNewMemberName}
-            />
+            <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
+              <Text style={styles.inputLabel}>Full Name *</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="e.g. Ramesh Chandra"
+                placeholderTextColor={COLORS.textMuted}
+                value={newMemberName}
+                onChangeText={setNewMemberName}
+              />
 
-            <Text style={styles.inputLabel}>Mobile Number *</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="e.g. 9876543210"
-              placeholderTextColor={COLORS.textMuted}
-              value={newMemberPhone}
-              onChangeText={(txt) => setNewMemberPhone(sanitizeTenDigitPhone(txt))}
-              keyboardType="number-pad"
-              maxLength={10}
-            />
+              <Text style={styles.inputLabel}>Mobile Number *</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="e.g. 9876543210"
+                placeholderTextColor={COLORS.textMuted}
+                value={newMemberPhone}
+                onChangeText={(txt) => setNewMemberPhone(sanitizeTenDigitPhone(txt))}
+                keyboardType="number-pad"
+                maxLength={10}
+              />
 
-            <Text style={styles.inputLabel}>Email (Optional)</Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="e.g. member@gmail.com"
-              placeholderTextColor={COLORS.textMuted}
-              value={newMemberEmail}
-              onChangeText={setNewMemberEmail}
-              keyboardType="email-address"
-            />
+              <Text style={styles.inputLabel}>Email (Optional)</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="e.g. member@gmail.com"
+                placeholderTextColor={COLORS.textMuted}
+                value={newMemberEmail}
+                onChangeText={setNewMemberEmail}
+                keyboardType="email-address"
+              />
 
-            <Text style={styles.inputLabel}>Select Membership Plan</Text>
-            <View style={styles.planSelectorRow}>
-              {['Gold Annual', 'Silver Quarterly', 'Monthly Pass'].map((plan) => (
-                <TouchableOpacity
-                  key={plan}
-                  style={[styles.planChip, newMemberPlan === plan && styles.planChipActive]}
-                  onPress={() => setNewMemberPlan(plan)}
-                >
-                  <Text style={[styles.planChipText, newMemberPlan === plan && styles.planChipTextActive]}>
-                    {plan}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+              <Text style={styles.inputLabel}>Select Membership Plan</Text>
+              <View style={styles.planSelectorRow}>
+                {['Gold Annual', 'Silver Quarterly', 'Monthly Pass'].map((plan) => (
+                  <TouchableOpacity
+                    key={plan}
+                    style={[styles.planChip, newMemberPlan === plan && styles.planChipActive]}
+                    onPress={() => setNewMemberPlan(plan)}
+                  >
+                    <Text style={[styles.planChipText, newMemberPlan === plan && styles.planChipTextActive]}>
+                      {plan}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.inputLabel}>Gender</Text>
+              <View style={styles.planSelectorRow}>
+                {(['Male', 'Female', 'Other'] as const).map((g) => (
+                  <TouchableOpacity
+                    key={g}
+                    style={[styles.planChip, newMemberGender === g && styles.planChipActive]}
+                    onPress={() => setNewMemberGender(g)}
+                  >
+                    <Text style={[styles.planChipText, newMemberGender === g && styles.planChipTextActive]}>
+                      {g}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.inputLabel}>Date of Birth (Optional)</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="YYYY-MM-DD (e.g. 1998-05-14)"
+                placeholderTextColor={COLORS.textMuted}
+                value={newMemberDob}
+                onChangeText={setNewMemberDob}
+              />
+
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.inputLabel}>City (Optional)</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="e.g. Chennai"
+                    placeholderTextColor={COLORS.textMuted}
+                    value={newMemberCity}
+                    onChangeText={setNewMemberCity}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.inputLabel}>PIN Code (Optional)</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="e.g. 600001"
+                    placeholderTextColor={COLORS.textMuted}
+                    value={newMemberPinCode}
+                    onChangeText={(txt) => setNewMemberPinCode(sanitizeSixDigitPinCode(txt))}
+                    keyboardType="number-pad"
+                    maxLength={6}
+                  />
+                </View>
+              </View>
+
+              <View style={{ flexDirection: 'row', gap: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.inputLabel}>Height cm (Optional)</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="e.g. 175"
+                    placeholderTextColor={COLORS.textMuted}
+                    value={newMemberHeight}
+                    onChangeText={setNewMemberHeight}
+                    keyboardType="numeric"
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.inputLabel}>Weight kg (Optional)</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="e.g. 72"
+                    placeholderTextColor={COLORS.textMuted}
+                    value={newMemberWeight}
+                    onChangeText={setNewMemberWeight}
+                    keyboardType="numeric"
+                  />
+                </View>
+              </View>
+            </ScrollView>
 
             <View style={styles.modalActions}>
               <TouchableOpacity 
@@ -1041,7 +1131,7 @@ export const OwnerDashboardScreen: React.FC<{
                 {isSubmittingMember ? (
                   <ActivityIndicator size="small" color={COLORS.white} />
                 ) : (
-                  <Text style={styles.modalSubmitText}>Save to Database</Text>
+                  <Text style={styles.modalSubmitText}>Save</Text>
                 )}
               </TouchableOpacity>
             </View>

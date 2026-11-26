@@ -1,16 +1,30 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../constants/theme';
 import { useAuth, UserRole } from '../context/AuthContext';
+import { subscribeUnreadCount, getGlobalUnreadCount } from '../services/notificationService';
 
 export const Header: React.FC<{ 
   title?: string; 
   subtitle?: string;
   onOpenNotifications?: () => void;
   onPressBrand?: () => void;
-}> = ({ title, subtitle, onOpenNotifications, onPressBrand }) => {
+  unreadCount?: number;
+}> = ({ title, subtitle, onOpenNotifications, onPressBrand, unreadCount: propUnreadCount }) => {
   const { user, activeRole, logout } = useAuth();
+  const [unreadCount, setUnreadCount] = useState<number>(propUnreadCount ?? getGlobalUnreadCount());
+
+  useEffect(() => {
+    if (propUnreadCount !== undefined) {
+      setUnreadCount(propUnreadCount);
+      return;
+    }
+    const unsubscribe = subscribeUnreadCount((count) => {
+      setUnreadCount(count);
+    });
+    return unsubscribe;
+  }, [propUnreadCount]);
 
   const getRoleLabel = (role: UserRole | null) => {
     switch (role) {
@@ -76,10 +90,20 @@ export const Header: React.FC<{
               style={styles.notifBtn}
               onPress={onOpenNotifications}
               activeOpacity={0.7}
-              accessibilityLabel="View notifications"
+              accessibilityLabel={`View notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
             >
               <Ionicons name="notifications-outline" size={16} color={COLORS.textDark} />
-              <View style={styles.notifDot} />
+              {unreadCount > 0 && (
+                unreadCount > 1 ? (
+                  <View style={styles.notifCountBadge}>
+                    <Text style={styles.notifBadgeText}>
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </Text>
+                  </View>
+                ) : (
+                  <View style={styles.notifDot} />
+                )
+              )}
             </TouchableOpacity>
           )}
 
@@ -199,9 +223,29 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 5,
     right: 5,
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: COLORS.primary,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: COLORS.rose,
+  },
+  notifCountBadge: {
+    position: 'absolute',
+    top: 1,
+    right: 1,
+    minWidth: 15,
+    height: 15,
+    borderRadius: 7.5,
+    backgroundColor: COLORS.rose,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+    borderWidth: 1.5,
+    borderColor: COLORS.white,
+  },
+  notifBadgeText: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: COLORS.white,
+    lineHeight: 10,
   },
 });

@@ -1,8 +1,19 @@
-﻿import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Clock, CheckCircle, XCircle, CreditCard, Banknote, Smartphone, ArrowRight, ChevronDown, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import api from '../../utils/api';
+import { 
+  isValidBankName, 
+  sanitizeBankName, 
+  isValidAccountNumber, 
+  sanitizeAccountNumber, 
+  isValidIfscCode, 
+  sanitizeIfscCode, 
+  isValidUtrNumber, 
+  sanitizeUtrNumber, 
+  isValidUpiId 
+} from '../../utils/validation';
 
 const defaultPayForm = {
   amount: '',
@@ -97,6 +108,48 @@ const GymAdminPendingTrainerPayments = () => {
       showToast('Amount and payment date are required', 'error');
       return;
     }
+
+    if (payForm.paymentMethod === 'Bank Transfer') {
+      const bName = (payForm.bankName || '').trim();
+      if (!bName) {
+        showToast('Please enter Bank Name', 'error');
+        return;
+      }
+      if (!isValidBankName(bName)) {
+        showToast('Bank Name must contain only uppercase letters and spaces (e.g. HDFC BANK, SBI, ICICI BANK)', 'error');
+        return;
+      }
+      const accNum = (payForm.accountNumber || '').trim();
+      if (!accNum || !isValidAccountNumber(accNum)) {
+        showToast('Bank account number must be between 10 and 19 digits', 'error');
+        return;
+      }
+      const ifsc = (payForm.ifscCode || '').trim().toUpperCase();
+      if (!ifsc || !isValidIfscCode(ifsc)) {
+        showToast('IFSC code must be 11 characters matching standard RBI format (e.g. HDFC0001234)', 'error');
+        return;
+      }
+    }
+
+    if (payForm.paymentMethod === 'UPI') {
+      const upi = (payForm.upiId || '').trim();
+      if (!upi || !isValidUpiId(upi)) {
+        showToast('Please enter a valid UPI ID (e.g. name@bank)', 'error');
+        return;
+      }
+    }
+
+    if (['Bank Transfer', 'UPI'].includes(payForm.paymentMethod)) {
+      const txId = (payForm.transactionId || '').trim();
+      if (!txId) {
+        showToast(`Please enter the ${payForm.paymentMethod === 'UPI' ? 'UPI Reference / UTR Number' : 'Bank UTR / Transaction ID'} to complete payment`, 'error');
+        return;
+      }
+      if (!isValidUtrNumber(txId)) {
+        showToast('Transaction Reference / UTR ID must be between 6 and 22 alphanumeric characters', 'error');
+        return;
+      }
+    }
     setSaving(true);
     try {
       await api.post('/trainer-payments/process', {
@@ -107,6 +160,11 @@ const GymAdminPendingTrainerPayments = () => {
         transactionId: payForm.transactionId,
         paymentDate: payForm.paymentDate,
         notes: payForm.notes,
+        bankName: payForm.bankName,
+        accountNumber: payForm.accountNumber,
+        ifscCode: payForm.ifscCode,
+        accountHolder: payForm.accountHolder,
+        upiId: payForm.upiId
       });
       showToast('Payment processed successfully!');
       setSelectedTrainer(null);
@@ -297,16 +355,16 @@ const GymAdminPendingTrainerPayments = () => {
                     <input type="text" value={payForm.accountHolder} onChange={e => setPayForm({ ...payForm, accountHolder: e.target.value })} className="w-full border border-[#F8FAFC] rounded-xl px-3 py-2 text-sm outline-none focus:border-[#FDBA74]" />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-[#64748B] mb-1">Bank Name</label>
-                    <input type="text" value={payForm.bankName} onChange={e => setPayForm({ ...payForm, bankName: e.target.value })} className="w-full border border-[#F8FAFC] rounded-xl px-3 py-2 text-sm outline-none focus:border-[#FDBA74]" />
+                    <label className="block text-xs font-semibold text-[#64748B] mb-1">Bank Name *</label>
+                    <input type="text" value={payForm.bankName} placeholder="e.g. HDFC BANK, SBI, ICICI" onChange={e => setPayForm({ ...payForm, bankName: sanitizeBankName(e.target.value) })} className="w-full border border-[#F8FAFC] rounded-xl px-3 py-2 text-sm outline-none focus:border-[#FDBA74] uppercase" />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-[#64748B] mb-1">Account Number</label>
-                    <input type="text" value={payForm.accountNumber} onChange={e => setPayForm({ ...payForm, accountNumber: e.target.value.replace(/\D/g, '').slice(0, 18) })} inputMode="numeric" maxLength={18} placeholder="9-18 digits" className="w-full border border-[#F8FAFC] rounded-xl px-3 py-2 text-sm outline-none focus:border-[#FDBA74] font-mono" />
+                    <label className="block text-xs font-semibold text-[#64748B] mb-1">Account Number *</label>
+                    <input type="text" value={payForm.accountNumber} onChange={e => setPayForm({ ...payForm, accountNumber: sanitizeAccountNumber(e.target.value) })} inputMode="numeric" maxLength={19} placeholder="10-19 digits" className="w-full border border-[#F8FAFC] rounded-xl px-3 py-2 text-sm outline-none focus:border-[#FDBA74] font-mono" />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-[#64748B] mb-1">IFSC Code</label>
-                    <input type="text" value={payForm.ifscCode} onChange={e => setPayForm({ ...payForm, ifscCode: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 11) })} maxLength={11} placeholder="11 chars (e.g. HDFC0001234)" className="w-full border border-[#F8FAFC] rounded-xl px-3 py-2 text-sm outline-none focus:border-[#FDBA74] uppercase font-mono" />
+                    <label className="block text-xs font-semibold text-[#64748B] mb-1">IFSC Code *</label>
+                    <input type="text" value={payForm.ifscCode} onChange={e => setPayForm({ ...payForm, ifscCode: sanitizeIfscCode(e.target.value) })} maxLength={11} placeholder="HDFC0001234" className="w-full border border-[#F8FAFC] rounded-xl px-3 py-2 text-sm outline-none focus:border-[#FDBA74] uppercase font-mono" />
                   </div>
                 </div>
               )}
@@ -315,8 +373,8 @@ const GymAdminPendingTrainerPayments = () => {
               {payForm.paymentMethod === 'UPI' && (
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-[#64748B] mb-1">UPI ID</label>
-                    <input type="text" value={payForm.upiId} onChange={e => setPayForm({ ...payForm, upiId: e.target.value })} placeholder="name@bank" className="w-full border border-[#F8FAFC] rounded-xl px-3 py-2 text-sm outline-none focus:border-[#FDBA74]" />
+                    <label className="block text-xs font-semibold text-[#64748B] mb-1">UPI ID *</label>
+                    <input type="text" value={payForm.upiId} onChange={e => setPayForm({ ...payForm, upiId: e.target.value.trim() })} placeholder="name@bank" className="w-full border border-[#F8FAFC] rounded-xl px-3 py-2 text-sm outline-none focus:border-[#FDBA74]" />
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-[#64748B] mb-1">Payment Name</label>
@@ -324,6 +382,19 @@ const GymAdminPendingTrainerPayments = () => {
                   </div>
                 </div>
               )}
+
+              {/* Digital Transaction Reference ID */}
+              <div>
+                <label className="block text-xs font-semibold text-[#64748B] mb-1">Bank UTR / Transaction Reference ID *</label>
+                <input
+                  type="text"
+                  value={payForm.transactionId}
+                  onChange={e => setPayForm({ ...payForm, transactionId: sanitizeUtrNumber(e.target.value) })}
+                  maxLength={22}
+                  placeholder="e.g. UTR202609298877"
+                  className="w-full border border-[#F8FAFC] rounded-xl px-3 py-2 text-sm outline-none focus:border-[#FDBA74] uppercase font-mono"
+                />
+              </div>
 
               {/* Common fields */}
               <div className="grid grid-cols-2 gap-3">

@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Percent, ArrowUpRight, CheckCircle, Clock,
   Search, Building2, Smartphone, Copy, Check, X,
@@ -9,6 +9,15 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useAuth } from '../../contexts/AuthContext';
 import api from '../../utils/api';
+import { 
+  isValidBankName, 
+  sanitizeBankName, 
+  isValidAccountNumber, 
+  sanitizeAccountNumber, 
+  isValidIfscCode, 
+  sanitizeIfscCode, 
+  isValidUpiId 
+} from '../../utils/validation';
 
 const GymAdminTrainerCommission = () => {
   const { user } = useAuth();
@@ -227,8 +236,20 @@ const GymAdminTrainerCommission = () => {
         showToast('Please fill in all bank account details', 'error');
         return;
       }
+      if (withdrawForm.bankName && !isValidBankName(withdrawForm.bankName)) {
+        showToast('Bank Name must contain only uppercase letters and spaces (e.g. HDFC BANK, SBI, ICICI BANK)', 'error');
+        return;
+      }
+      if (!isValidAccountNumber(withdrawForm.accountNumber)) {
+        showToast('Bank account number must be between 10 and 19 digits', 'error');
+        return;
+      }
+      if (!isValidIfscCode(withdrawForm.ifscCode)) {
+        showToast('IFSC code must be 11 characters matching standard RBI format (e.g. HDFC0001234)', 'error');
+        return;
+      }
     } else {
-      if (!withdrawForm.upiId.trim() || !withdrawForm.upiId.includes('@')) {
+      if (!withdrawForm.upiId.trim() || !isValidUpiId(withdrawForm.upiId)) {
         showToast('Please enter a valid UPI ID (e.g. name@okhdfcbank)', 'error');
         return;
       }
@@ -914,10 +935,10 @@ const GymAdminTrainerCommission = () => {
                       <label className="block text-[11px] font-bold text-[#64748B] mb-0.5">Bank Name</label>
                       <input
                         type="text"
-                        placeholder="e.g. HDFC Bank"
+                        placeholder="e.g. HDFC BANK, SBI"
                         value={withdrawForm.bankName}
-                        onChange={e => setWithdrawForm({ ...withdrawForm, bankName: e.target.value })}
-                        className="w-full px-3 py-1.5 border border-[#E2E8F0] rounded-lg text-xs font-medium focus:outline-none focus:border-[#FDBA74] bg-[#FFFFFF]"
+                        onChange={e => setWithdrawForm({ ...withdrawForm, bankName: sanitizeBankName(e.target.value) })}
+                        className="w-full px-3 py-1.5 border border-[#E2E8F0] rounded-lg text-xs font-medium focus:outline-none focus:border-[#FDBA74] bg-[#FFFFFF] uppercase"
                       />
                     </div>
                     <div>
@@ -925,10 +946,11 @@ const GymAdminTrainerCommission = () => {
                       <input
                         type="text"
                         required
+                        maxLength={11}
                         placeholder="HDFC0001234"
                         value={withdrawForm.ifscCode}
-                        onChange={e => setWithdrawForm({ ...withdrawForm, ifscCode: e.target.value.toUpperCase() })}
-                        className="w-full px-3 py-1.5 border border-[#E2E8F0] rounded-lg text-xs font-mono font-medium focus:outline-none focus:border-[#FDBA74] bg-[#FFFFFF]"
+                        onChange={e => setWithdrawForm({ ...withdrawForm, ifscCode: sanitizeIfscCode(e.target.value) })}
+                        className="w-full px-3 py-1.5 border border-[#E2E8F0] rounded-lg text-xs font-mono font-medium focus:outline-none focus:border-[#FDBA74] bg-[#FFFFFF] uppercase"
                       />
                     </div>
                   </div>
@@ -937,9 +959,10 @@ const GymAdminTrainerCommission = () => {
                     <input
                       type="text"
                       required
-                      placeholder="e.g. 5010023456789"
+                      maxLength={19}
+                      placeholder="10-19 digits"
                       value={withdrawForm.accountNumber}
-                      onChange={e => setWithdrawForm({ ...withdrawForm, accountNumber: e.target.value })}
+                      onChange={e => setWithdrawForm({ ...withdrawForm, accountNumber: sanitizeAccountNumber(e.target.value) })}
                       className="w-full px-3 py-1.5 border border-[#E2E8F0] rounded-lg text-xs font-mono font-medium focus:outline-none focus:border-[#FDBA74] bg-[#FFFFFF]"
                     />
                   </div>

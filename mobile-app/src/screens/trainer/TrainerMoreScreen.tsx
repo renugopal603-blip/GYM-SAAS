@@ -20,8 +20,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../constants/theme';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../api/client';
+import { setGlobalUnreadCount } from '../../services/notificationService';
 import { FileDownloader } from '../../utils/fileDownloader';
 import * as DocumentPicker from 'expo-document-picker';
+import {
+  playVoiceNote,
+  stopVoicePlayback,
+  isVoiceNoteMessage,
+  extractVoiceDuration,
+  getFallbackAudioUri,
+} from '../../services/voiceAudioService';
 import { TrainerEarningsScreen } from './TrainerEarningsScreen';
 import { TrainerProfileScreen } from './TrainerProfileScreen';
 import { 
@@ -708,22 +716,34 @@ export const TrainerMoreScreen: React.FC<{ initialSection?: TrainerMoreKey }> = 
                 const firstAtt = hasAtt ? m.attachments[0] : null;
                 const attUrl = firstAtt?.url || m.attachmentUrl;
                 const isImg = (firstAtt?.fileType === 'image') || (m.fileType === 'image') || (m.messageType === 'image') || (m.message === '📷 Photo attached');
+                const isVoice = isVoiceNoteMessage({
+                  text: m.message,
+                  messageType: m.messageType,
+                  attachments: m.attachments,
+                });
+                const voiceDuration = extractVoiceDuration({
+                  duration: m.duration,
+                  message: m.message,
+                  attachments: m.attachments,
+                });
 
                 const mappedAttachments = hasAtt
                   ? m.attachments.map((a: any) => ({
                       fileName: a.fileName || m.fileName || 'Attachment',
-                      fileType: a.fileType || m.fileType || (isImg ? 'image' : 'document'),
+                      fileType: a.fileType || m.fileType || (isImg ? 'image' : isVoice ? 'audio' : 'document'),
                       fileSize: a.fileSize || m.fileSize,
                       url: a.url || attUrl,
                       previewUrl: a.url || attUrl,
+                      duration: a.duration || voiceDuration,
                     }))
                   : (attUrl || isImg)
                   ? [{
-                      fileName: m.fileName || 'Photo.jpg',
+                      fileName: m.fileName || (isImg ? 'Photo.jpg' : 'Attachment'),
                       fileType: isImg ? 'image' : (m.fileType || 'document'),
                       fileSize: m.fileSize,
                       url: attUrl || 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=600',
                       previewUrl: attUrl || 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=600',
+                      duration: voiceDuration,
                     }]
                   : [];
 
@@ -734,10 +754,10 @@ export const TrainerMoreScreen: React.FC<{ initialSection?: TrainerMoreKey }> = 
                   message: m.message,
                   time: new Date(m.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }).toLowerCase(),
                   isOutgoing: isOut,
-                  messageType: m.messageType || (isImg ? 'image' : 'text'),
+                  messageType: isVoice ? 'voice' : (m.messageType || (isImg ? 'image' : 'text')),
                   attachments: mappedAttachments,
                   attachmentUrl: attUrl || (isImg ? (mappedAttachments[0]?.url || 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=600') : undefined),
-                  duration: m.duration,
+                  duration: voiceDuration,
                 };
               }));
             }
@@ -3308,13 +3328,27 @@ export const TrainerMoreScreen: React.FC<{ initialSection?: TrainerMoreKey }> = 
       }
     };
 
-    // Toggle voice playback
+    // Toggle voice playback with real audio
     const togglePlayVoice = (msgId: string) => {
       if (playingVoiceMsgId === msgId) {
+        stopVoicePlayback();
         setPlayingVoiceMsgId(null);
       } else {
+        const targetMsg = chatMessages.find((m: any) => (m._id || m.id) === msgId);
+        const audioUri = targetMsg?.attachments?.[0]?.url || targetMsg?.attachmentUrl;
         setPlayingVoiceMsgId(msgId);
-        setVoicePlaybackProgress(prev => ({ ...prev, [msgId]: 0 }));
+        setVoicePlaybackProgress((prev: any) => ({ ...prev, [msgId]: 0 }));
+        playVoiceNote(
+          msgId,
+          audioUri,
+          (sec) => {
+            setVoicePlaybackProgress((prev: any) => ({ ...prev, [msgId]: sec }));
+          },
+          () => {
+            setPlayingVoiceMsgId(null);
+            setVoicePlaybackProgress((prev: any) => ({ ...prev, [msgId]: 0 }));
+          }
+        );
       }
     };
 
@@ -3472,10 +3506,10 @@ export const TrainerMoreScreen: React.FC<{ initialSection?: TrainerMoreKey }> = 
             <View style={styles.chatMessagesThread}>
               {chatMessages.map((msg, index) => {
                 const isOutgoing = msg.isOutgoing || msg.senderName?.includes('You') || msg.senderId === user?._id;
-                const isVoice = msg.messageType === 'voice';
+                const isVoice = isVoiceNoteMessage(msg);
                 const isPlaying = playingVoiceMsgId === msg._id;
                 const playbackSec = voicePlaybackProgress[msg._id] || 0;
-                const totalDur = msg.duration || 6;
+                const totalDur = extractVoiceDuration(msg);
                 const attachments = msg.attachments || [];
 
                 return (
@@ -3813,27 +3847,35 @@ export const TrainerMoreScreen: React.FC<{ initialSection?: TrainerMoreKey }> = 
     );
   };
 
+  const handleTrainerMarkAllAsRead = async () => {
+    try {
+      setNotifications(prev => prev.map(n => ({ ...n, isRead: true, read: true })));
+      setGlobalUnreadCount(0);
+      await api.put('/notifications/mark-all-read').catch(() => api.patch('/notifications/mark-all-read'));
+    } catch (err) {
+      console.log('Failed to mark all read:', err);
+    }
+  };
+
   // 9. Notifications (100% Match of Web & User Modal Image)
   const renderNotifications = () => {
-    const unreadCount = notifications.filter(n => !n.isRead).length;
+    const unreadCount = notifications.filter(n => !(n.isRead || n.read)).length;
 
     const markAsRead = async (id: string) => {
       try {
-        setNotifications(prev => prev.map(n => n._id === id ? { ...n, isRead: true } : n));
+        setNotifications(prev => {
+          const updated = prev.map(n => n._id === id ? { ...n, isRead: true, read: true } : n);
+          const remaining = updated.filter(n => !(n.isRead || n.read)).length;
+          setGlobalUnreadCount(remaining);
+          return updated;
+        });
         await api.put(`/notifications/${id}/read`);
       } catch (err) {
         console.log('Failed to mark read:', err);
       }
     };
 
-    const markAllAsRead = async () => {
-      try {
-        setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-        await api.put('/notifications/mark-all-read');
-      } catch (err) {
-        console.log('Failed to mark all read:', err);
-      }
-    };
+    const markAllAsRead = handleTrainerMarkAllAsRead;
 
     const openNotification = (notif: any) => {
       if (!notif.isRead) {
@@ -3874,11 +3916,20 @@ export const TrainerMoreScreen: React.FC<{ initialSection?: TrainerMoreKey }> = 
               </View>
             </View>
 
-            {/* Unread Pill */}
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-start', alignItems: 'center', marginTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.15)', paddingTop: 10 }}>
+            {/* Unread Pill & Quick Mark All Read */}
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.15)', paddingTop: 10 }}>
               <View style={{ backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 }}>
                 <Text style={{ fontSize: 11, fontWeight: '800', color: '#FFFFFF' }}>{unreadCount} Unread</Text>
               </View>
+              <TouchableOpacity
+                onPress={handleTrainerMarkAllAsRead}
+                disabled={unreadCount === 0}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, opacity: unreadCount === 0 ? 0.5 : 1 }}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="checkmark-done" size={13} color="#FFFFFF" />
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#FFFFFF' }}>Mark all as read</Text>
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -5020,7 +5071,33 @@ export const TrainerMoreScreen: React.FC<{ initialSection?: TrainerMoreKey }> = 
             <Text style={styles.backBtnText}>{activeSection === 'notifications' ? 'Close' : 'More'}</Text>
           </TouchableOpacity>
           <Text style={styles.subNavTitle} numberOfLines={1}>{activeMod?.title}</Text>
-          <View style={{ width: 60 }} />
+          {activeSection === 'notifications' ? (
+            <TouchableOpacity 
+              style={[
+                styles.markAllReadHeaderBtn,
+                notifications.filter(n => !(n.isRead || n.read)).length === 0 && styles.markAllReadHeaderBtnDisabled,
+              ]}
+              onPress={handleTrainerMarkAllAsRead}
+              activeOpacity={0.7}
+              disabled={notifications.filter(n => !(n.isRead || n.read)).length === 0}
+              accessibilityLabel="Mark all notifications as read"
+              accessibilityRole="button"
+            >
+              <Ionicons 
+                name="checkmark-done" 
+                size={14} 
+                color={notifications.filter(n => !(n.isRead || n.read)).length > 0 ? '#EA580C' : '#94A3B8'} 
+              />
+              <Text style={[
+                styles.markAllReadHeaderBtnText,
+                notifications.filter(n => !(n.isRead || n.read)).length === 0 && styles.markAllReadHeaderBtnDisabledText,
+              ]}>
+                Mark all as read
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={{ width: 60 }} />
+          )}
         </View>
 
         {activeSection === 'profile' && renderProfile()}
@@ -5156,6 +5233,29 @@ const styles = StyleSheet.create({
   backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, width: 80 },
   backBtnText: { fontSize: 13, fontWeight: '700', color: COLORS.textDark },
   subNavTitle: { fontSize: 14, fontWeight: '800', color: COLORS.textDark, flex: 1, textAlign: 'center' },
+  markAllReadHeaderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    backgroundColor: '#FFF7ED',
+    borderWidth: 1,
+    borderColor: '#FFEDD5',
+  },
+  markAllReadHeaderBtnDisabled: {
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E2E8F0',
+  },
+  markAllReadHeaderBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#EA580C',
+  },
+  markAllReadHeaderBtnDisabledText: {
+    color: '#94A3B8',
+  },
   subScroll: { flex: 1 },
   subScrollContent: { padding: 14, paddingBottom: 110 },
   card: {
