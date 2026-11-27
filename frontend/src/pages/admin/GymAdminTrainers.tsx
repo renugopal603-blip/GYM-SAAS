@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import {
   Plus, Trash2, CheckCircle, Eye, EyeOff, X, Mail, UserPlus, Check, PauseCircle,
   Clock, Ban, ShieldCheck, Edit, Phone, Calendar, Dumbbell, Award, Briefcase,
-  GraduationCap, Sparkles, IndianRupee, Activity, Lock, ChevronDown
+  GraduationCap, Sparkles, IndianRupee, Activity, Lock, ChevronDown, Search, Filter, RotateCcw
 } from 'lucide-react';
 import api, { getAssetUrl } from '../../utils/api';
 import TrainerNavigationTabs from '../../components/GymAdmin/TrainerNavigationTabs';
@@ -32,6 +32,12 @@ const GymAdminTrainers = () => {
   
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // Search & Filter state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterSpecialization, setFilterSpecialization] = useState('All');
+  const [filterMode, setFilterMode] = useState('All');
+  const [filterStatus, setFilterStatus] = useState('All');
 
   const [manualNameError, setManualNameError] = useState('');
   const [inviteNameError, setInviteNameError] = useState('');
@@ -350,6 +356,87 @@ const GymAdminTrainers = () => {
     }
   };
 
+  // Collect unique specializations from trainers
+  const uniqueSpecializations = useMemo(() => {
+    const set = new Set<string>();
+    trainers.forEach(t => {
+      if (t.specialization) set.add(t.specialization);
+    });
+    return Array.from(set);
+  }, [trainers]);
+
+  // Filtered trainers and invitations
+  const filteredTrainers = useMemo(() => {
+    return trainers.filter(t => {
+      const q = searchQuery.toLowerCase().trim();
+      const matchesSearch = !q || (
+        (t.name && t.name.toLowerCase().includes(q)) ||
+        (t.trainerId && t.trainerId.toLowerCase().includes(q)) ||
+        (t.email && t.email.toLowerCase().includes(q)) ||
+        (t.phone && t.phone.toLowerCase().includes(q))
+      );
+      if (!matchesSearch) return false;
+
+      if (filterSpecialization !== 'All') {
+        if ((t.specialization || 'General') !== filterSpecialization) return false;
+      }
+
+      if (filterMode !== 'All') {
+        const mode = (t.trainingMode || 'offline').toLowerCase();
+        if (filterMode.toLowerCase() !== mode) return false;
+      }
+
+      if (filterStatus !== 'All') {
+        if (filterStatus === 'Invite Pending') return false; // Handled in invitations
+        const status = t.status || 'Active';
+        if (filterStatus === 'Inactive' && (status === 'Inactive' || status === 'Suspended')) {
+          // matches
+        } else if (filterStatus !== status) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [trainers, searchQuery, filterSpecialization, filterMode, filterStatus]);
+
+  const filteredInvitations = useMemo(() => {
+    // If filterStatus is Active or Inactive, hide invite pending
+    if (filterStatus === 'Active' || filterStatus === 'Inactive') return [];
+
+    return invitations.filter(inv => {
+      const q = searchQuery.toLowerCase().trim();
+      const matchesSearch = !q || (
+        (inv.trainerName && inv.trainerName.toLowerCase().includes(q)) ||
+        (inv.email && inv.email.toLowerCase().includes(q)) ||
+        (inv.phone && inv.phone.toLowerCase().includes(q))
+      );
+      if (!matchesSearch) return false;
+
+      if (filterSpecialization !== 'All') {
+        // Invitations typically don't have specialization or have '-'
+        if (filterSpecialization !== '-') return false;
+      }
+
+      if (filterMode !== 'All') {
+        const mode = (inv.trainingMode || 'offline').toLowerCase();
+        if (filterMode.toLowerCase() !== mode) return false;
+      }
+
+      // If filterStatus === 'Invite Pending' or 'All', it passes
+      return true;
+    });
+  }, [invitations, searchQuery, filterSpecialization, filterMode, filterStatus]);
+
+  const hasActiveFilters = searchQuery !== '' || filterSpecialization !== 'All' || filterMode !== 'All' || filterStatus !== 'All';
+
+  const clearFilters = () => {
+    setSearchQuery('');
+    setFilterSpecialization('All');
+    setFilterMode('All');
+    setFilterStatus('All');
+  };
+
   return (
     <div className="space-y-6">
       <TrainerNavigationTabs />
@@ -375,6 +462,91 @@ const GymAdminTrainers = () => {
         </button>
       </div>
 
+      {/* Search and Filters Bar */}
+      <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-4 shadow-xs space-y-3">
+        <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+          {/* Search Input */}
+          <div className="relative flex-1 min-w-[240px]">
+            <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#64748B]" />
+            <input
+              type="text"
+              placeholder="Search by Name, Trainer ID, Email, or Mobile Number..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-xs sm:text-sm text-[#111827] placeholder-[#64748B] focus:outline-none focus:border-[#EA580C] focus:bg-[#FFFFFF] transition-colors"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#111827]"
+              >
+                <X size={15} />
+              </button>
+            )}
+          </div>
+
+          {/* Filters Row */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Specialization Filter */}
+            <div className="flex items-center space-x-1.5">
+              <span className="text-xs font-semibold text-[#64748B] hidden sm:inline">Specialization:</span>
+              <select
+                value={filterSpecialization}
+                onChange={(e) => setFilterSpecialization(e.target.value)}
+                className="px-3 py-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-xs font-semibold text-[#111827] focus:outline-none focus:border-[#EA580C] cursor-pointer"
+              >
+                <option value="All">All Specializations</option>
+                {uniqueSpecializations.map((spec) => (
+                  <option key={spec} value={spec}>{spec}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Mode Filter */}
+            <div className="flex items-center space-x-1.5">
+              <span className="text-xs font-semibold text-[#64748B] hidden sm:inline">Mode:</span>
+              <select
+                value={filterMode}
+                onChange={(e) => setFilterMode(e.target.value)}
+                className="px-3 py-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-xs font-semibold text-[#111827] focus:outline-none focus:border-[#EA580C] cursor-pointer"
+              >
+                <option value="All">All Modes</option>
+                <option value="offline">Offline</option>
+                <option value="online">Online</option>
+                <option value="both">Both</option>
+              </select>
+            </div>
+
+            {/* Status Filter: Active, Inactive, and Invite Pending */}
+            <div className="flex items-center space-x-1.5">
+              <span className="text-xs font-semibold text-[#64748B] hidden sm:inline">Status:</span>
+              <select
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="px-3 py-2 bg-[#F8FAFC] border border-[#CBD5E1] rounded-xl text-xs font-semibold text-[#111827] focus:outline-none focus:border-[#EA580C] cursor-pointer"
+              >
+                <option value="All">All Statuses</option>
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+                <option value="Invite Pending">Invite Pending</option>
+              </select>
+            </div>
+
+            {/* Clear Filters Button */}
+            {hasActiveFilters && (
+              <button
+                onClick={clearFilters}
+                className="flex items-center space-x-1 px-3 py-2 bg-[#FFF7ED] text-[#EA580C] hover:bg-[#FFEDD5] border border-[#FFEDD5] rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                title="Clear all filters"
+              >
+                <RotateCcw size={13} />
+                <span>Clear Filters</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
       <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl overflow-x-auto shadow-xs custom-scrollbar">
         <table className="w-full min-w-[700px] text-left text-sm text-[#64748B]">
           <thead className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[#111827]">
@@ -391,12 +563,12 @@ const GymAdminTrainers = () => {
           <tbody className="divide-y divide-[#E2E8F0]">
             {isLoading ? (
               <tr><td colSpan={7} className="px-6 py-8 text-center">Loading trainers...</td></tr>
-            ) : trainers.length === 0 && invitations.length === 0 ? (
-              <tr><td colSpan={7} className="px-6 py-8 text-center">No trainers found. Hire a trainer to get started.</td></tr>
+            ) : filteredTrainers.length === 0 && filteredInvitations.length === 0 ? (
+              <tr><td colSpan={7} className="px-6 py-8 text-center text-[#64748B]">{hasActiveFilters ? 'No trainers match your search or filter criteria.' : 'No trainers found. Hire a trainer to get started.'}</td></tr>
             ) : (
               <>
                 {/* Active/Suspended/Pending Profiles */}
-                {trainers.map((trainer, idx) => (
+                {filteredTrainers.map((trainer, idx) => (
                   <tr key={trainer._id} className="hover:bg-[#FFF7ED] transition-colors">
                     <td className="px-4 py-4 text-center font-medium text-[#64748B] w-14">
                       {idx + 1}
@@ -479,10 +651,10 @@ const GymAdminTrainers = () => {
                 ))}
                 
                 {/* Pending Invitations */}
-                {invitations.map((invite, i) => (
+                {filteredInvitations.map((invite, i) => (
                   <tr key={invite._id} className="bg-[#FFF7ED] hover:bg-[#FFF7ED] transition-colors opacity-70">
                     <td className="px-4 py-4 text-center font-medium text-[#64748B] w-14">
-                      {trainers.length + i + 1}
+                      {filteredTrainers.length + i + 1}
                     </td>
                     <td className="px-6 py-4">
                       <div className="font-bold text-[#111827]">{invite.trainerName} <span className="text-xs font-normal ml-2 bg-[#F8FAFC] text-[#EA580C] px-2 py-0.5 rounded-full">Invited</span></div>

@@ -298,6 +298,7 @@ const GymAdminDashboard = () => {
           <table className="w-full text-left text-sm text-[#64748B] whitespace-nowrap">
             <thead className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[#64748B] text-xs">
               <tr>
+                <th className="px-4 py-3 font-semibold w-14 text-center">S.No</th>
                 <th className="px-4 py-3 font-semibold">Member</th>
                 <th className="px-4 py-3 font-semibold">Assigned Trainer</th>
                 <th className="px-4 py-3 font-semibold">Date &amp; Schedule</th>
@@ -309,12 +310,12 @@ const GymAdminDashboard = () => {
             <tbody className="divide-y divide-[#E2E8F0] text-xs">
               {recentSessions.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-[#64748B]">
+                  <td colSpan={7} className="px-4 py-8 text-center text-[#64748B]">
                     No session bookings or checkouts recorded yet.
                   </td>
                 </tr>
               ) : (
-                recentSessions.slice(0, 6).map((session: any) => {
+                recentSessions.slice(0, 6).map((session: any, index: number) => {
                   const cName = session.customerId
                     ? `${session.customerId.firstName} ${session.customerId.lastName || ''}`.trim()
                     : 'Member';
@@ -324,6 +325,9 @@ const GymAdminDashboard = () => {
                   
                   return (
                     <tr key={session._id} className="hover:bg-[#FFF7ED] transition-colors">
+                      <td className="px-4 py-3 text-center font-bold text-xs text-[#64748B]">
+                        {index + 1}
+                      </td>
                       <td className="px-4 py-3 font-semibold text-[#111827]">
                         <div className="flex items-center gap-2.5">
                           <div className="w-7 h-7 rounded-full bg-[#FFF7ED] text-[#EA580C] border border-[#FFEDD5] flex items-center justify-center font-bold text-xs shrink-0">

@@ -72,15 +72,23 @@ export const generateRecommendation = async (req: any, res: any) => {
     }
 
     const computedAgeFromDob = (() => {
-      if (!userDoc?.dateOfBirth) return undefined;
-      const diffMs = Date.now() - new Date(userDoc.dateOfBirth).getTime();
-      return String(Math.max(14, Math.abs(new Date(diffMs).getUTCFullYear() - 1970)));
+      const dobVal = rawProfile.dateOfBirth || userDoc?.dateOfBirth;
+      if (!dobVal) return undefined;
+      const dob = new Date(dobVal);
+      if (isNaN(dob.getTime())) return undefined;
+      const diffMs = Date.now() - dob.getTime();
+      const age = Math.floor(diffMs / (365.25 * 24 * 60 * 60 * 1000));
+      return age > 0 ? String(age) : undefined;
     })();
+
+    const resolvedAge = rawProfile.age && String(rawProfile.age).trim() !== '' 
+      ? String(rawProfile.age).trim() 
+      : computedAgeFromDob;
 
     const fitnessProfile = {
       ...rawProfile,
       fullName: rawProfile.fullName || `${userDoc?.firstName || ''} ${userDoc?.lastName || ''}`.trim() || 'Member',
-      age: rawProfile.age || computedAgeFromDob || '28',
+      age: resolvedAge || undefined,
       gender: rawProfile.gender || userDoc?.gender || 'Not specified',
       height: rawProfile.height || userDoc?.height || 170,
       weight: rawProfile.weight || userDoc?.weight || 70,
@@ -94,6 +102,10 @@ export const generateRecommendation = async (req: any, res: any) => {
 
     // Sync updated customer registered details to User profile safely (validating enums)
     if (userDoc) {
+      if (fitnessProfile.dateOfBirth) {
+        const d = new Date(fitnessProfile.dateOfBirth);
+        if (!isNaN(d.getTime())) userDoc.dateOfBirth = d;
+      }
       if (fitnessProfile.height && !isNaN(Number(fitnessProfile.height))) userDoc.height = Number(fitnessProfile.height);
       if (fitnessProfile.weight && !isNaN(Number(fitnessProfile.weight))) userDoc.weight = Number(fitnessProfile.weight);
       if (fitnessProfile.fitnessGoal) userDoc.fitnessGoal = String(fitnessProfile.fitnessGoal);

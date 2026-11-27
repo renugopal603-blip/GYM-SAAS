@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Search, Loader2, AlertCircle, Phone, Mail, Building2, Eye, Edit2, X, Check, Users, Clock, CheckCircle, XCircle, ShieldAlert, Trash2, Download, FileText, Table as TableIcon, Star, Plus, MapPin, CreditCard, Dumbbell, Zap, Crown, Leaf, TrendingUp, Cpu, Activity, Target } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { Search, Loader2, AlertCircle, Phone, Mail, Building2, Eye, Edit2, X, Check, Users, Clock, CheckCircle, XCircle, ShieldAlert, Trash2, Download, FileText, Table as TableIcon, Star, Plus, MapPin, CreditCard, Dumbbell, Zap, Crown, Leaf, TrendingUp, Cpu, Activity, Target, MoreVertical } from 'lucide-react';
 import api from '../../utils/api';
 import { exportToPDF, exportToExcel, exportToWord } from '../../utils/export';
 
@@ -182,11 +183,25 @@ const formatDate = (dateInput?: string | Date | null): string => {
 };
 
 const SuperAdminGymOwners = () => {
+  const [searchParams] = useSearchParams();
   const [owners, setOwners] = useState<GymOwner[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState('ALL');
+  const [activeTab, setActiveTab] = useState(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam && ['ALL', 'PENDING', 'APPROVED', 'REJECTED', 'SUSPENDED'].includes(tabParam.toUpperCase())) {
+      return tabParam.toUpperCase();
+    }
+    return 'ALL';
+  });
+
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam && ['ALL', 'PENDING', 'APPROVED', 'REJECTED', 'SUSPENDED'].includes(tabParam.toUpperCase())) {
+      setActiveTab(tabParam.toUpperCase());
+    }
+  }, [searchParams]);
   const [statusUpdating, setStatusUpdating] = useState<string | null>(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
 
@@ -197,6 +212,24 @@ const SuperAdminGymOwners = () => {
   const [viewSubscription, setViewSubscription] = useState<GymOwner | null>(null);
   const [editForm, setEditForm] = useState<any>({});
   const [isSaving, setIsSaving] = useState(false);
+
+  // Actions menu, Branches popup, and Confirmation dialog states
+  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+  const [branchesModalOwner, setBranchesModalOwner] = useState<GymOwner | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{
+    id: string;
+    type: string;
+    title: string;
+    message: string;
+    confirmText: string;
+    confirmColor: string;
+  } | null>(null);
+
+  useEffect(() => {
+    const handleGlobalClick = () => setOpenActionMenuId(null);
+    window.addEventListener('click', handleGlobalClick);
+    return () => window.removeEventListener('click', handleGlobalClick);
+  }, []);
 
   // Edit form auxiliary inputs
   const [newServiceInput, setNewServiceInput] = useState('');
@@ -840,45 +873,18 @@ const SuperAdminGymOwners = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="px-5 py-3.5">
-                      <div className="space-y-1">
-                        <button
-                          type="button"
-                          onClick={() => setViewOwner(owner)}
-                          className="flex items-center gap-1.5 font-bold text-xs text-[#111827] hover:text-[#EA580C] transition-colors cursor-pointer group text-left"
-                          title="Click to view owner profile & all branches"
-                        >
-                          <Building2 size={14} className="text-[#EA580C] group-hover:scale-110 transition-transform" />
-                          <span className="underline underline-offset-2 decoration-[#F97316]/40 group-hover:decoration-[#F97316]">
-                            {owner.branches?.length || 0} {owner.branches?.length === 1 ? 'Branch' : 'Branches'}
-                          </span>
-                        </button>
-                        {owner.branches && owner.branches.length > 0 ? (
-                          <div className="flex flex-col gap-1 max-w-[170px]">
-                            {owner.branches.map((b: any, bIdx: number) => (
-                              <button
-                                key={b._id || bIdx}
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setViewBranch({
-                                    ...b,
-                                    ownerName: `${owner.firstName} ${owner.lastName}`,
-                                    gymName: owner.gymId?.name
-                                  });
-                                }}
-                                className="inline-flex items-center gap-1.5 text-[11px] font-semibold bg-[#F8FAFC] border border-[#F8FAFC] text-[#EA580C] px-2.5 py-1 rounded-lg hover:bg-[#C2410C] hover:text-[#FFFFFF] font-bold transition-all cursor-pointer shadow-2xs group text-left w-fit active:scale-95"
-                                title={`Click to view full details for branch ${b.branchName}`}
-                              >
-                                <span className="w-1.5 h-1.5 rounded-full bg-[#C2410C] group-hover:bg-[#FFFFFF] shrink-0"></span>
-                                <span className="truncate max-w-[120px]">{b.branchName}</span>
-                              </button>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-[#64748B] italic">1 Main Location</span>
-                        )}
-                      </div>
+                    <td className="px-5 py-3.5 whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={() => setBranchesModalOwner(owner)}
+                        className="inline-flex items-center gap-1.5 font-bold text-xs text-[#EA580C] hover:text-[#C2410C] bg-[#FFF7ED] hover:bg-[#FFEDD5] border border-[#FFEDD5] px-3 py-1.5 rounded-xl transition-all cursor-pointer shadow-2xs group active:scale-95"
+                        title="Click to view all branch details"
+                      >
+                        <Building2 size={14} className="text-[#EA580C] group-hover:scale-110 transition-transform" />
+                        <span>
+                          {owner.branches?.length || 0} {owner.branches?.length === 1 ? 'Branch' : 'Branches'}
+                        </span>
+                      </button>
                     </td>
                     <td className="px-5 py-3.5">
                       <div className="space-y-1">
@@ -923,82 +929,175 @@ const SuperAdminGymOwners = () => {
                         {owner.approvalStatus}
                       </span>
                     </td>
-                    <td className="px-5 py-3.5">
-                      <div className="flex flex-col items-center gap-2">
-                        {/* Quick Actions based on status - Fixed width to prevent shifting */}
-                        <div className="flex items-center gap-1 border-t border-[#F8FAFC] pt-1.5">
-                          {owner.approvalStatus !== 'APPROVED' && (
-                            <button 
-                              onClick={() => handleStatusChange(owner._id, 'APPROVED')}
-                              disabled={statusUpdating === owner._id}
-                              className="p-1 text-green-500 hover:bg-green-500/10 rounded-md transition-colors disabled:opacity-50"
-                              title="Approve"
-                            >
-                              <CheckCircle size={18} />
-                            </button>
-                          )}
-                          
-                          {owner.approvalStatus !== 'PENDING' && (
-                            <button 
-                              onClick={() => handleStatusChange(owner._id, 'PENDING')}
-                              disabled={statusUpdating === owner._id}
-                              className="p-1 text-yellow-500 hover:bg-yellow-500/10 rounded-md transition-colors disabled:opacity-50"
-                              title="Mark as Pending"
-                            >
-                              <Clock size={18} />
-                            </button>
-                          )}
+                    <td className="px-5 py-3.5 whitespace-nowrap">
+                      <div className="flex items-center gap-1.5">
+                        {/* Direct View Button */}
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            setViewOwner(owner);
+                            const gymId = owner.gymId?._id || owner.gymId;
+                            if (gymId) fetchOwnerPackages(String(gymId));
+                            else setOwnerPackages([]);
+                          }}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-[#EA580C] bg-[#FFF7ED] hover:bg-[#FFEDD5] border border-[#FFEDD5] rounded-lg transition-colors cursor-pointer shadow-2xs"
+                          title="View Details"
+                        >
+                          <Eye size={13} />
+                          <span>View</span>
+                        </button>
 
-                          {owner.approvalStatus !== 'REJECTED' && (
-                            <button 
-                              onClick={() => handleStatusChange(owner._id, 'REJECTED')}
-                              disabled={statusUpdating === owner._id}
-                              className="p-1 text-[#9A3412] hover:bg-red-500/10 rounded-md transition-colors disabled:opacity-50"
-                              title="Reject"
-                            >
-                              <XCircle size={18} />
-                            </button>
-                          )}
-                          
-                          {owner.approvalStatus !== 'SUSPENDED' && (
-                            <button 
-                              onClick={() => handleStatusChange(owner._id, 'SUSPENDED')}
-                              disabled={statusUpdating === owner._id}
-                              className="p-1 text-[#EA580C] hover:bg-[#FFF7ED] rounded-md transition-colors disabled:opacity-50"
-                              title="Suspend"
-                            >
-                              <ShieldAlert size={18} />
-                            </button>
-                          )}
-                        </div>
+                        {/* Direct Edit Button */}
+                        <button 
+                          type="button"
+                          onClick={() => handleEditClick(owner)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-[#111827] bg-[#F8FAFC] hover:bg-[#E2E8F0] border border-[#E2E8F0] rounded-lg transition-colors cursor-pointer shadow-2xs"
+                          title="Edit Owner Details"
+                        >
+                          <Edit2 size={13} />
+                          <span>Edit</span>
+                        </button>
 
-                        {/* View, Edit, Delete buttons */}
-                        <div className="flex items-center gap-1">
-                          <button 
-                            onClick={() => {
-                              setViewOwner(owner);
-                              const gymId = owner.gymId?._id || owner.gymId;
-                              if (gymId) fetchOwnerPackages(String(gymId));
-                              else setOwnerPackages([]);
+                        {/* Three-Dot Menu for Status Actions & Delete */}
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenActionMenuId(openActionMenuId === owner._id ? null : owner._id);
                             }}
-                            className="p-1.5 text-[#EA580C] bg-[#F8FAFC] hover:bg-[#FFF7ED] rounded-lg transition-colors cursor-pointer" title="View Details"
+                            className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+                              openActionMenuId === owner._id 
+                                ? 'bg-[#FFF7ED] text-[#EA580C] border-[#FFEDD5]' 
+                                : 'text-[#64748B] hover:text-[#111827] hover:bg-[#F1F5F9] border-transparent hover:border-[#E2E8F0]'
+                            }`}
+                            title="More Actions"
                           >
-                            <Eye size={16} />
+                            <MoreVertical size={16} />
                           </button>
-                          <button 
-                            onClick={() => handleEditClick(owner)}
-                            className="p-1.5 text-[#EA580C] bg-[#F8FAFC] hover:bg-[#FFF7ED] rounded-lg transition-colors"
-                            title="Edit Owner Details"
-                          >
-                            <Edit2 size={16} />
-                          </button>
-                          <button 
-                            onClick={() => handleDelete(owner._id)}
-                            className="p-1.5 text-[#64748B] hover:text-rose-600 hover:bg-red-50 rounded-md transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+
+                          {/* Dropdown Menu */}
+                          {openActionMenuId === owner._id && (
+                            <div 
+                              onClick={(e) => e.stopPropagation()}
+                              className="absolute right-0 top-full mt-1 w-48 bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl shadow-xl z-30 py-1 text-xs animate-in fade-in zoom-in-95 duration-100 divide-y divide-[#F1F5F9]"
+                            >
+                              <div className="py-1">
+                                <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-[#94A3B8]">
+                                  Status Controls
+                                </div>
+                                {owner.approvalStatus !== 'APPROVED' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenActionMenuId(null);
+                                      setConfirmAction({
+                                        id: owner._id,
+                                        type: 'APPROVED',
+                                        title: 'Approve Gym Owner',
+                                        message: `Are you sure you want to approve ${owner.firstName} ${owner.lastName} (${owner.gymId?.name || 'Gym'})? This will grant the gym owner full active platform access.`,
+                                        confirmText: 'Approve Owner',
+                                        confirmColor: 'bg-emerald-600 hover:bg-emerald-700'
+                                      });
+                                    }}
+                                    className="w-full flex items-center gap-2 px-3 py-1.5 text-left font-medium text-emerald-700 hover:bg-emerald-50 transition-colors cursor-pointer"
+                                    title="Approve gym owner registration"
+                                  >
+                                    <CheckCircle size={14} className="text-emerald-600 shrink-0" />
+                                    <span>Approve</span>
+                                  </button>
+                                )}
+
+                                {owner.approvalStatus !== 'PENDING' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenActionMenuId(null);
+                                      setConfirmAction({
+                                        id: owner._id,
+                                        type: 'PENDING',
+                                        title: 'Mark as Pending',
+                                        message: `Are you sure you want to revert status to Pending for ${owner.firstName} ${owner.lastName}?`,
+                                        confirmText: 'Mark as Pending',
+                                        confirmColor: 'bg-amber-600 hover:bg-amber-700'
+                                      });
+                                    }}
+                                    className="w-full flex items-center gap-2 px-3 py-1.5 text-left font-medium text-amber-700 hover:bg-amber-50 transition-colors cursor-pointer"
+                                    title="Change status to pending review"
+                                  >
+                                    <Clock size={14} className="text-amber-600 shrink-0" />
+                                    <span>Mark as Pending</span>
+                                  </button>
+                                )}
+
+                                {owner.approvalStatus !== 'SUSPENDED' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenActionMenuId(null);
+                                      setConfirmAction({
+                                        id: owner._id,
+                                        type: 'SUSPENDED',
+                                        title: 'Suspend Gym Owner',
+                                        message: `Are you sure you want to suspend ${owner.firstName} ${owner.lastName}? Access to gym management features will be temporarily locked.`,
+                                        confirmText: 'Suspend Access',
+                                        confirmColor: 'bg-orange-600 hover:bg-orange-700'
+                                      });
+                                    }}
+                                    className="w-full flex items-center gap-2 px-3 py-1.5 text-left font-medium text-orange-700 hover:bg-orange-50 transition-colors cursor-pointer"
+                                    title="Suspend gym owner access"
+                                  >
+                                    <ShieldAlert size={14} className="text-orange-600 shrink-0" />
+                                    <span>Suspend</span>
+                                  </button>
+                                )}
+
+                                {owner.approvalStatus !== 'REJECTED' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenActionMenuId(null);
+                                      setConfirmAction({
+                                        id: owner._id,
+                                        type: 'REJECTED',
+                                        title: 'Reject Gym Owner',
+                                        message: `Are you sure you want to reject ${owner.firstName} ${owner.lastName}?`,
+                                        confirmText: 'Reject Registration',
+                                        confirmColor: 'bg-red-600 hover:bg-red-700'
+                                      });
+                                    }}
+                                    className="w-full flex items-center gap-2 px-3 py-1.5 text-left font-medium text-red-700 hover:bg-red-50 transition-colors cursor-pointer"
+                                    title="Reject gym owner registration"
+                                  >
+                                    <XCircle size={14} className="text-red-600 shrink-0" />
+                                    <span>Reject</span>
+                                  </button>
+                                )}
+                              </div>
+
+                              <div className="py-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setOpenActionMenuId(null);
+                                    setConfirmAction({
+                                      id: owner._id,
+                                      type: 'DELETE',
+                                      title: 'Delete Gym Owner',
+                                      message: `Are you sure you want to permanently delete ${owner.firstName} ${owner.lastName}? This operation cannot be undone.`,
+                                      confirmText: 'Delete Permanently',
+                                      confirmColor: 'bg-red-600 hover:bg-red-700'
+                                    });
+                                  }}
+                                  className="w-full flex items-center gap-2 px-3 py-1.5 text-left font-medium text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                                  title="Permanently remove gym owner"
+                                >
+                                  <Trash2 size={14} className="text-red-500 shrink-0" />
+                                  <span>Delete</span>
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -1009,6 +1108,238 @@ const SuperAdminGymOwners = () => {
           </div>
         )}
       </div>
+
+      {/* Branches Popup Modal */}
+      {branchesModalOwner && (
+        <div 
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 overflow-y-auto bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setBranchesModalOwner(null)}
+        >
+          <div 
+            className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl max-w-2xl w-full shadow-2xl flex flex-col max-h-[85vh] overflow-hidden my-auto animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#E2E8F0] bg-[#FFFFFF] shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#FFF7ED] text-[#EA580C] flex items-center justify-center border border-[#FFEDD5]">
+                  <Building2 size={20} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-lg font-bold text-[#111827]">Registered Branches</h2>
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#C2410C] text-white">
+                      {branchesModalOwner.branches?.length || 0} {branchesModalOwner.branches?.length === 1 ? 'Branch' : 'Branches'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#64748B]">
+                    {branchesModalOwner.firstName} {branchesModalOwner.lastName} • {branchesModalOwner.gymId?.name || 'Gym'}
+                  </p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setBranchesModalOwner(null)}
+                className="p-1.5 text-[#64748B] hover:text-[#EA580C] hover:bg-[#FFF7ED] rounded-lg transition-colors cursor-pointer"
+                title="Close"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 overflow-y-auto flex-1 space-y-4">
+              {branchesModalOwner.branches && branchesModalOwner.branches.length > 0 ? (
+                <div className="space-y-3">
+                  {branchesModalOwner.branches.map((b: any, bIdx: number) => (
+                    <div 
+                      key={b._id || bIdx}
+                      className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl p-4 hover:border-[#FDBA74] transition-all space-y-2.5"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-[#EA580C]"></span>
+                          <h4 className="font-bold text-[#111827] text-sm">{b.branchName}</h4>
+                          {b.branchCode && (
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white border border-[#E2E8F0] text-[#64748B]">
+                              {b.branchCode}
+                            </span>
+                          )}
+                        </div>
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                          b.status === 'Active' || b.status === 'Approved' 
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                            : b.status === 'Pending' 
+                              ? 'bg-amber-50 text-amber-700 border-amber-200' 
+                              : 'bg-slate-100 text-slate-700 border-slate-200'
+                        }`}>
+                          {b.status || 'Active'}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-[#64748B]">
+                        {(b.address || b.city) && (
+                          <div className="flex items-center gap-1.5">
+                            <MapPin size={13} className="text-[#EA580C] shrink-0" />
+                            <span className="truncate">{[b.address, b.city, b.state, b.pinCode].filter(Boolean).join(', ')}</span>
+                          </div>
+                        )}
+                        {b.phone && (
+                          <div className="flex items-center gap-1.5">
+                            <Phone size={13} className="text-[#EA580C] shrink-0" />
+                            <span>{b.phone}</span>
+                          </div>
+                        )}
+                        {b.operatingHours && (
+                          <div className="flex items-center gap-1.5">
+                            <Clock size={13} className="text-[#EA580C] shrink-0" />
+                            <span>{b.operatingHours}</span>
+                          </div>
+                        )}
+                        {b.email && (
+                          <div className="flex items-center gap-1.5">
+                            <Mail size={13} className="text-[#EA580C] shrink-0" />
+                            <span className="truncate">{b.email}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="pt-2 border-t border-[#E2E8F0] flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBranchesModalOwner(null);
+                            setViewBranch({
+                              ...b,
+                              ownerName: `${branchesModalOwner.firstName} ${branchesModalOwner.lastName}`,
+                              gymName: branchesModalOwner.gymId?.name
+                            });
+                          }}
+                          className="inline-flex items-center gap-1 text-xs font-bold text-[#EA580C] hover:text-[#9A3412] transition-colors cursor-pointer"
+                        >
+                          <Eye size={13} />
+                          <span>View Full Branch Details →</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl p-6 text-center space-y-2">
+                  <Building2 size={32} className="mx-auto text-[#EA580C]" />
+                  <h4 className="font-bold text-[#111827] text-sm">Primary Gym Facility Only</h4>
+                  <p className="text-xs text-[#64748B] max-w-sm mx-auto">
+                    {branchesModalOwner.gymId?.name || 'This gym'} operates from its main location. No additional branch facilities have been added yet.
+                  </p>
+                  {branchesModalOwner.gymId?.location && (
+                    <div className="pt-2 text-xs text-[#64748B] flex items-center justify-center gap-1.5">
+                      <MapPin size={13} className="text-[#EA580C]" />
+                      <span>{[branchesModalOwner.gymId.location.address, branchesModalOwner.gymId.location.city, branchesModalOwner.gymId.location.state].filter(Boolean).join(', ')}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-3.5 bg-[#F8FAFC] border-t border-[#E2E8F0] flex items-center justify-end shrink-0">
+              <button 
+                type="button"
+                onClick={() => setBranchesModalOwner(null)}
+                className="px-5 py-2 bg-[#FFFFFF] border border-[#E2E8F0] text-[#111827] hover:bg-[#FFF7ED] hover:border-[#FFEDD5] rounded-xl transition-colors text-xs font-bold cursor-pointer shadow-xs"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal for Critical Status Actions & Delete */}
+      {confirmAction && (
+        <div 
+          className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150"
+          onClick={() => setConfirmAction(null)}
+        >
+          <div 
+            className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl max-w-md w-full shadow-2xl p-6 space-y-4 animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                confirmAction.type === 'DELETE' || confirmAction.type === 'REJECTED' 
+                  ? 'bg-red-50 text-red-600 border border-red-200' 
+                  : confirmAction.type === 'APPROVED' 
+                    ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' 
+                    : confirmAction.type === 'SUSPENDED' 
+                      ? 'bg-orange-50 text-orange-600 border border-orange-200' 
+                      : 'bg-amber-50 text-amber-600 border border-amber-200'
+              }`}>
+                {confirmAction.type === 'DELETE' ? (
+                  <Trash2 size={20} />
+                ) : confirmAction.type === 'APPROVED' ? (
+                  <CheckCircle size={20} />
+                ) : confirmAction.type === 'SUSPENDED' ? (
+                  <ShieldAlert size={20} />
+                ) : confirmAction.type === 'REJECTED' ? (
+                  <XCircle size={20} />
+                ) : (
+                  <Clock size={20} />
+                )}
+              </div>
+              <div className="flex-1">
+                <h3 className="text-base font-bold text-[#111827]">{confirmAction.title}</h3>
+                <p className="text-xs text-[#64748B] mt-1 leading-relaxed">{confirmAction.message}</p>
+              </div>
+            </div>
+
+            <div className="pt-2 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setConfirmAction(null)}
+                disabled={statusUpdating === confirmAction.id}
+                className="px-4 py-2 bg-[#FFFFFF] border border-[#E2E8F0] text-[#64748B] hover:text-[#111827] hover:bg-[#F8FAFC] rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (confirmAction.type === 'DELETE') {
+                    try {
+                      setStatusUpdating(confirmAction.id);
+                      await api.delete(`/users/${confirmAction.id}`);
+                      setOwners(prev => prev.filter(o => o._id !== confirmAction.id));
+                      setConfirmAction(null);
+                    } catch (err: any) {
+                      console.error(err);
+                      alert('Failed to delete gym owner.');
+                    } finally {
+                      setStatusUpdating(null);
+                    }
+                  } else {
+                    const actionId = confirmAction.id;
+                    const actionType = confirmAction.type;
+                    setConfirmAction(null);
+                    await handleStatusChange(actionId, actionType);
+                  }
+                }}
+                disabled={statusUpdating === confirmAction.id}
+                className={`px-4 py-2 text-white font-bold rounded-xl text-xs transition-colors flex items-center gap-1.5 cursor-pointer shadow-sm ${confirmAction.confirmColor}`}
+              >
+                {statusUpdating === confirmAction.id ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin" />
+                    <span>Processing...</span>
+                  </>
+                ) : (
+                  <span>{confirmAction.confirmText}</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* View Details Modal */}
       {viewOwner && (

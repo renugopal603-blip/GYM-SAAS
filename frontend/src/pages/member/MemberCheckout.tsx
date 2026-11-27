@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Loader2, MapPin, Truck, CreditCard, CheckCircle2, ArrowLeft, Coins, Sparkles, ShoppingBag, Shield } from 'lucide-react';
+import { Loader2, MapPin, Truck, CreditCard, CheckCircle2, ArrowLeft, Coins, Sparkles, ShoppingBag, Shield, Tag, Check, AlertCircle } from 'lucide-react';
 import api from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
 import PaymentModal, { type PaymentConfirmData } from '../../components/common/PaymentModal';
@@ -28,6 +28,13 @@ const MemberCheckout = () => {
   const [usePoints, setUsePoints] = useState<boolean>(false);
   const [pointsToRedeem, setPointsToRedeem] = useState<number>(0);
 
+  // Reward Vouchers State
+  const [voucherCodeInput, setVoucherCodeInput] = useState<string>('');
+  const [appliedVoucher, setAppliedVoucher] = useState<any>(null);
+  const [voucherError, setVoucherError] = useState<string | null>(null);
+  const [validatingVoucher, setValidatingVoucher] = useState<boolean>(false);
+  const [myVouchers, setMyVouchers] = useState<any[]>([]);
+
   const isPremium = user?.subscriptionPlan?.toLowerCase().includes('premium');
   const discountAmount = isPremium ? Math.round(subtotal * 0.3) : 0;
 
@@ -38,15 +45,29 @@ const MemberCheckout = () => {
   const maxPossibleDiscount = Math.max(0, subtotal - discountAmount);
   const rawPointsDiscount = usePoints ? Math.round(pointsToRedeem * rate) : 0;
   const pointsDiscount = Math.min(rawPointsDiscount, maxPossibleDiscount);
-  const finalTotal = Math.max(0, subtotal - discountAmount - pointsDiscount);
+
+  // Voucher discount calculation
+  const voucherDiscount = appliedVoucher
+    ? Math.min(appliedVoucher.discount ?? 0, Math.max(0, subtotal - discountAmount - pointsDiscount))
+    : 0;
+  const finalTotal = Math.max(0, subtotal - discountAmount - pointsDiscount - voucherDiscount);
+
+  const availableStoreVouchers = myVouchers.filter((v: any) =>
+    v.claimStatus === 'Approved' &&
+    (v.reward?.category === 'Free Product / Gift' ||
+     v.reward?.category === 'Discount Coupon' ||
+     v.reward?.applicableService === 'Products' ||
+     v.reward?.applicableService === 'All Services')
+  );
 
   const load = async () => {
     try {
       setLoading(true);
-      const [cartRes, walletRes, settingsRes] = await Promise.all([
+      const [cartRes, walletRes, settingsRes, vouchersRes] = await Promise.all([
         api.get('/store/customer/cart'),
         api.get('/referrals/my-rewards-ledger').catch(() => ({ data: { pointsBalance: 0 } })),
-        api.get('/referrals/settings').catch(() => ({ data: { settings: null } }))
+        api.get('/referrals/settings').catch(() => ({ data: { settings: null } })),
+        api.get('/rewards/my-vouchers').catch(() => ({ data: { vouchers: [] } }))
       ]);
 
       const cart = cartRes.data.cart || [];
@@ -61,6 +82,10 @@ const MemberCheckout = () => {
       const st = settingsRes.data?.settings;
       setRewardSettings(st);
 
+      if (vouchersRes.data?.vouchers) {
+        setMyVouchers(vouchersRes.data.vouchers);
+      }
+
       // Auto-set initial points if eligible
       if (st && st.enableStorePurchase && pts >= (st.minPointsForRedemption || 100)) {
         setPointsToRedeem(pts);
@@ -74,6 +99,39 @@ const MemberCheckout = () => {
 
   useEffect(() => { load(); }, []);
 
+  const handleApplyVoucher = async (codeToApply?: string) => {
+    const code = (codeToApply || voucherCodeInput).trim().toUpperCase();
+    if (!code) {
+      setVoucherError('Please enter or select a voucher code');
+      return;
+    }
+    try {
+      setValidatingVoucher(true);
+      setVoucherError(null);
+      const res = await api.post('/rewards/validate-voucher', {
+        voucherCode: code,
+        context: 'store',
+        amount: Math.max(0, subtotal - discountAmount - pointsDiscount),
+        items
+      });
+      if (res.data.success && res.data.valid) {
+        setAppliedVoucher(res.data);
+        setVoucherCodeInput(code);
+      }
+    } catch (err: any) {
+      setVoucherError(err.response?.data?.message || 'Invalid or ineligible voucher code');
+      setAppliedVoucher(null);
+    } finally {
+      setValidatingVoucher(false);
+    }
+  };
+
+  const handleRemoveVoucher = () => {
+    setAppliedVoucher(null);
+    setVoucherCodeInput('');
+    setVoucherError(null);
+  };
+
   const handleInitiatePayment = () => {
     if (items.length === 0) { alert('Your cart is empty.'); return; }
     if (fulfilmentType === 'Delivery') {
@@ -83,6 +141,10 @@ const MemberCheckout = () => {
           return;
         }
       }
+    }
+    if (finalTotal === 0) {
+      executeCheckout('Reward Voucher');
+      return;
     }
     if (paymentMethod === 'Cash at Gym') {
       executeCheckout('Cash at Gym');
@@ -102,7 +164,8 @@ const MemberCheckout = () => {
         paymentMethod: chosenMethod,
         bankName: chosenBank || (chosenMethod === 'NetBanking' ? bankName : undefined),
         discount: discountAmount,
-        pointsToRedeem: usePoints ? pointsToRedeem : 0
+        pointsToRedeem: usePoints ? pointsToRedeem : 0,
+        voucherCode: appliedVoucher ? appliedVoucher.voucherCode : undefined
       });
       setShowPaymentModal(false);
       setPlacedOrder(res.data.order);
@@ -338,6 +401,92 @@ const MemberCheckout = () => {
             </div>
           )}
 
+          {/* Reward Voucher / Coupon Box */}
+          <div className="mt-4 p-3.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-[#111827] flex items-center gap-1.5">
+                <Tag size={14} className="text-[#EA580C]" />
+                Reward Voucher / Coupon
+              </span>
+              {availableStoreVouchers.length > 0 && !appliedVoucher && (
+                <span className="text-[11px] font-bold text-[#EA580C]">
+                  {availableStoreVouchers.length} available
+                </span>
+              )}
+            </div>
+
+            {appliedVoucher ? (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Check size={16} className="text-emerald-600 shrink-0" />
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-black text-emerald-800 font-mono tracking-wider">{appliedVoucher.voucherCode}</span>
+                      <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold uppercase">{appliedVoucher.category}</span>
+                    </div>
+                    <p className="text-[11px] text-emerald-700 font-medium">{appliedVoucher.benefitDescription || appliedVoucher.rewardTitle}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRemoveVoucher}
+                  className="text-xs font-bold text-red-600 hover:text-red-700 cursor-pointer ml-2 hover:underline"
+                >
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={voucherCodeInput}
+                    onChange={(e) => {
+                      setVoucherCodeInput(e.target.value.toUpperCase());
+                      setVoucherError(null);
+                    }}
+                    placeholder="Enter Voucher (e.g. RWD-V48QPT)"
+                    className="flex-1 bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl px-3 py-2 text-xs font-mono uppercase text-[#111827] focus:border-[#EA580C] outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleApplyVoucher()}
+                    disabled={validatingVoucher || !voucherCodeInput.trim()}
+                    className="px-4 py-2 bg-[#EA580C] text-white text-xs font-bold rounded-xl hover:bg-[#C2410C] transition-colors disabled:opacity-50 cursor-pointer shrink-0"
+                  >
+                    {validatingVoucher ? 'Checking...' : 'Apply'}
+                  </button>
+                </div>
+
+                {voucherError && (
+                  <p className="text-[11px] text-red-600 font-medium flex items-center gap-1">
+                    <AlertCircle size={12} /> {voucherError}
+                  </p>
+                )}
+
+                {/* Quick Selection for Claimed Vouchers */}
+                {availableStoreVouchers.length > 0 && (
+                  <div className="pt-2 border-t border-[#E2E8F0]/60 space-y-1.5">
+                    <p className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider">Your Claimed Vouchers:</p>
+                    <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                      {availableStoreVouchers.map((v: any) => (
+                        <button
+                          key={v.claimId || v.voucherCode}
+                          type="button"
+                          onClick={() => handleApplyVoucher(v.voucherCode)}
+                          className="px-2.5 py-1.5 bg-[#FFFFFF] border border-[#E2E8F0] hover:border-[#EA580C] rounded-lg text-left text-xs transition-colors cursor-pointer group flex items-center gap-1.5 shadow-2xs"
+                        >
+                          <span className="font-mono font-bold text-[#EA580C] group-hover:underline">{v.voucherCode}</span>
+                          <span className="text-[11px] text-[#64748B] truncate max-w-[130px]">• {v.reward?.title || v.reward?.category}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           <div className="border-t border-[#E2E8F0] pt-3 mt-4 space-y-2 text-sm">
             <div className="flex justify-between text-[#64748B]">
               <span>Subtotal</span>
@@ -355,6 +504,12 @@ const MemberCheckout = () => {
                 <span className="font-bold">-₹{pointsDiscount}</span>
               </div>
             )}
+            {voucherDiscount > 0 && (
+              <div className="flex justify-between text-emerald-600">
+                <span className="flex items-center gap-1"><Tag size={13} /> Reward Voucher ({appliedVoucher?.voucherCode})</span>
+                <span className="font-bold">-₹{voucherDiscount}</span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="font-bold text-[#111827]">Total</span>
               <span className="font-black text-[#EA580C] text-lg">₹{finalTotal}</span>
@@ -366,7 +521,7 @@ const MemberCheckout = () => {
             className="mt-6 w-full py-3 bg-gradient-to-r from-[#EA580C] to-[#C2410C] text-[#FFFFFF] font-bold rounded-xl shadow-lg shadow-orange-500/15 hover:opacity-90 transition-opacity flex items-center justify-center gap-2 disabled:opacity-40 cursor-pointer"
           >
             {placing ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
-            {placing ? 'Placing Order...' : `Pay ₹${finalTotal} & Place Order`}
+            {placing ? 'Placing Order...' : finalTotal === 0 ? 'Confirm Free Order with Voucher' : `Pay ₹${finalTotal} & Place Order`}
           </button>
         </div>
       </div>

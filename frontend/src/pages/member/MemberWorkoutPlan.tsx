@@ -2,14 +2,16 @@ import React, { useState, useEffect } from 'react';
 import {
   PlayCircle, Clock, Flame, Dumbbell, CheckCircle2,
   Activity, Utensils, Video, Play, Sparkles, User,
-  HeartPulse, FileText, ShieldCheck, Award
+  HeartPulse, FileText, ShieldCheck, Award, AlertCircle
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api from '../../utils/api';
+import { useAuth } from '../../contexts/AuthContext';
 import MemberExercisePlayer, { type PlayerExercise } from '../../components/workout/MemberExercisePlayer';
 import { getUnifiedWeeklyWorkouts } from '../../utils/aiFitnessPlans';
 
 const MemberWorkoutPlan: React.FC = () => {
+  const { user } = useAuth();
   const [activePlan, setActivePlan] = useState<any>(null);
   const [aiRec, setAiRec] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -793,8 +795,46 @@ const MemberWorkoutPlan: React.FC = () => {
               </div>
 
               <div className="p-4 bg-[#F8FAFC] border border-[#F8FAFC] rounded-2xl text-sm text-[#111827] leading-relaxed">
-                {aiRec?.aiAnalysis?.fitnessSummary || 'Biometric analysis generated for personal transformation.'}
+                {(() => {
+                  let summary = aiRec?.aiAnalysis?.fitnessSummary || 'Biometric analysis generated for personal transformation.';
+                  const authUser = user as any;
+                  const actualDob = authUser?.dateOfBirth;
+                  const actualAge = (() => {
+                    if (authUser?.age) return String(authUser.age);
+                    if (actualDob) {
+                      const dt = new Date(actualDob);
+                      if (!isNaN(dt.getTime())) {
+                        const calculated = Math.floor((Date.now() - dt.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+                        if (calculated > 0) return String(calculated);
+                      }
+                    }
+                    if (aiRec?.fitnessProfile?.age && String(aiRec.fitnessProfile.age) !== '28') {
+                      return String(aiRec.fitnessProfile.age);
+                    }
+                    return null;
+                  })();
+
+                  if (actualAge) {
+                    // Replace "Age: 28" or "Age: <any>" with actual calculated age
+                    summary = summary.replace(/Age:\s*(\d+|Not specified)/i, `Age: ${actualAge}`);
+                  } else if (!actualDob && !authUser?.age) {
+                    // If age / DOB was never entered, replace "Age: 28" with "Age: Not specified"
+                    summary = summary.replace(/Age:\s*28/i, 'Age: Not specified');
+                  }
+                  return summary;
+                })()}
               </div>
+              {!((user as any)?.dateOfBirth) && !((user as any)?.age) && (
+                <div className="flex items-center justify-between p-3.5 bg-amber-50 border border-amber-200 rounded-2xl text-xs text-amber-800">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle size={16} className="text-amber-600 shrink-0" />
+                    <span>Your Date of Birth is missing from your profile. Adding it ensures accurate caloric and metabolic calculations.</span>
+                  </div>
+                  <Link to="/member/profile" className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg transition-colors whitespace-nowrap text-xs shadow-xs">
+                    Update Profile →
+                  </Link>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="p-4 bg-[#FFFFFF] border border-[#F8FAFC] rounded-2xl">

@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { getDb } from '../../utils/mockDb';
 import { Building2, FileText, CheckCircle, XCircle, AlertTriangle, Activity, BarChart } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api from '../../utils/api';
@@ -14,30 +13,60 @@ const SuperAdminDashboard = () => {
 
   const fetchDashboardData = async () => {
     try {
-      const res = await api.get('/users');
-      if (res.data.success) {
-        const owners = res.data.users.filter((u: any) => u.role === 'GYM_OWNER');
-        setActivities(owners.slice(0, 8));
+      const [res, gymsRes] = await Promise.allSettled([
+        api.get('/users?role=GYM_OWNER'),
+        api.get('/gyms')
+      ]);
+
+      let owners: any[] = [];
+      if (res.status === 'fulfilled' && res.value.data?.users) {
+        owners = res.value.data.users;
+      } else {
+        const fallbackRes = await api.get('/users').catch(() => ({ data: { users: [] } }));
+        owners = (fallbackRes.data?.users || []).filter((u: any) => u.role === 'GYM_OWNER');
       }
 
+      setActivities(owners.slice(0, 8));
+
+      let gyms: any[] = [];
+      if (gymsRes.status === 'fulfilled' && gymsRes.value.data?.gyms) {
+        gyms = gymsRes.value.data.gyms;
+      }
+
+      const norm = (val: any) => String(val || '').toUpperCase().trim();
+
+      const approvedCount = owners.filter((u: any) => norm(u.approvalStatus) === 'APPROVED').length;
+      const pendingCount = owners.filter((u: any) => {
+        const s = norm(u.approvalStatus);
+        return s === 'PENDING' || s === 'NEW';
+      }).length;
+      const suspendedCount = owners.filter((u: any) => {
+        const s = norm(u.approvalStatus);
+        return s === 'SUSPENDED' || s === 'INACTIVE';
+      }).length;
+      const rejectedCount = owners.filter((u: any) => norm(u.approvalStatus) === 'REJECTED').length;
+
+      // Active gyms represents approved, active operating gyms on the platform
+      const activeGymCount = approvedCount;
+
       setStats({
-        active: getDb('gyms').length,
-        approved: getDb('gymApplications').filter((a: any) => a.status === 'Approved').length,
-        pending: getDb('gymApplications').filter((a: any) => a.status === 'Pending').length,
-        suspended: getDb('gymApplications').filter((a: any) => a.status === 'Suspended').length,
-        rejected: getDb('gymApplications').filter((a: any) => a.status === 'Rejected').length,
+        active: activeGymCount,
+        approved: approvedCount,
+        pending: pendingCount,
+        suspended: suspendedCount,
+        rejected: rejectedCount,
       });
     } catch (err) {
-      console.error('Failed to fetch recent activity', err);
+      console.error('Failed to fetch dashboard data', err);
     }
   };
 
   const cards = [
-    { title: 'Active Gyms', value: stats.active, icon: Activity, color: 'text-[#111827]', bg: 'bg-[#F8FAFC]' },
-    { title: 'Approved Gyms', value: stats.approved, icon: CheckCircle, color: 'text-[#15803D]', bg: 'bg-[#15803D]/10' },
-    { title: 'Pending Gyms', value: stats.pending, icon: FileText, color: 'text-[#EA580C]', bg: 'bg-[#FFF7ED]' },
-    { title: 'Suspended Gyms', value: stats.suspended, icon: AlertTriangle, color: 'text-[#EA580C]', bg: 'bg-[#FFF7ED]' },
-    { title: 'Rejected Gyms', value: stats.rejected, icon: XCircle, color: 'text-[#B91C1C]', bg: 'bg-[#B91C1C]/10' },
+    { title: 'Active Gyms', value: stats.active, icon: Activity, color: 'text-[#111827]', bg: 'bg-[#F8FAFC]', link: '/super-admin/gym-owners?tab=APPROVED' },
+    { title: 'Approved Gyms', value: stats.approved, icon: CheckCircle, color: 'text-[#15803D]', bg: 'bg-[#15803D]/10', link: '/super-admin/gym-owners?tab=APPROVED' },
+    { title: 'Pending Gyms', value: stats.pending, icon: FileText, color: 'text-[#EA580C]', bg: 'bg-[#FFF7ED]', link: '/super-admin/gym-owners?tab=PENDING' },
+    { title: 'Suspended Gyms', value: stats.suspended, icon: AlertTriangle, color: 'text-amber-700', bg: 'bg-amber-500/10', link: '/super-admin/gym-owners?tab=SUSPENDED' },
+    { title: 'Rejected Gyms', value: stats.rejected, icon: XCircle, color: 'text-[#B91C1C]', bg: 'bg-[#B91C1C]/10', link: '/super-admin/gym-owners?tab=REJECTED' },
   ];
 
   return (
@@ -49,15 +78,19 @@ const SuperAdminDashboard = () => {
 
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4">
         {cards.map((c, i) => (
-          <div key={i} className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-5 flex items-center space-x-3.5 shadow-sm hover:shadow-md transition-shadow">
-            <div className={`w-12 h-12 rounded-xl shrink-0 flex items-center justify-center ${c.bg} ${c.color}`}>
+          <Link
+            to={c.link}
+            key={i}
+            className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl p-5 flex items-center space-x-3.5 shadow-sm hover:shadow-md hover:border-[#FDBA74] transition-all cursor-pointer group"
+          >
+            <div className={`w-12 h-12 rounded-xl shrink-0 flex items-center justify-center ${c.bg} ${c.color} group-hover:scale-105 transition-transform`}>
               <c.icon size={24} />
             </div>
             <div className="min-w-0">
               <p className="text-[#64748B] text-xs font-semibold uppercase tracking-wider truncate">{c.title}</p>
               <h3 className="text-2xl font-bold text-[#111827] mt-0.5">{c.value}</h3>
             </div>
-          </div>
+          </Link>
         ))}
       </div>
 

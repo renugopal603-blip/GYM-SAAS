@@ -7,7 +7,9 @@ import {
   updateClaimStatus,
   getMemberRewards,
   claimReward,
-  getTrainerRewards
+  getTrainerRewards,
+  validateVoucher,
+  getMyVouchers
 } from '../controllers/rewardController';
 import { authenticate } from '../middlewares/auth';
 
@@ -33,6 +35,10 @@ router.put('/claims/:claimId/status', updateClaimStatus);
 // Member operations
 router.get('/member', getMemberRewards);
 router.post('/claim', claimReward);
+router.post('/validate-voucher', validateVoucher);
+router.get('/my-vouchers', getMyVouchers);
+router.post('/member/validate-voucher', validateVoucher);
+router.get('/member/my-vouchers', getMyVouchers);
 
 // Trainer operations
 router.get('/trainer', getTrainerRewards);

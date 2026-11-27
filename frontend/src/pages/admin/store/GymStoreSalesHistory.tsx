@@ -255,7 +255,8 @@ const GymStoreSalesHistory = () => {
             <table className="w-full text-left text-xs text-[#64748B]">
               <thead className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[#111827]">
                 <tr>
-                  <th className="px-3.5 py-3 font.bold">Reference</th>
+                  <th className="px-3.5 py-3 font-bold text-center w-12">S.No</th>
+                  <th className="px-3.5 py-3 font-bold">Reference</th>
                   <th className="px-3.5 py-3 font-bold">Type</th>
                   <th className="px-3.5 py-3 font-bold">Date</th>
                   <th className="px-3.5 py-3 font-bold">Customer</th>
@@ -268,9 +269,10 @@ const GymStoreSalesHistory = () => {
               </thead>
               <tbody className="divide-y divide-[#E2E8F0]">
                 {sales.length === 0 ? (
-                  <tr><td colSpan={9} className="px-4 py-10 text-center text-sm">No sales found for the selected filters.</td></tr>
-                ) : sales.map((s) => (
+                  <tr><td colSpan={10} className="px-4 py-10 text-center text-sm">No sales found for the selected filters.</td></tr>
+                ) : sales.map((s, idx) => (
                   <tr key={s._id} className="hover:bg-[#FFF7ED] transition-colors">
+                    <td className="px-3.5 py-3 font-semibold text-[#64748B] text-center whitespace-nowrap">{idx + 1}</td>
                     <td className="px-3.5 py-3 font-bold text-[#111827] whitespace-nowrap">{s.recordNumber}</td>
                     <td className="px-3.5 py-3 whitespace-nowrap">
                       <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${s.sourceType === 'Online Order' ? 'bg-[#F8FAFC] text-[#EA580C]' : 'bg-[#F8FAFC] text-[#EA580C]'}`}>

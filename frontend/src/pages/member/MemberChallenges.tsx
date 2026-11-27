@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Trophy,
   Award,
@@ -28,7 +29,8 @@ import {
   CalendarCheck,
   Download,
   Dumbbell,
-  Eye
+  Eye,
+  ShoppingBag
 } from 'lucide-react';
 import clsx from 'clsx';
 import api from '../../utils/api';
@@ -123,6 +125,7 @@ interface Claim {
   pointsDeducted: number;
   claimStatus: 'Pending' | 'Approved' | 'Rejected' | 'Redeemed' | 'Expired';
   rejectionReason?: string;
+  redeemedAt?: string;
   createdAt: string;
 }
 
@@ -136,6 +139,7 @@ const BADGE_ICONS: { [key: string]: any } = {
 };
 
 export default function MemberChallenges() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'performance' | 'rewards' | 'claims' | 'awards'>('performance');
   const [myPerformance, setMyPerformance] = useState<any>(null);
   const [availableChallenges, setAvailableChallenges] = useState<Challenge[]>([]);
@@ -1491,7 +1495,7 @@ export default function MemberChallenges() {
               My Claimed Vouchers
             </h2>
             <p className="text-xs text-[#64748B]">
-              Present your voucher codes at the gym desk to redeem your rewards and benefits.
+              Present your voucher codes at the gym desk, or apply them digitally during store & session checkout to redeem your rewards and benefits.
             </p>
           </div>
 
@@ -1508,61 +1512,98 @@ export default function MemberChallenges() {
               {claims.map(claim => (
                 <div
                   key={claim._id}
-                  className="bg-[#FFFFFF] rounded-2xl border border-[#E2E8F0] p-5 space-y-3 shadow-xl"
+                  className="bg-[#FFFFFF] rounded-2xl border border-[#E2E8F0] p-5 space-y-3 shadow-xl flex flex-col justify-between"
                 >
-                  <div className="flex justify-between items-center">
-                    <span
-                      className={clsx(
-                        "text-xs px-2.5 py-1 rounded-full font-semibold",
-                        claim.claimStatus === 'Approved'
-                          ? 'bg-[#FFF7ED] text-[#15803D] border border-[#E2E8F0]/30'
-                          : claim.claimStatus === 'Pending'
-                          ? 'bg-amber-500/15 text-[#EA580C] border border-amber-500/30'
-                          : claim.claimStatus === 'Redeemed'
-                          ? 'bg-[#FFF7ED] text-[#EA580C] border border-[#FFEDD5]'
-                          : 'bg-rose-500/15 text-[#B91C1C] border border-rose-500/30'
-                      )}
-                    >
-                      {claim.claimStatus}
-                    </span>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span
+                        className={clsx(
+                          "text-xs px-2.5 py-1 rounded-full font-semibold",
+                          claim.claimStatus === 'Approved'
+                            ? 'bg-[#FFF7ED] text-[#15803D] border border-[#E2E8F0]/30'
+                            : claim.claimStatus === 'Pending'
+                            ? 'bg-amber-500/15 text-[#EA580C] border border-amber-500/30'
+                            : claim.claimStatus === 'Redeemed'
+                            ? 'bg-[#FFF7ED] text-[#EA580C] border border-[#FFEDD5]'
+                            : 'bg-rose-500/15 text-[#B91C1C] border border-rose-500/30'
+                        )}
+                      >
+                        {claim.claimStatus}
+                      </span>
 
-                    <span className="text-xs text-[#64748B]">
-                      {new Date(claim.createdAt).toLocaleDateString()}
-                    </span>
-                  </div>
-
-                  <div>
-                    <h3 className="font-bold text-base text-[#111827]">
-                      {claim.rewardId?.title || 'Reward'}
-                    </h3>
-                    <span className="text-xs text-[#64748B]">
-                      {claim.rewardId?.category}
-                    </span>
-                  </div>
-
-                  {/* Voucher Code Card */}
-                  <div className="p-3.5 rounded-xl border border-dashed border-[#FFEDD5] bg-[#F8FAFC] flex items-center justify-between">
-                    <div>
-                      <span className="text-[10px] text-[#64748B] block font-semibold uppercase tracking-wider">VOUCHER CODE</span>
-                      <span className="font-mono font-bold text-base text-[#EA580C]">
-                        {claim.claimCode}
+                      <span className="text-xs text-[#64748B]">
+                        {new Date(claim.createdAt).toLocaleDateString()}
                       </span>
                     </div>
 
-                    <button
-                      onClick={() => copyVoucherCode(claim.claimCode)}
-                      className="px-2.5 py-1 rounded-lg text-xs font-semibold border border-[#E2E8F0] bg-[#F8FAFC] flex items-center gap-1 text-[#111827] hover:bg-[#F8FAFC] cursor-pointer"
-                    >
-                      {copiedCode === claim.claimCode ? <Check className="w-3.5 h-3.5 text-[#15803D]" /> : <Copy className="w-3.5 h-3.5" />}
-                      {copiedCode === claim.claimCode ? 'Copied' : 'Copy'}
-                    </button>
+                    <div>
+                      <h3 className="font-bold text-base text-[#111827]">
+                        {claim.rewardId?.title || 'Reward'}
+                      </h3>
+                      <span className="text-xs text-[#64748B]">
+                        {claim.rewardId?.category}
+                      </span>
+                    </div>
+
+                    {/* Voucher Code Card */}
+                    <div className="p-3.5 rounded-xl border border-dashed border-[#FFEDD5] bg-[#F8FAFC] flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] text-[#64748B] block font-semibold uppercase tracking-wider">VOUCHER CODE</span>
+                        <span className="font-mono font-bold text-base text-[#EA580C]">
+                          {claim.claimCode}
+                        </span>
+                      </div>
+
+                      <button
+                        onClick={() => copyVoucherCode(claim.claimCode)}
+                        className="px-2.5 py-1 rounded-lg text-xs font-semibold border border-[#E2E8F0] bg-[#F8FAFC] flex items-center gap-1 text-[#111827] hover:bg-[#F8FAFC] cursor-pointer"
+                      >
+                        {copiedCode === claim.claimCode ? <Check className="w-3.5 h-3.5 text-[#15803D]" /> : <Copy className="w-3.5 h-3.5" />}
+                        {copiedCode === claim.claimCode ? 'Copied' : 'Copy'}
+                      </button>
+                    </div>
+
+                    {claim.rejectionReason && (
+                      <div className="p-2.5 rounded-xl bg-red-50 border border-rose-800/40 text-xs text-rose-300">
+                        Reason: {claim.rejectionReason}
+                      </div>
+                    )}
                   </div>
 
-                  {claim.rejectionReason && (
-                    <div className="p-2.5 rounded-xl bg-red-50 border border-rose-800/40 text-xs text-rose-300">
-                      Reason: {claim.rejectionReason}
-                    </div>
-                  )}
+                  {/* Digital Redemption Action */}
+                  <div className="pt-2 border-t border-[#E2E8F0]/60">
+                    {claim.claimStatus === 'Approved' ? (
+                      claim.rewardId?.category === 'Free Product / Gift' || (claim.rewardId as any)?.applicableService === 'Products' ? (
+                        <button
+                          type="button"
+                          onClick={() => navigate('/member/store')}
+                          className="w-full py-2 bg-[#EA580C] text-white text-xs font-bold rounded-xl hover:bg-[#C2410C] transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                        >
+                          <ShoppingBag size={14} /> Redeem at Store Checkout
+                        </button>
+                      ) : claim.rewardId?.category === 'Personal Training' || (claim.rewardId as any)?.applicableService === 'Personal Training' ? (
+                        <button
+                          type="button"
+                          onClick={() => navigate('/member/bookings')}
+                          className="w-full py-2 bg-[#EA580C] text-white text-xs font-bold rounded-xl hover:bg-[#C2410C] transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                        >
+                          <Calendar size={14} /> Redeem on Session Booking
+                        </button>
+                      ) : (
+                        <div className="text-[11px] text-emerald-700 font-medium bg-emerald-50 py-1.5 px-2.5 rounded-xl border border-emerald-200 text-center">
+                          Ready to apply during checkout
+                        </div>
+                      )
+                    ) : claim.claimStatus === 'Redeemed' ? (
+                      <div className="text-[11px] text-[#64748B] font-medium bg-[#F8FAFC] py-1.5 px-2.5 rounded-xl border border-[#E2E8F0] text-center">
+                        Successfully redeemed digitally {claim.redeemedAt ? `on ${new Date(claim.redeemedAt).toLocaleDateString()}` : ''}
+                      </div>
+                    ) : (
+                      <div className="text-[11px] text-[#94A3B8] text-center">
+                        {claim.claimStatus === 'Pending' ? 'Pending owner approval before use' : 'Unavailable for redemption'}
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

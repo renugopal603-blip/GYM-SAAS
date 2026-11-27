@@ -137,14 +137,24 @@ const GymAdminNotifications: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+        <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end flex-wrap">
           <span className="px-3 py-1 rounded-full text-xs font-bold bg-[#FFF7ED] text-[#EA580C] border border-[#FFEDD5]">
             {unreadCount} Unread
           </span>
           <button
             type="button"
+            onClick={markAllAsRead}
+            disabled={unreadCount === 0}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#FFF7ED] hover:bg-[#FFEDD5] text-xs font-bold text-[#EA580C] border border-[#FFEDD5] transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shadow-xs active:scale-95"
+            title="Mark all notifications as read"
+          >
+            <CheckCheck size={15} className="text-[#EA580C]" />
+            Mark All as Read
+          </button>
+          <button
+            type="button"
             onClick={() => navigate('/admin')}
-            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#F8FAFC] hover:bg-[#E2E8F0] text-xs font-bold text-[#111827] border border-[#CBD5E1] transition-all cursor-pointer shadow-xs"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#F8FAFC] hover:bg-[#E2E8F0] text-xs font-bold text-[#111827] border border-[#CBD5E1] transition-all cursor-pointer shadow-xs active:scale-95"
             title="Close"
           >
             <X size={15} className="text-[#EA580C]" />
@@ -153,22 +163,90 @@ const GymAdminNotifications: React.FC = () => {
         </div>
       </div>
 
+      {/* Filter Tabs Bar */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 border-b border-[#E2E8F0] no-scrollbar">
+        <button
+          onClick={() => setFilter('all')}
+          className={clsx(
+            "px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap",
+            filter === 'all'
+              ? 'bg-[#C2410C] text-white shadow-md shadow-orange-500/15 border border-[#FDBA74]'
+              : 'bg-[#FFFFFF] text-[#64748B] hover:text-[#C2410C] border border-[#E2E8F0]'
+          )}
+        >
+          All ({notifications.length})
+        </button>
+
+        <button
+          onClick={() => setFilter('unread')}
+          className={clsx(
+            "px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap",
+            filter === 'unread'
+              ? 'bg-[#C2410C] text-white shadow-md shadow-orange-500/15 border border-[#FDBA74]'
+              : 'bg-[#FFFFFF] text-[#64748B] hover:text-[#C2410C] border border-[#E2E8F0]'
+          )}
+        >
+          Unread ({unreadCount})
+        </button>
+
+        <button
+          onClick={() => setFilter('alerts')}
+          className={clsx(
+            "px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5",
+            filter === 'alerts'
+              ? 'bg-[#C2410C] text-white shadow-md shadow-orange-500/15 border border-[#FDBA74]'
+              : 'bg-[#FFFFFF] text-[#64748B] hover:text-[#C2410C] border border-[#E2E8F0]'
+          )}
+        >
+          <AlertCircle size={13} className="text-[#B91C1C]" />
+          Alerts
+        </button>
+
+        <button
+          onClick={() => setFilter('members')}
+          className={clsx(
+            "px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5",
+            filter === 'members'
+              ? 'bg-[#C2410C] text-white shadow-md shadow-orange-500/15 border border-[#FDBA74]'
+              : 'bg-[#FFFFFF] text-[#64748B] hover:text-[#C2410C] border border-[#E2E8F0]'
+          )}
+        >
+          <Users size={13} className="text-[#EA580C]" />
+          Members & Leads
+        </button>
+
+        <button
+          onClick={() => setFilter('billing')}
+          className={clsx(
+            "px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5",
+            filter === 'billing'
+              ? 'bg-[#C2410C] text-white shadow-md shadow-orange-500/15 border border-[#FDBA74]'
+              : 'bg-[#FFFFFF] text-[#64748B] hover:text-[#C2410C] border border-[#E2E8F0]'
+          )}
+        >
+          <CreditCard size={13} className="text-[#EA580C]" />
+          Billing & Store
+        </button>
+      </div>
+
       {/* Notifications List */}
       {loading ? (
         <div className="flex items-center justify-center py-20 bg-[#FFFFFF] border border-[#E2E8F0] rounded-3xl">
           <div className="w-8 h-8 border-4 border-[#FDBA74] border-t-transparent rounded-full animate-spin" />
         </div>
-      ) : notifications.length === 0 ? (
+      ) : filteredNotifications.length === 0 ? (
         <div className="bg-[#FFFFFF] border border-[#E2E8F0] rounded-3xl py-16 text-center shadow-xl">
-          <Bell size={40} className="mx-auto text-zinc-600 mb-3" />
-          <p className="text-white font-bold text-base">No notifications found</p>
+          <Bell size={40} className="mx-auto text-zinc-400 mb-3" />
+          <p className="text-[#111827] font-bold text-base">
+            {filter === 'unread' ? "You're all caught up!" : "No notifications found"}
+          </p>
           <p className="text-[#64748B] text-xs mt-1">
-            System alerts and gym events will appear here.
+            {filter === 'unread' ? "No unread system notifications at this time." : "System alerts and gym events will appear here."}
           </p>
         </div>
       ) : (
         <div className="space-y-3">
-          {notifications.map((notif) => {
+          {filteredNotifications.map((notif) => {
             const config = TYPE_CONFIG[notif.type] || TYPE_CONFIG.info;
             const Icon = config.icon;
             const isUnread = !notif.isRead;

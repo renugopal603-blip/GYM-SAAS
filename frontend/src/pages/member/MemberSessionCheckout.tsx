@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Loader2, CreditCard, CheckCircle2, ArrowLeft, Calendar, Clock, MapPin, Video, Shield, Crown } from 'lucide-react';
+import { Loader2, CreditCard, CheckCircle2, ArrowLeft, Calendar, Clock, MapPin, Video, Shield, Crown, Tag, Check, AlertCircle } from 'lucide-react';
 import api from '../../utils/api';
 import PaymentModal, { type PaymentConfirmData } from '../../components/common/PaymentModal';
 
@@ -17,18 +17,30 @@ const MemberSessionCheckout = () => {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
 
+  // Voucher State
+  const [voucherCodeInput, setVoucherCodeInput] = useState<string>('');
+  const [appliedVoucher, setAppliedVoucher] = useState<any>(null);
+  const [voucherError, setVoucherError] = useState<string | null>(null);
+  const [validatingVoucher, setValidatingVoucher] = useState<boolean>(false);
+  const [myVouchers, setMyVouchers] = useState<any[]>([]);
+
   useEffect(() => {
     const fetchSession = async () => {
       try {
         setLoading(true);
-        // We get it from /trainer-sessions/member and filter
-        const res = await api.get('/trainer-sessions/member');
-        const sess = res.data.sessions.find((s: any) => s._id === id);
+        const [sessRes, vouchersRes] = await Promise.all([
+          api.get('/trainer-sessions/member'),
+          api.get('/rewards/my-vouchers').catch(() => ({ data: { vouchers: [] } }))
+        ]);
+        const sess = sessRes.data.sessions.find((s: any) => s._id === id);
         if (sess) {
           setSession(sess);
         } else {
           alert('Session not found');
           navigate('/member/bookings');
+        }
+        if (vouchersRes.data?.vouchers) {
+          setMyVouchers(vouchersRes.data.vouchers);
         }
       } catch (err) {
         console.error(err);
@@ -39,9 +51,77 @@ const MemberSessionCheckout = () => {
     if (id) fetchSession();
   }, [id, navigate]);
 
+  const availableSessionVouchers = myVouchers.filter((v: any) =>
+    v.claimStatus === 'Approved' &&
+    (v.reward?.category === 'Personal Training' ||
+     v.reward?.category === 'Discount Coupon' ||
+     v.reward?.applicableService === 'Personal Training' ||
+     v.reward?.applicableService === 'All Services')
+  );
+
+  const handleApplyVoucher = async (codeToApply?: string) => {
+    const code = (codeToApply || voucherCodeInput).trim().toUpperCase();
+    if (!code) {
+      setVoucherError('Please enter or select a voucher code');
+      return;
+    }
+    try {
+      setValidatingVoucher(true);
+      setVoucherError(null);
+      const res = await api.post('/rewards/validate-voucher', {
+        voucherCode: code,
+        context: 'session',
+        amount: session?.fee || 0
+      });
+      if (res.data.success && res.data.valid) {
+        setAppliedVoucher(res.data);
+        setVoucherCodeInput(code);
+      }
+    } catch (err: any) {
+      setVoucherError(err.response?.data?.message || 'Invalid or ineligible voucher code');
+      setAppliedVoucher(null);
+    } finally {
+      setValidatingVoucher(false);
+    }
+  };
+
+  const handleRemoveVoucher = () => {
+    setAppliedVoucher(null);
+    setVoucherCodeInput('');
+    setVoucherError(null);
+  };
+
+  const voucherDiscount = appliedVoucher ? Math.min(appliedVoucher.discount ?? session?.fee ?? 0, session?.fee ?? 0) : 0;
+  const totalPayable = Math.max(0, (session?.fee || 0) - voucherDiscount);
+
   const handleOpenPaymentModal = () => {
+    if (totalPayable === 0) {
+      handleFreeConfirm();
+      return;
+    }
     setPaymentError(null);
     setShowPaymentModal(true);
+  };
+
+  const handleFreeConfirm = async () => {
+    try {
+      setPlacing(true);
+      setPaymentError(null);
+      const res = await api.post(`/trainer-sessions/${id}/pay`, {
+        paymentMethod: 'Reward Voucher',
+        transactionReference: `VOUCHER-${appliedVoucher?.voucherCode || Date.now()}`,
+        voucherCode: appliedVoucher ? appliedVoucher.voucherCode : undefined
+      });
+      if (res.data.success) {
+        setSuccess(true);
+      }
+    } catch (err: any) {
+      const msg = err.response?.data?.message || 'Failed to redeem voucher. Please try again.';
+      setPaymentError(msg);
+      alert(msg);
+    } finally {
+      setPlacing(false);
+    }
   };
 
   const handleModalConfirm = async (data: PaymentConfirmData) => {
@@ -50,7 +130,8 @@ const MemberSessionCheckout = () => {
       setPaymentError(null);
       const res = await api.post(`/trainer-sessions/${id}/pay`, {
         paymentMethod: data.paymentMethod,
-        transactionReference: `TXN-${Date.now()}`
+        transactionReference: `TXN-${Date.now()}`,
+        voucherCode: appliedVoucher ? appliedVoucher.voucherCode : undefined
       });
       if (res.data.success) {
         setShowPaymentModal(false);
@@ -74,7 +155,14 @@ const MemberSessionCheckout = () => {
           Your training session with <span className="font-bold text-[#111827]">{session?.trainerId?.name}</span> is confirmed.
         </p>
         <p className="text-[#64748B] mb-6">
-          Paid <span className="font-black text-[#EA580C]">₹{session?.fee}</span> via {paymentMethod}.
+          {appliedVoucher ? (
+            <span>
+              Confirmed using Voucher <span className="font-mono font-bold text-[#EA580C]">{appliedVoucher.voucherCode}</span> ({appliedVoucher.rewardTitle || 'Personal Training'})
+              {totalPayable > 0 ? ` + ₹${totalPayable} via ${paymentMethod}` : ' (100% Free Session)'}.
+            </span>
+          ) : (
+            <span>Paid <span className="font-black text-[#EA580C]">₹{session?.fee}</span> via {paymentMethod}.</span>
+          )}
         </p>
         <button onClick={() => navigate('/member/bookings')} className="w-full py-3 bg-[#C2410C] text-white font-bold font-bold rounded-xl hover:bg-[#9A3412] transition-colors">
           Go to My Bookings
@@ -182,11 +270,105 @@ const MemberSessionCheckout = () => {
               </div>
             </div>
 
+            {/* Reward Voucher Box */}
+            <div className="mb-6 p-3.5 bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-[#111827] flex items-center gap-1.5">
+                  <Tag size={14} className="text-[#EA580C]" />
+                  Reward Voucher
+                </span>
+                {availableSessionVouchers.length > 0 && !appliedVoucher && (
+                  <span className="text-[11px] font-bold text-[#EA580C]">
+                    {availableSessionVouchers.length} available
+                  </span>
+                )}
+              </div>
+
+              {appliedVoucher ? (
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Check size={16} className="text-emerald-600 shrink-0" />
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black text-emerald-800 font-mono tracking-wider">{appliedVoucher.voucherCode}</span>
+                        <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold uppercase">{appliedVoucher.category}</span>
+                      </div>
+                      <p className="text-[11px] text-emerald-700 font-medium">{appliedVoucher.benefitDescription || appliedVoucher.rewardTitle}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRemoveVoucher}
+                    className="text-xs font-bold text-red-600 hover:text-red-700 cursor-pointer ml-2 hover:underline"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={voucherCodeInput}
+                      onChange={(e) => {
+                        setVoucherCodeInput(e.target.value.toUpperCase());
+                        setVoucherError(null);
+                      }}
+                      placeholder="Enter Voucher (e.g. RWD-N9LMKY)"
+                      className="flex-1 bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl px-3 py-2 text-xs font-mono uppercase text-[#111827] focus:border-[#EA580C] outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleApplyVoucher()}
+                      disabled={validatingVoucher || !voucherCodeInput.trim()}
+                      className="px-4 py-2 bg-[#EA580C] text-white text-xs font-bold rounded-xl hover:bg-[#C2410C] transition-colors disabled:opacity-50 cursor-pointer shrink-0"
+                    >
+                      {validatingVoucher ? 'Checking...' : 'Apply'}
+                    </button>
+                  </div>
+
+                  {voucherError && (
+                    <p className="text-[11px] text-red-600 font-medium flex items-center gap-1">
+                      <AlertCircle size={12} /> {voucherError}
+                    </p>
+                  )}
+
+                  {/* Quick Selection for Claimed Vouchers */}
+                  {availableSessionVouchers.length > 0 && (
+                    <div className="pt-2 border-t border-[#E2E8F0]/60 space-y-1.5">
+                      <p className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider">Your Claimed Vouchers:</p>
+                      <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                        {availableSessionVouchers.map((v: any) => (
+                          <button
+                            key={v.claimId || v.voucherCode}
+                            type="button"
+                            onClick={() => handleApplyVoucher(v.voucherCode)}
+                            className="px-2.5 py-1.5 bg-[#FFFFFF] border border-[#E2E8F0] hover:border-[#EA580C] rounded-lg text-left text-xs transition-colors cursor-pointer group flex items-center gap-1.5 shadow-2xs"
+                          >
+                            <span className="font-mono font-bold text-[#EA580C] group-hover:underline">{v.voucherCode}</span>
+                            <span className="text-[11px] text-[#64748B] truncate max-w-[130px]">• {v.reward?.title || v.reward?.category}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div className="space-y-3 mb-6">
               <div className="flex justify-between text-[#64748B]">
                 <span>Session Fee</span>
                 <span className="font-bold text-[#111827]">₹{session.fee}</span>
               </div>
+              {voucherDiscount > 0 && (
+                <div className="flex justify-between text-emerald-600">
+                  <span className="flex items-center gap-1">
+                    <Tag size={13} /> Reward Voucher ({appliedVoucher?.voucherCode})
+                  </span>
+                  <span className="font-bold">-₹{voucherDiscount}</span>
+                </div>
+              )}
               <div className="flex justify-between text-[#64748B]">
                 <span>Taxes & Fees</span>
                 <span className="font-bold text-[#111827]">₹0</span>
@@ -195,7 +377,7 @@ const MemberSessionCheckout = () => {
             
             <div className="flex justify-between items-center pt-4 border-t border-[#E2E8F0] mb-6">
               <span className="font-bold text-lg text-[#111827]">Total Payable</span>
-              <span className="font-black text-2xl text-[#EA580C]">₹{session.fee}</span>
+              <span className="font-black text-2xl text-[#EA580C]">₹{totalPayable}</span>
             </div>
 
             <button
@@ -203,7 +385,7 @@ const MemberSessionCheckout = () => {
               disabled={placing}
               className="w-full py-4 bg-[#C2410C] text-white font-bold rounded-xl hover:bg-[#9A3412] transition-colors shadow-lg disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer"
             >
-              {placing ? <Loader2 className="animate-spin" size={20} /> : `Pay ₹${session.fee} & Confirm`}
+              {placing ? <Loader2 className="animate-spin" size={20} /> : totalPayable === 0 ? 'Confirm Free Session with Voucher' : `Pay ₹${totalPayable} & Confirm`}
             </button>
             <p className="text-[10px] text-center text-[#64748B] mt-3">By confirming, you agree to our booking terms and cancellation policy.</p>
           </div>

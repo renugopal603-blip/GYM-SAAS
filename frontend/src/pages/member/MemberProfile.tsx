@@ -184,6 +184,23 @@ const MemberProfile = ({ hideEdit = false }: { hideEdit?: boolean }) => {
           <div className="space-y-3">
             {[
               { label: 'Customer ID', value: displayUser?.customerId || 'CUS-0C7D73' },
+              { 
+                label: 'Date of Birth', 
+                value: displayUser?.dateOfBirth 
+                  ? new Date(displayUser.dateOfBirth).toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: 'numeric' }) 
+                  : (displayUser?.dob || 'Not provided') 
+              },
+              { 
+                label: 'Age', 
+                value: (() => {
+                  const raw = displayUser?.dateOfBirth || displayUser?.dob;
+                  if (!raw) return displayUser?.age ? `${displayUser.age} yrs` : 'Not provided';
+                  const dt = new Date(raw);
+                  if (isNaN(dt.getTime())) return 'Not provided';
+                  const age = Math.floor((Date.now() - dt.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+                  return age > 0 ? `${age} yrs` : 'Not provided';
+                })()
+              },
               { label: 'Gender', value: displayUser?.gender || 'Not provided' },
               { label: 'Height', value: displayUser?.height ? `${displayUser.height} cm` : 'Not provided' },
               { label: 'Weight', value: displayUser?.weight ? `${displayUser.weight} kg` : 'Not provided' },
@@ -286,6 +303,16 @@ const MemberProfile = ({ hideEdit = false }: { hideEdit?: boolean }) => {
                     <option value="Female">Female</option>
                     <option value="Other">Other</option>
                   </select>
+                </div>
+                <div>
+                  <label className="block text-xs sm:text-sm font-semibold text-[#111827] mb-1.5">Date of Birth</label>
+                  <input
+                    type="date"
+                    max={new Date().toISOString().split('T')[0]}
+                    value={formData.dateOfBirth}
+                    onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
+                    className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3.5 py-2.5 sm:py-3 text-xs sm:text-sm text-[#111827] focus:border-[#FDBA74] focus:ring-2 focus:ring-[#F97316]/20 outline-none transition-all"
+                  />
                 </div>
                 <div className="flex gap-3 sm:gap-4 sm:col-span-2">
                   <div className="flex-1">

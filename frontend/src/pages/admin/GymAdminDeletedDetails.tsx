@@ -284,7 +284,7 @@ const GymAdminDeletedDetails = () => {
 
       {selectedItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-[#FFFFFF] rounded-2xl max-w-md w-full shadow-2xl border border-[#E2E8F0] overflow-hidden">
+          <div className="bg-[#FFFFFF] rounded-2xl max-w-xl w-full shadow-2xl border border-[#E2E8F0] overflow-hidden my-auto">
             <div className="p-6 border-b border-[#E2E8F0] flex justify-between items-center bg-[#F8FAFC]">
               <h2 className="text-xl font-bold text-[#111827]">Deleted Record Details</h2>
               <button onClick={() => setSelectedItem(null)} className="text-[#64748B] hover:text-[#C2410C]"><X size={24} /></button>
@@ -319,7 +319,7 @@ const GymAdminDeletedDetails = () => {
                   <span className="text-sm font-bold text-[#64748B] flex items-center gap-1.5 mb-0.5">
                     <Mail size={13} className="text-[#EA580C]" /> Mail ID
                   </span>
-                  <p className="text-[#111827] font-semibold break-all">{getMailId(selectedItem)}</p>
+                  <p className="text-[#111827] font-semibold whitespace-nowrap overflow-x-auto custom-scrollbar">{getMailId(selectedItem)}</p>
                 </div>
                 <div>
                   <span className="text-sm font-bold text-[#64748B]">Deleted At</span>

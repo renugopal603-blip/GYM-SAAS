@@ -276,7 +276,6 @@ const TrainerSchedule = () => {
             return (
               <div key={s.id}
                 className={'bg-[#FFFFFF] border rounded-2xl overflow-hidden hover:shadow-md transition-all ' + (todayBadge ? 'border-[#FFEDD5] ring-1 ring-[#F97316]/20' : 'border-[#E2E8F0]')}>
-                <div className={'h-1 w-full ' + accentColor} />
                 <div className="flex items-stretch">
                   <div className={'flex flex-col items-center justify-center px-4 py-4 min-w-[76px] shrink-0 border-r border-[#F8FAFC] ' + (todayBadge ? 'bg-[#C2410C]' : 'bg-[#F8FAFC]')}>
                     <span className={'text-2xl font-black leading-none ' + (todayBadge ? 'text-white' : 'text-[#111827]')}>{day}</span>

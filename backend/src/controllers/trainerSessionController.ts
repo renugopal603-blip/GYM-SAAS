@@ -5,6 +5,7 @@ import TrainerSession, { TrainerSessionStatus, TrainerSessionMode } from '../mod
 import Trainer from '../models/Trainer';
 import User from '../models/User';
 import Gym from '../models/Gym';
+import RewardClaim from '../models/RewardClaim';
 import { notify } from '../utils/notificationUtils';
 
 // 1. Create a Booking Request
@@ -237,7 +238,7 @@ export const payForSession = async (req: AuthRequest, res: Response): Promise<vo
   try {
     const customerId = req.user?.id;
     const { id } = req.params;
-    const { paymentMethod, transactionReference } = req.body;
+    const { paymentMethod, transactionReference, voucherCode } = req.body;
 
     const session = await TrainerSession.findOne({ _id: id, customerId });
     if (!session) {
@@ -252,6 +253,52 @@ export const payForSession = async (req: AuthRequest, res: Response): Promise<vo
     ) {
       res.status(400).json({ success: false, message: 'Session is not eligible for payment' });
       return;
+    }
+
+    let validatedClaim: any = null;
+    let voucherDiscount = 0;
+    if (voucherCode) {
+      const normalizedCode = String(voucherCode).trim().toUpperCase();
+      validatedClaim = await RewardClaim.findOne({
+        claimCode: normalizedCode,
+        userId: customerId
+      }).populate('rewardId');
+
+      if (!validatedClaim) {
+        res.status(400).json({ success: false, message: 'Voucher code not found or invalid' });
+        return;
+      }
+      if (validatedClaim.claimStatus !== 'Approved') {
+        res.status(400).json({ success: false, message: `Voucher is not valid (Status: ${validatedClaim.claimStatus})` });
+        return;
+      }
+
+      const reward: any = validatedClaim.rewardId;
+      if (reward) {
+        if (reward.category === 'Personal Training') {
+          voucherDiscount = session.fee;
+        } else if (reward.category === 'Discount Coupon') {
+          if (reward.applicableService && reward.applicableService !== 'Personal Training' && reward.applicableService !== 'All Services') {
+            res.status(400).json({ success: false, message: 'This coupon is not valid for Personal Training' });
+            return;
+          }
+          if (reward.discountType === 'Percentage') {
+            voucherDiscount = Math.round((session.fee * (reward.discountValue || 0)) / 100);
+          } else {
+            voucherDiscount = Math.min(session.fee, reward.discountValue || 0);
+          }
+        } else {
+          voucherDiscount = Math.min(session.fee, reward.discountValue || session.fee);
+        }
+      }
+
+      session.voucherCode = validatedClaim.claimCode;
+      session.voucherDiscount = voucherDiscount;
+
+      validatedClaim.claimStatus = 'Redeemed';
+      validatedClaim.redeemedAt = new Date();
+      validatedClaim.notes = (validatedClaim.notes ? validatedClaim.notes + ' | ' : '') + `Redeemed on Session #${session._id}`;
+      await validatedClaim.save();
     }
 
     // Process payment integration here (Mocked for now)

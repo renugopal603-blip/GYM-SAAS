@@ -842,7 +842,17 @@ const GymAdminMembers = () => {
                 </div>
                 <div>
                   <p className="text-xs font-bold text-[#64748B] uppercase tracking-wider mb-1">Date of Birth</p>
-                  <p className="font-semibold text-[#111827]">{selectedMember.dob || 'Not specified'}</p>
+                  <p className="font-semibold text-[#111827]">
+                    {(() => {
+                      const raw = selectedMember.dob || selectedMember.originalUser?.dateOfBirth;
+                      if (!raw) return 'Not specified';
+                      const dt = new Date(raw);
+                      if (isNaN(dt.getTime())) return String(raw);
+                      const formatted = dt.toLocaleDateString('en-IN', { year: 'numeric', month: 'short', day: '2-digit' });
+                      const age = Math.floor((Date.now() - dt.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+                      return age > 0 ? `${formatted} (${age} yrs)` : formatted;
+                    })()}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs font-bold text-[#64748B] uppercase tracking-wider mb-1">City & PIN</p>
@@ -945,6 +955,13 @@ const GymAdminMembers = () => {
                                     </span>
                                   </>
                                 )}
+                              </div>
+                              {/* Transaction / Reference ID */}
+                              <div className="text-[11px] text-[#64748B] font-medium pt-1 flex items-center gap-1.5 flex-wrap">
+                                <span>Ref ID:</span>
+                                <span className="font-mono font-bold text-[#111827] bg-[#F8FAFC] px-1.5 py-0.5 rounded border border-[#E2E8F0]">
+                                  {item.paymentReference || item.transactionId || item.paymentId?.transactionId || item.paymentId?.paymentReference || item._id || (isTrialPlan ? 'TRIAL-INV-001' : 'N/A')}
+                                </span>
                               </div>
                             </div>
 

@@ -18,6 +18,7 @@ import Notification from '../models/Notification';
 import GymRewardSettings from '../models/GymRewardSettings';
 import CustomerPointsWallet from '../models/CustomerPointsWallet';
 import PointsTransaction from '../models/PointsTransaction';
+import RewardClaim from '../models/RewardClaim';
 import {
   isStoreEnabledForUser,
   isStoreEnabledForGym,
@@ -1007,7 +1008,7 @@ export const checkout = async (req: AuthRequest, res: Response): Promise<void> =
     if (!(await requireStoreCustomer(req, res))) return;
     const user = (await User.findById(req.user!.id)) as IUser;
     const gymId = user.gymId!;
-    const { fulfilmentType, deliveryDetails, paymentMethod = 'UPI', bankName, discount = 0, pointsToRedeem = 0 } = req.body;
+    const { fulfilmentType, deliveryDetails, paymentMethod = 'UPI', bankName, discount = 0, pointsToRedeem = 0, voucherCode } = req.body;
 
     const cart = await StoreCart.findOne({ customerId: user._id, gymId });
     if (!cart || cart.items.length === 0) {
@@ -1086,9 +1087,52 @@ export const checkout = async (req: AuthRequest, res: Response): Promise<void> =
       }
     }
 
+    // Handle reward voucher redemption
+    let voucherDiscount = 0;
+    let validatedClaim: any = null;
+    if (voucherCode) {
+      const normalizedCode = String(voucherCode).trim().toUpperCase();
+      validatedClaim = await RewardClaim.findOne({
+        claimCode: normalizedCode,
+        userId: user._id
+      }).populate('rewardId');
+
+      if (!validatedClaim) {
+        res.status(400).json({ success: false, message: 'Voucher code not found or does not belong to you' });
+        return;
+      }
+      if (validatedClaim.claimStatus !== 'Approved') {
+        res.status(400).json({ success: false, message: `Voucher cannot be used (Status: ${validatedClaim.claimStatus})` });
+        return;
+      }
+
+      const reward: any = validatedClaim.rewardId;
+      if (reward) {
+        if (reward.category === 'Free Product / Gift') {
+          voucherDiscount = built.subtotal!;
+        } else if (reward.category === 'Discount Coupon') {
+          if (reward.applicableService && reward.applicableService !== 'Products' && reward.applicableService !== 'All Services') {
+            res.status(400).json({ success: false, message: 'This coupon is not valid for Gym Store products' });
+            return;
+          }
+          if (reward.minPurchaseAmount && built.subtotal! < reward.minPurchaseAmount) {
+            res.status(400).json({ success: false, message: `Minimum purchase of ₹${reward.minPurchaseAmount} required for this voucher` });
+            return;
+          }
+          if (reward.discountType === 'Percentage') {
+            voucherDiscount = Math.round((built.subtotal! * (reward.discountValue || 0)) / 100);
+          } else {
+            voucherDiscount = Math.min(built.subtotal!, reward.discountValue || 0);
+          }
+        } else {
+          voucherDiscount = Math.min(built.subtotal!, reward.discountValue || built.subtotal!);
+        }
+      }
+    }
+
     const subtotal = built.subtotal!;
     const directDisc = Number(discount) || 0;
-    const totalDisc = Math.min(directDisc + pointsDiscount, subtotal);
+    const totalDisc = Math.min(directDisc + pointsDiscount + voucherDiscount, subtotal);
     const total = Math.max(0, subtotal - totalDisc);
 
     const order = await StoreOrder.create({
@@ -1100,6 +1144,8 @@ export const checkout = async (req: AuthRequest, res: Response): Promise<void> =
       discount: totalDisc,
       pointsRedeemed: requestedPoints,
       pointsDiscount: pointsDiscount,
+      voucherCode: validatedClaim ? validatedClaim.claimCode : undefined,
+      voucherDiscount: voucherDiscount,
       total,
       paymentStatus: StoreOrderPaymentStatus.PAID,
       paymentMethod,
@@ -1218,6 +1264,14 @@ export const checkout = async (req: AuthRequest, res: Response): Promise<void> =
         discountAmount: pointsDiscount,
         orderReference: order.orderNumber
       });
+    }
+
+    // Atomically mark voucher claim as Redeemed
+    if (validatedClaim) {
+      validatedClaim.claimStatus = 'Redeemed';
+      validatedClaim.redeemedAt = new Date();
+      validatedClaim.notes = (validatedClaim.notes ? validatedClaim.notes + ' | ' : '') + `Redeemed on Store Order #${order.orderNumber}`;
+      await validatedClaim.save();
     }
 
     const gym = await Gym.findById(gymId);
@@ -1661,7 +1715,12 @@ export const recordOfflineSale = async (req: AuthRequest, res: Response): Promis
         return;
       }
 
-      const qty = Math.max(1, Number(row.quantity) || 1);
+      const rawQty = Number(row.quantity);
+      if (!Number.isInteger(rawQty) || rawQty < 1) {
+        res.status(400).json({ success: false, message: `Quantity for "${p.name}" must be a positive whole number (1 or above).` });
+        return;
+      }
+      const qty = rawQty;
       if (targetStock < qty) {
         res.status(400).json({ success: false, message: `"${p.name}" has only ${targetStock} unit(s) in stock` });
         return;

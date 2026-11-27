@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, MapPin, Clock, ArrowLeft, Loader2, Dumbbell, Activity, CheckCircle, Wifi, Users, Droplets, Plus, Edit, X } from 'lucide-react';
+import { Building2, MapPin, Clock, ArrowLeft, Loader2, Dumbbell, Activity, CheckCircle, Wifi, Users, Droplets, Plus, Edit, X, AlertCircle } from 'lucide-react';
 import api from '../../utils/api';
 
 const commonFacilities = [
@@ -19,6 +19,7 @@ const GymAdminAddBranch = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [showPlanModal, setShowPlanModal] = useState(false);
   const [editingPlanIndex, setEditingPlanIndex] = useState<number | null>(null);
   const [planForm, setPlanForm] = useState({ name: '', price: '', duration: 'Monthly', features: '' });
@@ -124,6 +125,20 @@ const GymAdminAddBranch = () => {
     setError('');
 
     // Validations
+    if (!form.city.trim() || !/^[A-Za-z\s.'-]+$/.test(form.city.trim())) {
+      setErrors(prev => ({ ...prev, city: 'City must contain only alphabetic letters and spaces (no numbers).' }));
+      setError('Please enter a valid City name containing only letters (no numbers).');
+      setLoading(false);
+      return;
+    }
+
+    if (!form.state.trim() || !/^[A-Za-z\s.'-]+$/.test(form.state.trim())) {
+      setErrors(prev => ({ ...prev, state: 'State must contain only alphabetic letters and spaces (no numbers).' }));
+      setError('Please enter a valid State name containing only letters (no numbers).');
+      setLoading(false);
+      return;
+    }
+
     if (!/^[6-9]\d{9}$/.test(form.phone)) {
       setError('Phone number must be exactly 10 digits and start with 6, 7, 8, or 9.');
       setLoading(false);
@@ -252,11 +267,63 @@ const GymAdminAddBranch = () => {
             </div>
             <div>
               <label className="block text-sm font-bold text-[#64748B] mb-2">City *</label>
-              <input required type="text" value={form.city} onChange={e => setForm({ ...form, city: e.target.value })} placeholder="City" className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 text-[#111827] outline-none focus:border-[#FDBA74]" />
+              <input
+                required
+                type="text"
+                value={form.city}
+                onChange={e => {
+                  const val = e.target.value;
+                  setForm(prev => ({ ...prev, city: val }));
+                  if (!val.trim()) {
+                    setErrors(prev => ({ ...prev, city: 'City is required.' }));
+                  } else if (!/^[A-Za-z\s.'-]+$/.test(val)) {
+                    setErrors(prev => ({ ...prev, city: 'City must contain only letters and spaces (no numbers).' }));
+                  } else {
+                    setErrors(prev => {
+                      const updated = { ...prev };
+                      delete updated.city;
+                      return updated;
+                    });
+                  }
+                }}
+                placeholder="City"
+                className={`w-full bg-[#F8FAFC] border ${errors.city ? 'border-red-500 focus:border-red-500' : 'border-[#E2E8F0] focus:border-[#FDBA74]'} rounded-xl px-4 py-3 text-[#111827] outline-none transition-colors`}
+              />
+              {errors.city && (
+                <p className="text-xs text-red-500 mt-1 flex items-center gap-1 font-medium">
+                  <AlertCircle size={13} /> {errors.city}
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-bold text-[#64748B] mb-2">State *</label>
-              <input required type="text" value={form.state} onChange={e => setForm({ ...form, state: e.target.value })} placeholder="State" className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-3 text-[#111827] outline-none focus:border-[#FDBA74]" />
+              <input
+                required
+                type="text"
+                value={form.state}
+                onChange={e => {
+                  const val = e.target.value;
+                  setForm(prev => ({ ...prev, state: val }));
+                  if (!val.trim()) {
+                    setErrors(prev => ({ ...prev, state: 'State is required.' }));
+                  } else if (!/^[A-Za-z\s.'-]+$/.test(val)) {
+                    setErrors(prev => ({ ...prev, state: 'State must contain only letters and spaces (no numbers).' }));
+                  } else {
+                    setErrors(prev => {
+                      const updated = { ...prev };
+                      delete updated.state;
+                      return updated;
+                    });
+                  }
+                }}
+                placeholder="State"
+                className={`w-full bg-[#F8FAFC] border ${errors.state ? 'border-red-500 focus:border-red-500' : 'border-[#E2E8F0] focus:border-[#FDBA74]'} rounded-xl px-4 py-3 text-[#111827] outline-none transition-colors`}
+              />
+              {errors.state && (
+                <p className="text-xs text-red-500 mt-1 flex items-center gap-1 font-medium">
+                  <AlertCircle size={13} /> {errors.state}
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-bold text-[#64748B] mb-2">Pincode *</label>

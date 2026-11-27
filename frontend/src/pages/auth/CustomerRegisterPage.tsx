@@ -319,6 +319,16 @@ const CustomerRegisterPage = () => {
       if (form.password !== form.confirmPassword) e.confirmPassword = 'Passwords do not match';
     }
     if (step === 1) {
+      if (!form.dateOfBirth) {
+        e.dateOfBirth = 'Date of birth is required';
+      } else {
+        const dob = new Date(form.dateOfBirth);
+        const today = new Date();
+        const diffYears = (today.getTime() - dob.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
+        if (isNaN(dob.getTime()) || diffYears < 10 || diffYears > 100) {
+          e.dateOfBirth = 'Please enter a valid date of birth (must be at least 10 years old)';
+        }
+      }
       if (!form.city.trim()) {
         e.city = 'City is required';
       } else if (!/^[A-Za-z\s]+$/.test(form.city)) {
@@ -535,7 +545,17 @@ const CustomerRegisterPage = () => {
       <div className="w-full max-w-2xl lg:max-w-3xl bg-[#FFFFFF] border border-[#E2E8F0] rounded-2xl shadow-2xl overflow-hidden z-10">
         {/* Progress Header */}
         <div className="bg-[#FFFFFF] border-b border-[#E2E8F0] px-5 sm:px-8 py-4 sm:py-5 flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <h1 className="text-lg sm:text-xl font-bold text-[#111827] shrink-0">Customer Registration</h1>
+          <div className="flex items-center gap-3 shrink-0">
+            <Link
+              to="/login"
+              className="inline-flex items-center space-x-1 text-xs font-semibold text-[#64748B] hover:text-[#EA580C] bg-[#FFFFFF] border border-[#E2E8F0] px-3 py-1.5 rounded-lg hover:border-[#FFEDD5] hover:bg-[#FFF7ED] transition-colors shadow-xs"
+              title="Back to Login"
+            >
+              <ChevronLeft size={14} />
+              <span>Back to Login</span>
+            </Link>
+            <h1 className="text-lg sm:text-xl font-bold text-[#111827] shrink-0">Customer Registration</h1>
+          </div>
           <div className="flex items-center space-x-1 sm:space-x-1.5 overflow-x-auto min-w-0 py-1">
             {STEPS.map((s, i) => (
               <div key={i} className="flex items-center space-x-1 sm:space-x-1.5 shrink-0" title={s}>
@@ -761,6 +781,37 @@ const CustomerRegisterPage = () => {
               <h2 className="text-lg font-semibold text-[#111827] mb-1">Personal Details</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
+                  <label className="block text-sm text-[#64748B] mb-2">Date of Birth (DOB) *</label>
+                  <input
+                    id="reg-dob"
+                    type="date"
+                    max={new Date().toISOString().split('T')[0]}
+                    value={form.dateOfBirth}
+                    onChange={e => {
+                      set('dateOfBirth', e.target.value);
+                      setErrors(prev => {
+                        const n = { ...prev };
+                        delete n['dateOfBirth'];
+                        return n;
+                      });
+                    }}
+                    className={inputCls('dateOfBirth')}
+                  />
+                  {errors.dateOfBirth && <p className="text-[#EF4444] text-xs mt-1">{errors.dateOfBirth}</p>}
+                </div>
+                <div>
+                  <label className="block text-sm text-[#64748B] mb-2">Gender *</label>
+                  <div id="reg-gender" tabIndex={-1} className="flex flex-wrap gap-2 outline-none">
+                    {GENDERS.map(g => (
+                      <button key={g} type="button" onClick={() => { set('gender', g); setErrors(prev => { const n = { ...prev }; delete n['gender']; return n; }); }} className={selBtnCls(form.gender === g)}>{g}</button>
+                    ))}
+                  </div>
+                  {errors.gender && <p className="text-[#EF4444] text-xs mt-2">{errors.gender}</p>}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
                   <label className="block text-sm text-[#64748B] mb-2">City *</label>
                   <input
                     id="reg-city"
@@ -778,15 +829,6 @@ const CustomerRegisterPage = () => {
                   <input id="reg-pinCode" type="text" inputMode="numeric" maxLength={6} pattern="\d{6}" value={form.pinCode} onChange={e => set('pinCode', e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="6-digit PIN code" className={inputCls('pinCode')} />
                   {errors.pinCode && <p className="text-[#EF4444] text-xs mt-1">{errors.pinCode}</p>}
                 </div>
-              </div>
-              <div>
-                <label className="block text-sm text-[#64748B] mb-3">Gender *</label>
-                <div id="reg-gender" tabIndex={-1} className="flex flex-wrap gap-2 outline-none">
-                  {GENDERS.map(g => (
-                    <button key={g} type="button" onClick={() => { set('gender', g); setErrors(prev => { const n = { ...prev }; delete n['gender']; return n; }); }} className={selBtnCls(form.gender === g)}>{g}</button>
-                  ))}
-                </div>
-                {errors.gender && <p className="text-[#EF4444] text-xs mt-2">{errors.gender}</p>}
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -1186,7 +1228,7 @@ const CustomerRegisterPage = () => {
               </button>
             ) : (
               <Link to="/login" className="flex items-center space-x-2 px-5 py-2.5 bg-[#FFFFFF] border border-[#E2E8F0] text-[#111827] rounded-xl hover:bg-[#FFF7ED] transition-colors text-sm">
-                <span>Back to Login</span>
+                <ChevronLeft size={18} /><span>Back to Login</span>
               </Link>
             )}
 

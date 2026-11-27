@@ -3756,15 +3756,15 @@ export const TrainerProgramsScreen: React.FC<{ initialSection?: ProgramSectionKe
       >
         {/* ── Top Header Banner with Mode Switcher (Web Mirror) ── */}
         <View style={styles.cwpHeaderBanner}>
-          <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+          <View style={{ width: '100%' }}>
+            <View style={styles.cwpBadgeRow}>
               <View style={styles.cwpBadgePill}>
-                <Ionicons name="checkmark-circle" size={13} color="#EA580C" />
+                <Ionicons name="checkmark-circle" size={12} color="#EA580C" />
                 <Text style={styles.cwpBadgePillText}>
                   {cwpPlanType === 'workout' ? 'CUSTOMER WORKPLAN MONITORING' : 'CUSTOMER DIET MONITORING'}
                 </Text>
               </View>
-              <Text style={styles.cwpBadgeSubText}>
+              <Text style={styles.cwpBadgeSubText} numberOfLines={1} ellipsizeMode="tail">
                 • {cwpPlanType === 'workout' ? 'Live Workout Progress' : 'Live Nutrition & Diet Progress'}
               </Text>
             </View>
@@ -4156,8 +4156,9 @@ export const TrainerProgramsScreen: React.FC<{ initialSection?: ProgramSectionKe
             <Ionicons name="arrow-back" size={20} color={COLORS.textDark} />
             <Text style={styles.backBtnText}>Programs</Text>
           </TouchableOpacity>
+          <Text style={{ color: '#CBD5E1', fontSize: 13, marginHorizontal: 2 }}>/</Text>
           <Text style={styles.subNavTitle} numberOfLines={1} ellipsizeMode="tail">{activeMod?.title}</Text>
-          <View style={{ width: 32 }} />
+          <View style={{ width: 16 }} />
         </View>
 
         {activeSection === 'exercises' && renderExercises()}
@@ -7788,6 +7789,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '600',
     color: '#64748B',
+    flexShrink: 1,
   },
   cwpHeaderTitle: {
     fontSize: 20,
@@ -8153,7 +8155,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
-    gap: 6,
+    columnGap: 6,
+    rowGap: 4,
     marginBottom: 6,
   },
   cwpDayBadgePill: {

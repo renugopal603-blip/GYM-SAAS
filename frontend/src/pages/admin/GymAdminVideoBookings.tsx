@@ -292,6 +292,7 @@ const GymAdminVideoBookings = () => {
           <table className="w-full text-left text-sm text-[#64748B] whitespace-nowrap">
             <thead className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[#111827]">
               <tr>
+                <th className="px-6 py-4 font-semibold w-16 text-center">S.No</th>
                 <th className="px-6 py-4 font-semibold">Booking ID</th>
                 <th className="px-6 py-4 font-semibold">Member</th>
                 <th className="px-6 py-4 font-semibold">Assigned Trainer</th>
@@ -305,14 +306,14 @@ const GymAdminVideoBookings = () => {
             <tbody className="divide-y divide-[#E2E8F0]">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center">
+                  <td colSpan={9} className="px-6 py-12 text-center">
                     <div className="w-8 h-8 border-4 border-[#FDBA74] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                     <span className="text-xs text-[#64748B]">Loading video bookings...</span>
                   </td>
                 </tr>
               ) : filteredBookings.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-[#64748B]">
+                  <td colSpan={9} className="px-6 py-12 text-center text-[#64748B]">
                     <div className="w-10 h-10 rounded-full bg-[#F8FAFC] flex items-center justify-center text-[#64748B] mx-auto mb-2">
                       <Video size={20} />
                     </div>
@@ -321,10 +322,13 @@ const GymAdminVideoBookings = () => {
                   </td>
                 </tr>
               ) : (
-                filteredBookings.map((b) => {
+                filteredBookings.map((b, index) => {
                   const isCompleted = b.status === 'Completed';
                   return (
                     <tr key={b._id} className="hover:bg-[#FFF7ED] transition-colors">
+                      <td className="px-6 py-4 text-center font-bold text-xs text-[#64748B]">
+                        {index + 1}
+                      </td>
                       <td className="px-6 py-4 font-mono font-bold text-[#EA580C]">
                         {b.bookingId}
                       </td>

@@ -922,7 +922,15 @@ const MemberSubscription = () => {
                 <div className="flex justify-between items-center py-1 border-b border-[#E2E8F0]">
                   <span className="text-[#64748B]">Transaction / Reference ID</span>
                   <span className="font-mono font-bold text-[#111827]">
-                    {selectedHistoryItem.paymentReference || selectedHistoryItem._id || 'TRIAL-INV-001'}
+                    {(() => {
+                      const ref = selectedHistoryItem.paymentReference || selectedHistoryItem.transactionId;
+                      if (ref && !/^[0-9a-fA-F]{24}$/.test(ref)) return ref;
+                      const rawId = ref || selectedHistoryItem._id;
+                      if (rawId && typeof rawId === 'string' && rawId.length >= 6) {
+                        return `TXN-${rawId.slice(-8).toUpperCase()}`;
+                      }
+                      return selectedHistoryItem.itemIsTrial ? 'TRIAL-FREE' : 'TXN-ONLINE';
+                    })()}
                   </span>
                 </div>
 
@@ -933,7 +941,7 @@ const MemberSubscription = () => {
                   </span>
                 </div>
 
-                {selectedHistoryItem.discount && Number(selectedHistoryItem.discount) > 0 && (
+                {Number(selectedHistoryItem.discount || 0) > 0 && (
                   <div className="flex justify-between items-center py-1 border-b border-[#E2E8F0] text-[#15803D]">
                     <span>Applied Discount</span>
                     <span className="font-bold">-₹{Number(selectedHistoryItem.discount).toLocaleString('en-IN')}</span>

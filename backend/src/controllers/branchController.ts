@@ -51,6 +51,16 @@ export const createBranch = async (req: AuthRequest, res: Response): Promise<voi
       return;
     }
 
+    if (location?.city && !/^[A-Za-z\s.'-]+$/.test(String(location.city).trim())) {
+      res.status(400).json({ success: false, message: 'City must contain only alphabetic letters and spaces (no numbers).' });
+      return;
+    }
+
+    if (location?.state && !/^[A-Za-z\s.'-]+$/.test(String(location.state).trim())) {
+      res.status(400).json({ success: false, message: 'State must contain only alphabetic letters and spaces (no numbers).' });
+      return;
+    }
+
     // Validate Branch Code Uniqueness
     const existingBranch = await Branch.findOne({ gymId, branchCode });
     if (existingBranch) {

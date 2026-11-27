@@ -118,11 +118,18 @@ const GymStoreOfflineSales = () => {
     return priceOf(p);
   };
 
+  const isPositiveInteger = (val: any) => {
+    if (val === '' || val === null || val === undefined) return false;
+    const n = Number(val);
+    return Number.isInteger(n) && n >= 1;
+  };
+
   const subtotal = lines.reduce((sum, l) => {
-    return sum + (priceOfLine(l) * (Number(l.quantity) || 1));
+    const qty = isPositiveInteger(l.quantity) ? Number(l.quantity) : 0;
+    return sum + (priceOfLine(l) * qty);
   }, 0);
-  const disc = Math.min(Number(discount) || 0, subtotal);
-  const total = subtotal - disc;
+  const disc = Math.min(Math.max(0, Number(discount) || 0), subtotal);
+  const total = Math.max(0, subtotal - disc);
 
   const updateLine = (idx: number, patch: any) => {
     setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
@@ -153,6 +160,23 @@ const GymStoreOfflineSales = () => {
   const save = async () => {
     const items = lines.filter((l) => l.productId);
     if (items.length === 0) { alert('Add at least one product to the sale.'); return; }
+
+    // Validate quantities
+    for (let i = 0; i < items.length; i++) {
+      if (!isPositiveInteger(items[i].quantity)) {
+        alert('Quantity must be a positive whole number (1 or above).');
+        return;
+      }
+    }
+
+    // Validate cash received
+    if (paymentMethod === 'Cash' && cashReceived !== '') {
+      const numCash = Number(cashReceived);
+      if (isNaN(numCash) || numCash < 0) {
+        alert('Cash handed by customer must be a non-negative amount (₹0 or greater).');
+        return;
+      }
+    }
 
     // Build comprehensive note if cash / transfer information entered
     let combinedNote = note.trim();
@@ -477,20 +501,42 @@ const GymStoreOfflineSales = () => {
                       <input
                         type="number"
                         min={0}
+                        step="any"
                         value={cashReceived}
-                        onChange={(e) => setCashReceived(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === '-' || e.key === 'e' || e.key === 'E') {
+                            e.preventDefault();
+                          }
+                        }}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === '') {
+                            setCashReceived('');
+                            return;
+                          }
+                          const num = Number(val);
+                          if (num < 0) {
+                            return;
+                          }
+                          setCashReceived(val);
+                        }}
                         placeholder={`e.g. ${total}`}
-                        className="w-full bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl px-3 py-2 text-sm text-[#111827] font-bold focus:border-[#FDBA74] outline-none"
+                        className={`w-full bg-[#FFFFFF] border ${cashReceived !== '' && (isNaN(Number(cashReceived)) || Number(cashReceived) < 0) ? 'border-rose-400 bg-rose-50 text-rose-700' : 'border-[#E2E8F0] text-[#111827]'} rounded-xl px-3 py-2 text-sm font-bold focus:border-[#FDBA74] outline-none`}
                       />
+                      {cashReceived !== '' && (isNaN(Number(cashReceived)) || Number(cashReceived) < 0) && (
+                        <p className="text-xs text-rose-500 font-semibold mt-1">
+                          Cash handed must be ₹0 or greater (non-negative).
+                        </p>
+                      )}
 
                       {/* Quick Denomination Chips */}
                       <div className="flex flex-wrap gap-1.5 mt-2">
                         <button
                           type="button"
-                          onClick={() => setCashReceived(String(total))}
+                          onClick={() => setCashReceived(String(Math.max(0, total)))}
                           className="px-2 py-1 text-[11px] font-bold bg-[#FFFFFF] border border-[#E2E8F0] rounded-lg hover:border-[#FDBA74] text-[#EA580C]"
                         >
-                          Exact (₹{total})
+                          Exact (₹{Math.max(0, total)})
                         </button>
                         {[100, 200, 500, 1000, 2000].filter(a => a >= total).slice(0, 3).map((amt) => (
                           <button
@@ -506,23 +552,33 @@ const GymStoreOfflineSales = () => {
                     </div>
 
                     <div className="flex flex-col justify-center">
-                      {cashReceived && Number(cashReceived) >= total ? (
+                      {cashReceived !== '' && (isNaN(Number(cashReceived)) || Number(cashReceived) < 0) ? (
+                        <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-rose-800">
+                          <span className="text-[11px] font-bold uppercase tracking-wider block text-rose-600">
+                            Invalid Cash Amount
+                          </span>
+                          <span className="text-sm font-bold text-rose-600">
+                            Cash received cannot be negative.
+                          </span>
+                          <p className="text-[11px] text-rose-500 mt-0.5">Please enter ₹0 or a positive cash amount.</p>
+                        </div>
+                      ) : cashReceived !== '' && Number(cashReceived) >= 0 && Number(cashReceived) >= total ? (
                         <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl p-3 text-[#EA580C]">
                           <span className="text-[11px] font-bold uppercase tracking-wider block text-[#EA580C]">
                             Change to Return
                           </span>
                           <span className="text-2xl font-black text-[#EA580C]">
-                            ₹{Number(cashReceived) - total}
+                            ₹{Math.max(0, Number(cashReceived) - total)}
                           </span>
                           <p className="text-[11px] text-[#EA580C] mt-0.5">Please hand this change to the customer.</p>
                         </div>
-                      ) : cashReceived && Number(cashReceived) < total ? (
+                      ) : cashReceived !== '' && Number(cashReceived) >= 0 && Number(cashReceived) < total ? (
                         <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-amber-800">
                           <span className="text-[11px] font-bold uppercase tracking-wider block text-amber-700">
                             Amount Pending / Short
                           </span>
                           <span className="text-xl font-bold text-amber-600">
-                            - ₹{total - Number(cashReceived)}
+                            - ₹{Math.max(0, total - Number(cashReceived))}
                           </span>
                           <p className="text-[11px] text-amber-700 mt-0.5">Customer still owes this balance.</p>
                         </div>
@@ -664,14 +720,28 @@ const GymStoreOfflineSales = () => {
                             }
                           })}
                         </select>
-                        <input
-                          type="number" min={1}
-                          value={line.quantity}
-                          onChange={(e) => updateLine(idx, { quantity: e.target.value })}
-                          className="w-full sm:w-20 bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl px-3 py-2 text-sm text-center text-[#111827] focus:border-[#FDBA74] outline-none"
-                        />
+                        <div className="flex flex-col w-full sm:w-auto">
+                          <input
+                            type="number"
+                            min={1}
+                            step={1}
+                            value={line.quantity}
+                            onKeyDown={(e) => {
+                              if (e.key === '-' || e.key === '.' || e.key === 'e' || e.key === 'E') {
+                                e.preventDefault();
+                              }
+                            }}
+                            onChange={(e) => updateLine(idx, { quantity: e.target.value })}
+                            className={`w-full sm:w-20 bg-[#FFFFFF] border ${!isPositiveInteger(line.quantity) ? 'border-rose-400 bg-rose-50 text-rose-700 font-bold' : 'border-[#E2E8F0] text-[#111827]'} rounded-xl px-3 py-2 text-sm text-center focus:border-[#FDBA74] outline-none`}
+                          />
+                          {!isPositiveInteger(line.quantity) && (
+                            <span className="text-[10px] text-rose-500 font-semibold mt-1 text-center sm:text-left whitespace-nowrap">
+                              Min 1 (whole no.)
+                            </span>
+                          )}
+                        </div>
                         <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
-                          <span className="font-bold text-[#111827] w-20 text-right">₹{(priceOfLine(line) * (Number(line.quantity) || 1))}</span>
+                          <span className="font-bold text-[#111827] w-20 text-right">₹{(priceOfLine(line) * (isPositiveInteger(line.quantity) ? Number(line.quantity) : 0))}</span>
                           <div className="w-8 flex justify-end">
                             {lines.length > 1 && (
                               <button onClick={() => removeLine(idx)} className="p-1.5 bg-red-50 text-rose-600 rounded-lg hover:bg-red-100 transition-colors"><Trash2 size={15} /></button>
@@ -687,7 +757,19 @@ const GymStoreOfflineSales = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-[#E2E8F0]">
                 <div>
                   <label className="text-xs font-bold text-[#64748B] uppercase mb-1 block">Discount (₹)</label>
-                  <input type="number" min={0} value={discount} onChange={(e) => setDiscount(e.target.value)} className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3 py-2 text-sm text-[#111827] focus:border-[#FDBA74] outline-none" />
+                  <input
+                    type="number"
+                    min={0}
+                    value={discount}
+                    onKeyDown={(e) => {
+                      if (e.key === '-' || e.key === 'e' || e.key === 'E') e.preventDefault();
+                    }}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === '' || Number(v) >= 0) setDiscount(v);
+                    }}
+                    className="w-full bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-3 py-2 text-sm text-[#111827] focus:border-[#FDBA74] outline-none"
+                  />
                 </div>
                 <div>
                   <label className="text-xs font-bold text-[#64748B] uppercase mb-1 block">Note</label>

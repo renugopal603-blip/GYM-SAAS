@@ -163,7 +163,31 @@ const GymOwnerRegisterPage = () => {
     setForm(f => ({ ...f, [field]: value }));
     setErrors(e => {
       const n = { ...e };
-      if (field === 'mobile') {
+      if (field === 'firstName') {
+        if (value.trim() && !/^[A-Za-z\s'-]+$/.test(value.trim())) {
+          n.firstName = "First name must contain only letters, spaces, and valid separators (- or ')";
+        } else {
+          delete n.firstName;
+        }
+      } else if (field === 'lastName') {
+        if (value.trim() && !/^[A-Za-z\s'-]+$/.test(value.trim())) {
+          n.lastName = "Last name must contain only letters, spaces, and valid separators (- or ')";
+        } else {
+          delete n.lastName;
+        }
+      } else if (field === 'city') {
+        if (value.trim() && !/^[A-Za-z\s]+$/.test(value.trim())) {
+          n.city = 'City must contain only letters and spaces';
+        } else {
+          delete n.city;
+        }
+      } else if (field === 'state') {
+        if (value.trim() && !/^[A-Za-z\s]+$/.test(value.trim())) {
+          n.state = 'State must contain only letters and spaces';
+        } else {
+          delete n.state;
+        }
+      } else if (field === 'mobile') {
         if (value && !/^[6-9]/.test(value)) {
           n.mobile = 'Mobile number must be 10 digits and start with 6, 7, 8, or 9';
         } else if (value && value.length < 10) {
@@ -207,8 +231,18 @@ const GymOwnerRegisterPage = () => {
   const validateStep = (): boolean => {
     const e: Record<string, string> = {};
     if (step === 0) {
-      if (!form.firstName.trim()) e.firstName = 'First name is required';
-      if (!form.lastName.trim()) e.lastName = 'Last name is required';
+      if (!form.firstName.trim()) {
+        e.firstName = 'First name is required';
+      } else if (!/^[A-Za-z\s'-]+$/.test(form.firstName.trim())) {
+        e.firstName = "First name must contain only letters, spaces, and valid separators (- or ')";
+      }
+
+      if (!form.lastName.trim()) {
+        e.lastName = 'Last name is required';
+      } else if (!/^[A-Za-z\s'-]+$/.test(form.lastName.trim())) {
+        e.lastName = "Last name must contain only letters, spaces, and valid separators (- or ')";
+      }
+
       if (!form.email.trim()) e.email = 'Email is required';
       else if (!/\S+@\S+\.\S+/.test(form.email)) e.email = 'Enter a valid email';
       if (!form.mobile.trim()) e.mobile = 'Mobile is required';
@@ -222,8 +256,18 @@ const GymOwnerRegisterPage = () => {
       if (!form.gymContactNumber.trim()) e.gymContactNumber = 'Gym contact number is required';
       else if (!/^[6-9]\d{9}$/.test(form.gymContactNumber)) e.gymContactNumber = 'Gym contact number must be 10 digits and start with 6, 7, 8, or 9';
       if (!form.address.trim()) e.address = 'Address is required';
-      if (!form.city.trim()) e.city = 'City is required';
-      if (!form.state.trim()) e.state = 'State is required';
+
+      if (!form.city.trim()) {
+        e.city = 'City is required';
+      } else if (!/^[A-Za-z\s]+$/.test(form.city.trim())) {
+        e.city = 'City must contain only letters and spaces';
+      }
+
+      if (!form.state.trim()) {
+        e.state = 'State is required';
+      } else if (!/^[A-Za-z\s]+$/.test(form.state.trim())) {
+        e.state = 'State must contain only letters and spaces';
+      }
 
       if (!form.gymType) e.gymType = 'Gym type is required';
       if (!form.approxMembers) {
@@ -469,7 +513,17 @@ const GymOwnerRegisterPage = () => {
 
         {/* Header and Progress Indicator */}
         <div className="bg-[#F8FAFC] border-b border-[#E2E8F0] px-4 py-3.5 sm:px-8 sm:py-5 flex items-center justify-between shrink-0 overflow-x-auto custom-scrollbar">
-          <h1 className="text-base sm:text-xl font-bold text-[#111827] shrink-0 mr-4 sm:mr-8 whitespace-nowrap">Gym Owner Registration</h1>
+          <div className="flex items-center gap-3 shrink-0 mr-4 sm:mr-8">
+            <Link
+              to="/login"
+              className="inline-flex items-center space-x-1 text-xs font-semibold text-[#64748B] hover:text-[#EA580C] bg-[#FFFFFF] border border-[#E2E8F0] px-3 py-1.5 rounded-lg hover:border-[#FFEDD5] hover:bg-[#FFF7ED] transition-colors shadow-xs"
+              title="Back to Login"
+            >
+              <ChevronLeft size={14} />
+              <span>Back to Login</span>
+            </Link>
+            <h1 className="text-base sm:text-xl font-bold text-[#111827] whitespace-nowrap">Gym Owner Registration</h1>
+          </div>
           <div className="flex items-center space-x-2">
             {STEPS.map((s, i) => (
               <div key={i} className="flex items-center space-x-2 shrink-0" title={s}>
@@ -517,7 +571,14 @@ const GymOwnerRegisterPage = () => {
               >
                 <ChevronLeft size={16} /><span>Back</span>
               </button>
-            ) : <div />}
+            ) : (
+              <Link 
+                to="/login"
+                className="px-4 py-2.5 sm:px-6 sm:py-3 rounded-xl border border-[#E2E8F0] bg-[#FFFFFF] text-[#111827] hover:text-[#111827] hover:bg-[#FFF7ED] hover:border-[#FFEDD5] font-semibold text-xs sm:text-sm transition-colors flex items-center space-x-1.5 sm:space-x-2 cursor-pointer shadow-xs"
+              >
+                <ChevronLeft size={16} /><span>Back to Login</span>
+              </Link>
+            )}
             
             <button 
               type="button" 

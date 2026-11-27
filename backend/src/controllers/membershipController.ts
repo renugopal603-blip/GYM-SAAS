@@ -9,6 +9,7 @@ import Payment, { PaymentStatus } from '../models/Payment';
 import GymRewardSettings from '../models/GymRewardSettings';
 import CustomerPointsWallet from '../models/CustomerPointsWallet';
 import PointsTransaction from '../models/PointsTransaction';
+import RewardClaim from '../models/RewardClaim';
 import {
   sendMembershipConfirmationEmail,
   sendMembershipExpiryReminderEmail
@@ -349,7 +350,24 @@ export const joinGym = async (req: AuthRequest, res: Response): Promise<void> =>
       }
     }
 
-    const appliedDiscount = Math.min(numPrice, (Number(discount) || 0) + pointsDiscount);
+    // Voucher Discount Validation
+    let voucherDiscount = 0;
+    let validatedVoucherClaim: any = null;
+    if (req.body.voucherCode) {
+      const vCode = String(req.body.voucherCode).trim().toUpperCase();
+      const claim = await RewardClaim.findOne({ claimCode: vCode, memberId: userId }).populate('rewardId');
+      if (claim && claim.claimStatus !== 'Redeemed' && claim.claimStatus !== 'Rejected' && claim.claimStatus !== 'Expired') {
+        const reward = claim.rewardId as any;
+        if (reward?.discountType === 'Percentage') {
+          voucherDiscount = Math.round((numPrice * (reward.discountValue || 0)) / 100);
+        } else {
+          voucherDiscount = Math.min(numPrice, reward?.discountValue || (Number(req.body.voucherDiscount) || 0) || numPrice);
+        }
+        validatedVoucherClaim = claim;
+      }
+    }
+
+    const appliedDiscount = Math.min(numPrice, (Number(discount) || 0) + pointsDiscount + voucherDiscount);
     const discountedPrice = Math.max(0, numPrice - appliedDiscount);
     const calculatedTax = isFreeTrial ? 0 : Math.round(discountedPrice * 0.18);
     const finalAmount = isFreeTrial ? 0 : Math.round(discountedPrice + calculatedTax);
@@ -396,6 +414,8 @@ export const joinGym = async (req: AuthRequest, res: Response): Promise<void> =>
       duration: memDuration,
       price: numPrice,
       discount: appliedDiscount,
+      voucherCode: validatedVoucherClaim?.claimCode,
+      voucherDiscount: voucherDiscount,
       tax: calculatedTax,
       finalAmount: finalAmount,
       paymentMethod: isFreeTrial ? 'Free Trial' : (paymentMethod || 'UPI'),
@@ -410,6 +430,12 @@ export const joinGym = async (req: AuthRequest, res: Response): Promise<void> =>
     });
 
     await membership.save();
+
+    if (validatedVoucherClaim) {
+      validatedVoucherClaim.claimStatus = 'Redeemed';
+      validatedVoucherClaim.redeemedAt = new Date();
+      await validatedVoucherClaim.save();
+    }
 
     const userDoc = await User.findByIdAndUpdate(userId, {
       $set: {

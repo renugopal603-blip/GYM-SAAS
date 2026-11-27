@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   CheckCircle, XCircle, Zap, Star, Crown, Sparkles,
   Users, Dumbbell, Building2, UserCheck, TrendingUp,
@@ -201,9 +201,44 @@ const GymAdminSubscription = () => {
   const isSubscriptionValid = isActive && !isExpired && remainingDays > 0;
   const canRenew = isExpired || remainingDays <= 15;
 
+  // Purchased billing cycle from database subscription or payment history
+  const purchasedBillingCycle: 'annual' | 'monthly' | 'trial' = useMemo(() => {
+    if (isTrial) return 'trial';
+    const subCycle = (
+      activeSubData?.billingCycle ||
+      (user as any)?.billingCycle ||
+      (dbHistory?.[0] as any)?.billingCycle
+    )?.toLowerCase();
+    if (subCycle === 'annual' || subCycle === 'yearly') return 'annual';
+    if (subCycle === 'monthly') return 'monthly';
+
+    // If history item description/name specifies "Annual"
+    const latestHist = dbHistory?.[0];
+    if (latestHist) {
+      const planDesc = (latestHist.plan || latestHist.planName || '').toLowerCase();
+      if (planDesc.includes('annual') || planDesc.includes('year')) return 'annual';
+      if (planDesc.includes('month')) return 'monthly';
+    }
+
+    // High confidence fallback: if remaining validity or total duration is over 35 days, it's annual
+    if (remainingDays > 35) return 'annual';
+    return 'monthly';
+  }, [isTrial, activeSubData, user, dbHistory, remainingDays]);
+
+  const isPurchasedAnnual = purchasedBillingCycle === 'annual';
+  const billingCycleDisplay = isTrial ? '1 Day Trial' : isPurchasedAnnual ? 'Annual' : 'Monthly';
+
+  // Automatically sync comparison toggle to purchased plan on initial load
+  const userToggledRef = useRef(false);
+  useEffect(() => {
+    if (userToggledRef.current) return;
+    if (isPurchasedAnnual) {
+      setIsAnnual(true);
+    }
+  }, [isPurchasedAnnual]);
+
   const startDateFormatted = formatPaymentDate(activeSubData?.startDate || user?.subscriptionStartDate || now);
   const renewalDateFormatted = formatPaymentDate(parsedExpiry);
-  const billingCycleDisplay = isTrial ? '1 Day Trial' : (activeSubData?.billingCycle === 'annual' || isAnnual ? 'Annual' : 'Monthly');
 
   // Trigger Plan Action (Renew, Upgrade, Switch)
   const handlePlanAction = (targetKey: string, type: 'RENEWAL' | 'UPGRADE' | 'SWITCH') => {
@@ -519,7 +554,7 @@ const GymAdminSubscription = () => {
               </div>
 
               <h2 className={`text-2xl sm:text-3xl font-black mt-1 ${currentPlan.color}`}>
-                {currentPlan.name} Plan
+                {currentPlan.name} Plan {billingCycleDisplay !== '1 Day Trial' ? `(${billingCycleDisplay})` : ''}
               </h2>
 
               <p className="text-xs text-[#64748B] mt-0.5">
@@ -590,7 +625,7 @@ const GymAdminSubscription = () => {
           </div>
 
           <div className="bg-[#F8FAFC] rounded-2xl p-4 border border-[#E2E8F0] shadow-xs">
-            <p className="text-[#64748B] text-[10px] uppercase tracking-wider font-extrabold">Remaining Time</p>
+            <p className="text-[#64748B] text-[10px] uppercase tracking-wider font-extrabold">Remaining Validity</p>
             <p className={`font-black text-sm sm:text-base mt-1 ${isExpired ? 'text-[#B91C1C]' : isExpiringSoon ? 'text-[#B45309]' : 'text-[#EA580C]'}`}>
               {isExpired ? '0 Days (Expired)' : `${remainingDays} Days Left`}
             </p>
@@ -629,7 +664,10 @@ const GymAdminSubscription = () => {
             <span className={`text-sm font-semibold transition-colors ${!isAnnual ? 'text-[#111827]' : 'text-[#64748B]'}`}>Monthly</span>
             <button
               type="button"
-              onClick={() => setIsAnnual(!isAnnual)}
+              onClick={() => {
+                userToggledRef.current = true;
+                setIsAnnual(!isAnnual);
+              }}
               aria-pressed={isAnnual}
               className={`relative inline-flex h-8 w-16 items-center rounded-full transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-[#F97316] focus:ring-offset-2 ${isAnnual ? 'bg-[#C2410C]' : 'bg-[#E2E8F0]'}`}
             >
@@ -649,7 +687,12 @@ const GymAdminSubscription = () => {
         {/* Pricing Cards Grid - 4 Columns */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {plans.map((plan) => {
-            const isCurrent = plan.key === currentPlanKey;
+            const isPlanMatch = plan.key === currentPlanKey;
+            // The card represents the current active plan ONLY IF both the plan tier AND the billing duration match!
+            const isCycleMatch = isTrial ? Boolean(plan.trial) : !plan.trial && (isAnnual ? isPurchasedAnnual : !isPurchasedAnnual);
+            const isCurrent = isPlanMatch && isCycleMatch && isSubscriptionValid;
+            const isSamePlanDifferentCycle = isPlanMatch && !isCycleMatch && isSubscriptionValid;
+
             const currentRank = PLAN_TIER_RANK[currentPlanKey] ?? 1;
             const targetRank = PLAN_TIER_RANK[plan.key] ?? 1;
             const isHigherTier = targetRank > currentRank;
@@ -666,22 +709,31 @@ const GymAdminSubscription = () => {
                 className={`relative flex flex-col bg-[#FFFFFF] rounded-2xl transition-all duration-300 overflow-hidden border-2 text-[#111827] ${
                   isCurrent
                     ? 'border-[#FDBA74] shadow-2xl ring-2 ring-[#F97316]/40'
+                    : isSamePlanDifferentCycle
+                    ? 'border-[#E2E8F0] shadow-sm'
                     : plan.popular
                     ? 'border-[#FFEDD5] hover:border-[#FDBA74] hover:shadow-xl'
                     : 'border-[#E2E8F0] hover:border-[#FFEDD5] hover:shadow-xl'
                 }`}
               >
                 {/* Most Popular Banner */}
-                {plan.popular && (
+                {plan.popular && !isCurrent && !isSamePlanDifferentCycle && (
                   <div className="bg-[#C2410C] text-[#F8FAFC] text-[10px] font-extrabold text-center py-1.5 uppercase tracking-widest">
                     ⭐ Most Popular
                   </div>
                 )}
 
-                {/* Current Active Plan Banner */}
-                {isCurrent && !plan.popular && (
+                {/* Current Active Plan Banner - ONLY on exact active plan and duration */}
+                {isCurrent && (
                   <div className="bg-[#FFF7ED] border-b border-[#FFEDD5] text-[#EA580C] text-[10px] font-extrabold text-center py-1.5 uppercase tracking-widest flex items-center justify-center gap-1">
-                    <CheckCircle2 size={12} /> Current Active Plan
+                    <CheckCircle2 size={12} /> Current Active Plan ({isAnnual ? 'Annual' : 'Monthly'})
+                  </div>
+                )}
+
+                {/* Notice if gym owner owns this plan tier on the alternate billing cycle */}
+                {isSamePlanDifferentCycle && (
+                  <div className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[#64748B] text-[10px] font-bold text-center py-1.5 uppercase tracking-wider flex items-center justify-center gap-1">
+                    <span>Active on {isPurchasedAnnual ? 'Annual' : 'Monthly'} Billing</span>
                   </div>
                 )}
 
@@ -771,6 +823,19 @@ const GymAdminSubscription = () => {
                         <span>Active Plan ({remainingDays} Days Left)</span>
                       </button>
                     )
+                  ) : isSamePlanDifferentCycle ? (
+                    <div className="space-y-1">
+                      <button
+                        type="button"
+                        disabled
+                        className="w-full py-3 rounded-xl text-center font-bold text-xs sm:text-sm block cursor-default bg-[#F8FAFC] text-[#64748B] border border-[#E2E8F0] flex items-center justify-center gap-1.5"
+                      >
+                        <span>Active on {isPurchasedAnnual ? 'Annual' : 'Monthly'} ({remainingDays}d Left)</span>
+                      </button>
+                      <p className="text-[10px] text-[#EA580C] text-center font-semibold">
+                        Switch to {isPurchasedAnnual ? 'Annual' : 'Monthly'} view to manage active plan
+                      </p>
+                    </div>
                   ) : isSubscriptionValid && isLowerTier ? (
                     <button
                       type="button"

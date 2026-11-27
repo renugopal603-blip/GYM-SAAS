@@ -371,6 +371,27 @@ export const registerTrainer = async (req: Request, res: Response): Promise<void
       return;
     }
 
+    const nameRegex = /^[A-Za-z\s'-]+$/;
+    if (!nameRegex.test(firstName.trim())) {
+      res.status(400).json({ success: false, message: 'First name must contain only alphabetic characters and spaces', errorCode: 'INVALID_FIRST_NAME' });
+      return;
+    }
+
+    if (!nameRegex.test(lastName.trim())) {
+      res.status(400).json({ success: false, message: 'Last name must contain only alphabetic characters and spaces', errorCode: 'INVALID_LAST_NAME' });
+      return;
+    }
+
+    if (city?.trim() && !/^[A-Za-z\s,.-]+$/.test(city.trim())) {
+      res.status(400).json({ success: false, message: 'City/Location must contain only alphabetic characters and spaces', errorCode: 'INVALID_CITY' });
+      return;
+    }
+
+    if (expectedSalary && !/^\d+$/.test(String(expectedSalary).trim())) {
+      res.status(400).json({ success: false, message: 'Expected salary must contain only positive numeric digits', errorCode: 'INVALID_SALARY' });
+      return;
+    }
+
     const cleanEmail = email.toLowerCase().trim();
 
     if (!/^\S+@\S+\.\S+$/.test(cleanEmail)) {
@@ -595,6 +616,42 @@ export const registerGymOwner = async (req: Request, res: Response): Promise<voi
 
     if (!firstName || !lastName || !email || !mobile || !password || !gymName || !gymType || !address || !city) {
       res.status(400).json({ success: false, message: 'Required fields missing', errorCode: 'MISSING_FIELDS' });
+      return;
+    }
+
+    if (!/^[A-Za-z\s'-]+$/.test(String(firstName).trim())) {
+      res.status(400).json({
+        success: false,
+        message: "First name must contain only letters, spaces, and valid separators (- or ')",
+        errorCode: 'INVALID_FIRST_NAME'
+      });
+      return;
+    }
+
+    if (!/^[A-Za-z\s'-]+$/.test(String(lastName).trim())) {
+      res.status(400).json({
+        success: false,
+        message: "Last name must contain only letters, spaces, and valid separators (- or ')",
+        errorCode: 'INVALID_LAST_NAME'
+      });
+      return;
+    }
+
+    if (!/^[A-Za-z\s]+$/.test(String(city).trim())) {
+      res.status(400).json({
+        success: false,
+        message: 'City must contain only letters and spaces',
+        errorCode: 'INVALID_CITY'
+      });
+      return;
+    }
+
+    if (state && !/^[A-Za-z\s]+$/.test(String(state).trim())) {
+      res.status(400).json({
+        success: false,
+        message: 'State must contain only letters and spaces',
+        errorCode: 'INVALID_STATE'
+      });
       return;
     }
 

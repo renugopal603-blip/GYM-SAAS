@@ -958,3 +958,183 @@ export const getTrainerRewards = async (req: AuthRequest, res: Response): Promis
     res.status(500).json({ success: false, message: 'Server error', error: error.message });
   }
 };
+
+// Validate voucher code during checkout
+export const validateVoucher = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    const { voucherCode, context, amount = 0, items = [] } = req.body;
+    if (!voucherCode) {
+      res.status(400).json({ success: false, message: 'Please enter a voucher code' });
+      return;
+    }
+
+    const normalizedCode = voucherCode.trim().toUpperCase();
+    const claim = await RewardClaim.findOne({
+      claimCode: normalizedCode,
+      userId
+    }).populate('rewardId');
+
+    if (!claim) {
+      res.status(404).json({ success: false, message: 'Invalid voucher code or it does not belong to your account.' });
+      return;
+    }
+
+    if (claim.claimStatus === 'Redeemed') {
+      res.status(400).json({ success: false, message: 'This voucher has already been redeemed.' });
+      return;
+    }
+    if (claim.claimStatus === 'Rejected') {
+      res.status(400).json({ success: false, message: 'This voucher claim was rejected.' });
+      return;
+    }
+    if (claim.claimStatus === 'Pending') {
+      res.status(400).json({ success: false, message: 'This voucher is pending Gym Owner approval.' });
+      return;
+    }
+    if (claim.claimStatus !== 'Approved') {
+      res.status(400).json({ success: false, message: `Voucher is not active (Status: ${claim.claimStatus}).` });
+      return;
+    }
+
+    const reward: any = claim.rewardId;
+    if (!reward) {
+      res.status(400).json({ success: false, message: 'Associated reward could not be found.' });
+      return;
+    }
+
+    if (reward.expiryDate && new Date(reward.expiryDate) < new Date()) {
+      res.status(400).json({ success: false, message: 'This voucher has expired.' });
+      return;
+    }
+
+    let discount = 0;
+    let benefitDescription = '';
+    const numericAmount = Number(amount) || 0;
+
+    if (reward.category === 'Free Product / Gift') {
+      if (context !== 'store') {
+        res.status(400).json({
+          success: false,
+          message: 'This voucher is for a Free Product / Gift and can only be used in Store checkout.'
+        });
+        return;
+      }
+      discount = numericAmount;
+      benefitDescription = `Free Product / Gift: ${reward.title}`;
+    } else if (reward.category === 'Personal Training') {
+      if (context !== 'session') {
+        res.status(400).json({
+          success: false,
+          message: 'This voucher is for Personal Training and can only be used during Session Booking checkout.'
+        });
+        return;
+      }
+      discount = numericAmount;
+      benefitDescription = `Free Personal Training: ${reward.title}`;
+    } else if (reward.category === 'Discount Coupon') {
+      if (reward.applicableService === 'Products' && context !== 'store') {
+        res.status(400).json({ success: false, message: 'This coupon is only valid for Gym Store purchases.' });
+        return;
+      }
+      if (reward.applicableService === 'Personal Training' && context !== 'session') {
+        res.status(400).json({ success: false, message: 'This coupon is only valid for Personal Training sessions.' });
+        return;
+      }
+      if (reward.applicableService === 'Membership' && context !== 'membership') {
+        res.status(400).json({ success: false, message: 'This coupon is only valid for Membership plans.' });
+        return;
+      }
+
+      if (reward.minPurchaseAmount && numericAmount < reward.minPurchaseAmount) {
+        res.status(400).json({
+          success: false,
+          message: `Minimum purchase amount of ₹${reward.minPurchaseAmount} is required to use this voucher.`
+        });
+        return;
+      }
+
+      if (reward.discountType === 'Percentage') {
+        discount = Math.round((numericAmount * (reward.discountValue || 0)) / 100);
+      } else {
+        discount = Math.min(numericAmount, reward.discountValue || 0);
+      }
+      benefitDescription = `${reward.discountType === 'Percentage' ? `${reward.discountValue}% Off` : `₹${reward.discountValue} Off`}`;
+    } else if (reward.category === 'Free Membership / Extension') {
+      if (context !== 'membership') {
+        res.status(400).json({
+          success: false,
+          message: 'This voucher is for Membership and can only be used during Membership subscription checkout.'
+        });
+        return;
+      }
+      discount = numericAmount;
+      benefitDescription = `Free Membership / Extension: ${reward.title}`;
+    } else {
+      discount = numericAmount;
+      benefitDescription = reward.title;
+    }
+
+    res.status(200).json({
+      success: true,
+      valid: true,
+      claimId: claim._id,
+      voucherCode: claim.claimCode,
+      rewardTitle: reward.title,
+      category: reward.category,
+      benefitDescription,
+      discount: Math.min(discount, numericAmount)
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Error validating voucher', error: error.message });
+  }
+};
+
+// Get user's vouchers for checkout selection
+export const getMyVouchers = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ success: false, message: 'Unauthorized' });
+      return;
+    }
+
+    const claims = await RewardClaim.find({
+      userId
+    })
+      .populate('rewardId')
+      .sort({ createdAt: -1 });
+
+    const vouchers = claims.map((c: any) => ({
+      claimId: c._id,
+      voucherCode: c.claimCode,
+      claimStatus: c.claimStatus,
+      createdAt: c.createdAt,
+      redeemedAt: c.redeemedAt,
+      reward: c.rewardId ? {
+        title: c.rewardId.title,
+        description: c.rewardId.description,
+        category: c.rewardId.category,
+        rewardType: c.rewardId.rewardType,
+        discountType: c.rewardId.discountType,
+        discountValue: c.rewardId.discountValue,
+        applicableService: c.rewardId.applicableService,
+        minPurchaseAmount: c.rewardId.minPurchaseAmount,
+        expiryDate: c.rewardId.expiryDate,
+        productId: c.rewardId.productId,
+        productName: c.rewardId.productName,
+        sessionCount: c.rewardId.sessionCount,
+        sessionDuration: c.rewardId.sessionDuration,
+      } : null
+    }));
+
+    res.status(200).json({ success: true, vouchers });
+  } catch (error: any) {
+    res.status(500).json({ success: false, message: 'Error fetching vouchers', error: error.message });
+  }
+};

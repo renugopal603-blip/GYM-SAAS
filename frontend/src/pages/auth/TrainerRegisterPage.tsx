@@ -24,7 +24,8 @@ import {
   Calendar,
   Check,
   Camera,
-  ShieldCheck
+  ShieldCheck,
+  ChevronLeft
 } from 'lucide-react';
 import api from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -387,8 +388,20 @@ export default function TrainerRegisterPage() {
   const validate = () => {
     const errs: Record<string, string> = {};
 
-    if (!form.firstName.trim()) errs.firstName = 'First name is required';
-    if (!form.lastName.trim()) errs.lastName = 'Last name is required';
+    const nameRegex = /^[A-Za-z\s'-]+$/;
+    const cityRegex = /^[A-Za-z\s,.-]+$/;
+
+    if (!form.firstName.trim()) {
+      errs.firstName = 'First name is required';
+    } else if (!nameRegex.test(form.firstName.trim())) {
+      errs.firstName = 'Only letters are allowed, numbers and symbols are not permitted';
+    }
+
+    if (!form.lastName.trim()) {
+      errs.lastName = 'Last name is required';
+    } else if (!nameRegex.test(form.lastName.trim())) {
+      errs.lastName = 'Only letters are allowed, numbers and symbols are not permitted';
+    }
 
     if (!form.email.trim()) {
       errs.email = 'Email address is required';
@@ -409,6 +422,12 @@ export default function TrainerRegisterPage() {
 
     if (!form.city.trim()) {
       errs.city = 'Current city / location is required';
+    } else if (!cityRegex.test(form.city.trim())) {
+      errs.city = 'Only letters are allowed, numbers are not permitted';
+    }
+
+    if (form.expectedSalary && !/^\d+$/.test(form.expectedSalary.trim())) {
+      errs.expectedSalary = 'No negative symbols or letters allowed. Only positive numbers are permitted.';
     }
 
     if (!form.preferredLocation.trim()) {
@@ -610,6 +629,19 @@ export default function TrainerRegisterPage() {
         {/* 5. JOB APPLICATION DETAILS (Read-only banner if jobId present) */}
         {jobInfo ? (
           <div className="p-5 bg-[#FFFFFF] border border-[#FFEDD5] rounded-2xl relative overflow-hidden space-y-3 shadow-lg">
+            <div className="flex items-center justify-between pb-2 border-b border-[#E2E8F0]">
+              <Link
+                to="/login"
+                className="inline-flex items-center space-x-1 text-xs font-semibold text-[#64748B] hover:text-[#EA580C] bg-[#FFFFFF] border border-[#E2E8F0] px-3 py-1.5 rounded-lg hover:border-[#FFEDD5] hover:bg-[#FFF7ED] transition-colors shadow-xs"
+                title="Back to Login"
+              >
+                <ChevronLeft size={14} />
+                <span>Back to Login</span>
+              </Link>
+              <span className="hidden sm:inline-flex px-3 py-1 bg-[#F8FAFC] text-[10px] font-mono text-slate-600 border border-[#E2E8F0] rounded-full">
+                ID: {jobInfo.id.slice(-6).toUpperCase()}
+              </span>
+            </div>
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
                 <div className="w-12 h-12 rounded-xl bg-[#FFF7ED] text-[#EA580C] flex items-center justify-center shrink-0 border border-[#FFEDD5]">
@@ -631,9 +663,6 @@ export default function TrainerRegisterPage() {
                   </p>
                 </div>
               </div>
-              <span className="hidden sm:inline-flex px-3 py-1 bg-[#F8FAFC] text-[10px] font-mono text-slate-600 border border-[#E2E8F0] rounded-full">
-                ID: {jobInfo.id.slice(-6).toUpperCase()}
-              </span>
             </div>
 
             <div className="pt-2.5 border-t border-[#E2E8F0]/70 flex flex-wrap items-center justify-between text-[11px] text-slate-400">
@@ -645,17 +674,29 @@ export default function TrainerRegisterPage() {
           </div>
         ) : (
           /* General Registration Header */
-          <div className="text-center space-y-1.5">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FFF7ED] border border-[#FFEDD5] text-[#EA580C] text-xs font-semibold mb-1">
-              <UserCheck size={14} />
-              <span>Trainer Registration</span>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Link
+                to="/login"
+                className="inline-flex items-center space-x-1 text-xs font-semibold text-[#64748B] hover:text-[#EA580C] bg-[#FFFFFF] border border-[#E2E8F0] px-3 py-1.5 rounded-lg hover:border-[#FFEDD5] hover:bg-[#FFF7ED] transition-colors shadow-xs"
+                title="Back to Login"
+              >
+                <ChevronLeft size={14} />
+                <span>Back to Login</span>
+              </Link>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FFF7ED] border border-[#FFEDD5] text-[#EA580C] text-xs font-semibold">
+                <UserCheck size={14} />
+                <span>Trainer Registration</span>
+              </div>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-[#111827] tracking-tight">
-              Join as a Certified Trainer
-            </h1>
-            <p className="text-xs sm:text-sm text-[#64748B] max-w-lg mx-auto">
-              Create your coach profile to apply directly for verified gym vacancies and coaching opportunities.
-            </p>
+            <div className="text-center space-y-1.5">
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-[#111827] tracking-tight">
+                Join as a Certified Trainer
+              </h1>
+              <p className="text-xs sm:text-sm text-[#64748B] max-w-lg mx-auto">
+                Create your coach profile to apply directly for verified gym vacancies and coaching opportunities.
+              </p>
+            </div>
           </div>
         )}
 
@@ -769,8 +810,22 @@ export default function TrainerRegisterPage() {
                   required
                   placeholder="e.g. John"
                   value={form.firstName}
-                  onChange={(e) => setForm({ ...form, firstName: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-[#FFFFFF] border border-[#E2E8F0] focus:border-[#FDBA74] rounded-xl text-xs text-[#111827] placeholder-slate-400 focus:outline-none transition-colors"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setForm({ ...form, firstName: val });
+                    if (val && !/^[A-Za-z\s'-]+$/.test(val)) {
+                      setFieldErrors(prev => ({ ...prev, firstName: 'Only letters are allowed, numbers and symbols are not permitted' }));
+                    } else {
+                      setFieldErrors(prev => {
+                        const n = { ...prev };
+                        delete n.firstName;
+                        return n;
+                      });
+                    }
+                  }}
+                  className={`w-full px-4 py-2.5 bg-[#FFFFFF] border ${
+                    fieldErrors.firstName ? 'border-red-500/60' : 'border-[#E2E8F0] focus:border-[#FDBA74]'
+                  } rounded-xl text-xs text-[#111827] placeholder-slate-400 focus:outline-none transition-colors`}
                 />
                 {fieldErrors.firstName && (
                   <p className="text-[#B91C1C] text-[11px] mt-1 flex items-center gap-1">
@@ -788,8 +843,22 @@ export default function TrainerRegisterPage() {
                   required
                   placeholder="e.g. Doe"
                   value={form.lastName}
-                  onChange={(e) => setForm({ ...form, lastName: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-[#FFFFFF] border border-[#E2E8F0] focus:border-[#FDBA74] rounded-xl text-xs text-[#111827] placeholder-slate-400 focus:outline-none transition-colors"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setForm({ ...form, lastName: val });
+                    if (val && !/^[A-Za-z\s'-]+$/.test(val)) {
+                      setFieldErrors(prev => ({ ...prev, lastName: 'Only letters are allowed, numbers and symbols are not permitted' }));
+                    } else {
+                      setFieldErrors(prev => {
+                        const n = { ...prev };
+                        delete n.lastName;
+                        return n;
+                      });
+                    }
+                  }}
+                  className={`w-full px-4 py-2.5 bg-[#FFFFFF] border ${
+                    fieldErrors.lastName ? 'border-red-500/60' : 'border-[#E2E8F0] focus:border-[#FDBA74]'
+                  } rounded-xl text-xs text-[#111827] placeholder-slate-400 focus:outline-none transition-colors`}
                 />
                 {fieldErrors.lastName && (
                   <p className="text-[#B91C1C] text-[11px] mt-1 flex items-center gap-1">
@@ -1014,8 +1083,22 @@ export default function TrainerRegisterPage() {
                 required
                 placeholder="e.g. Bangalore, Karnataka"
                 value={form.city}
-                onChange={(e) => setForm({ ...form, city: e.target.value })}
-                className="w-full px-4 py-2.5 bg-[#FFFFFF] border border-[#E2E8F0] focus:border-[#FDBA74] rounded-xl text-xs text-[#111827] placeholder-slate-400 focus:outline-none transition-colors"
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setForm({ ...form, city: val });
+                  if (val && !/^[A-Za-z\s,.-]+$/.test(val)) {
+                    setFieldErrors(prev => ({ ...prev, city: 'Only letters are allowed, numbers are not permitted' }));
+                  } else {
+                    setFieldErrors(prev => {
+                      const n = { ...prev };
+                      delete n.city;
+                      return n;
+                    });
+                  }
+                }}
+                className={`w-full px-4 py-2.5 bg-[#FFFFFF] border ${
+                  fieldErrors.city ? 'border-red-500/60' : 'border-[#E2E8F0] focus:border-[#FDBA74]'
+                } rounded-xl text-xs text-[#111827] placeholder-slate-400 focus:outline-none transition-colors`}
               />
               {fieldErrors.city && (
                 <p className="text-[#B91C1C] text-[11px] mt-1 flex items-center gap-1">
@@ -1153,11 +1236,32 @@ export default function TrainerRegisterPage() {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. 35,000 / Monthly"
+                  placeholder="e.g. 35000"
                   value={form.expectedSalary}
-                  onChange={(e) => setForm({ ...form, expectedSalary: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-[#FFFFFF] border border-[#E2E8F0] focus:border-[#FDBA74] rounded-xl text-xs text-[#111827] placeholder-slate-400 focus:outline-none transition-colors"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    // Disallow negative symbols or non-numeric characters
+                    const cleaned = val.replace(/[^0-9]/g, '');
+                    setForm({ ...form, expectedSalary: cleaned });
+                    if (val && !/^\d+$/.test(val)) {
+                      setFieldErrors(prev => ({ ...prev, expectedSalary: 'No negative symbols or letters allowed. Only positive numbers are permitted.' }));
+                    } else {
+                      setFieldErrors(prev => {
+                        const n = { ...prev };
+                        delete n.expectedSalary;
+                        return n;
+                      });
+                    }
+                  }}
+                  className={`w-full px-4 py-2.5 bg-[#FFFFFF] border ${
+                    fieldErrors.expectedSalary ? 'border-red-500/60' : 'border-[#E2E8F0] focus:border-[#FDBA74]'
+                  } rounded-xl text-xs text-[#111827] placeholder-slate-400 focus:outline-none transition-colors`}
                 />
+                {fieldErrors.expectedSalary && (
+                  <p className="text-[#B91C1C] text-[11px] mt-1 flex items-center gap-1">
+                    <AlertCircle size={12} /> {fieldErrors.expectedSalary}
+                  </p>
+                )}
               </div>
             </div>
 

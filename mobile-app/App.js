@@ -190,11 +190,12 @@ const MainAppContent = () => {
       tab === 'plans' || 
       tab === 'branches' || 
       tab === 'gym_profile' || 
+      tab === 'profile' || 
       tab === 'reports' || 
       tab === 'rewards' || 
       tab === 'referrals'
     ) {
-      const subTarget = tab === 'bookings' ? 'session_bookings' : tab;
+      const subTarget = tab === 'bookings' ? 'session_bookings' : (tab === 'profile' ? 'gym_profile' : tab);
       navigateTo('more', sub || subTarget);
     } else if (tab === 'more' || tab === 'settings' || tab === 'operations' || tab === 'store') {
       navigateTo('more', sub || null);
@@ -702,7 +703,7 @@ const MainAppContent = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <StatusBar style="dark" backgroundColor={COLORS.white} />
       <Header 
         onPressBrand={handleGoMainPage}
@@ -710,6 +711,11 @@ const MainAppContent = () => {
           if (activeRole === 'GYM_OWNER') handleOwnerNavigate('more', 'notifications');
           else if (activeRole === 'TRAINER') handleTrainerNavigate('more', 'notifications');
           else if (activeRole === 'CUSTOMER') handleCustomerNavigate('more', 'notifications');
+        }}
+        onOpenProfile={() => {
+          if (activeRole === 'GYM_OWNER') handleOwnerNavigate('more', 'gym_profile');
+          else if (activeRole === 'TRAINER') handleTrainerNavigate('more', 'profile');
+          else if (activeRole === 'CUSTOMER') handleCustomerNavigate('more', 'profile');
         }}
       />
       <View style={styles.body}>
@@ -738,7 +744,6 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: COLORS.white,
-    paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 0,
   },
   body: {
     flex: 1,

@@ -90,6 +90,7 @@ const MemberPayments = () => {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
+                    <th className="px-6 py-4 text-xs font-bold text-[#64748B] uppercase tracking-wider w-14 text-center">S.No</th>
                     <th className="px-6 py-4 text-xs font-bold text-[#64748B] uppercase tracking-wider">Date</th>
                     <th className="px-6 py-4 text-xs font-bold text-[#64748B] uppercase tracking-wider">Plan</th>
                     <th className="px-6 py-4 text-xs font-bold text-[#64748B] uppercase tracking-wider">Amount</th>
@@ -100,8 +101,9 @@ const MemberPayments = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E2E8F0]">
-                  {payments.map((payment) => (
+                  {payments.map((payment, index) => (
                     <tr key={payment._id} className="hover:bg-[#FFF7ED] transition-colors">
+                      <td className="px-6 py-4 text-center font-bold text-xs text-[#64748B]">{index + 1}</td>
                       <td className="px-6 py-4 text-sm font-medium text-[#111827]">
                         {new Date(payment.paymentDate || payment.createdAt).toLocaleDateString()}
                       </td>
@@ -134,6 +136,7 @@ const MemberPayments = () => {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
+                    <th className="px-6 py-4 text-xs font-bold text-[#64748B] uppercase tracking-wider w-14 text-center">S.No</th>
                     <th className="px-6 py-4 text-xs font-bold text-[#64748B] uppercase tracking-wider">Booking ID</th>
                     <th className="px-6 py-4 text-xs font-bold text-[#64748B] uppercase tracking-wider">Trainer</th>
                     <th className="px-6 py-4 text-xs font-bold text-[#64748B] uppercase tracking-wider">Amount</th>
@@ -142,8 +145,9 @@ const MemberPayments = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E2E8F0]">
-                  {sessions.filter(s => s.paymentStatus && s.paymentStatus !== 'Pending').map((session) => (
+                  {sessions.filter(s => s.paymentStatus && s.paymentStatus !== 'Pending').map((session, index) => (
                     <tr key={session._id} className="hover:bg-[#FFF7ED] transition-colors">
+                      <td className="px-6 py-4 text-center font-bold text-xs text-[#64748B]">{index + 1}</td>
                       <td className="px-6 py-4 text-sm font-medium text-[#111827] font-mono">
                         {session.bookingId || session._id.slice(-6).toUpperCase()}
                       </td>

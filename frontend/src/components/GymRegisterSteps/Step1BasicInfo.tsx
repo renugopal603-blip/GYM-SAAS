@@ -326,12 +326,12 @@ const Step1BasicInfo: React.FC<Step1Props> = ({ form, set, errors, inputCls, sel
           <div>
             <label className="block text-sm font-semibold text-[#334155] mb-2">City *</label>
             <input value={form.city} onChange={e => set('city', e.target.value)} placeholder="City" className={inputCls('city')} />
-            {errors.city && <p className="text-red-500 text-xs mt-1">{errors.city}</p>}
+            {errors.city && <p className="text-[#B91C1C] text-xs mt-1 font-medium">{errors.city}</p>}
           </div>
           <div>
             <label className="block text-sm font-semibold text-[#334155] mb-2">State *</label>
             <input value={form.state} onChange={e => set('state', e.target.value)} placeholder="State" className={inputCls('state')} />
-            {errors.state && <p className="text-red-500 text-xs mt-1">{errors.state}</p>}
+            {errors.state && <p className="text-[#B91C1C] text-xs mt-1 font-medium">{errors.state}</p>}
           </div>
           <div>
             <label className="block text-sm font-semibold text-[#334155] mb-2">PIN Code</label>

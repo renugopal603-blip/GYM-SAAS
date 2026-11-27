@@ -21,7 +21,10 @@ interface GeminiResponse {
 export const mockAIGeneration = (fitnessProfile: any) => {
   const goal = fitnessProfile.fitnessGoal || 'General Fitness';
   const level = fitnessProfile.currentFitnessLevel || fitnessProfile.experienceLevel || 'Beginner';
-  const age = Number(fitnessProfile.age) || 28;
+  const parsedAge = Number(fitnessProfile.age);
+  const hasValidAge = !isNaN(parsedAge) && parsedAge > 0;
+  const ageDisplay = hasValidAge ? `${parsedAge}` : 'Not specified';
+  const calculationAge = hasValidAge ? parsedAge : 28;
   const weight = Number(fitnessProfile.weight) || 70;
   const height = Number(fitnessProfile.height) || 172;
   const gender = fitnessProfile.gender || 'Not specified';
@@ -47,7 +50,7 @@ export const mockAIGeneration = (fitnessProfile: any) => {
 
   // BMR & Calorie Target Calculation (Mifflin-St Jeor)
   const isFemale = String(gender).toLowerCase() === 'female';
-  const bmr = Math.round(10 * weight + 6.25 * height - 5 * age + (isFemale ? -161 : 5));
+  const bmr = Math.round(10 * weight + 6.25 * height - 5 * calculationAge + (isFemale ? -161 : 5));
   const activityMultiplier = 1.45;
   const maintenanceCalories = Math.round(bmr * activityMultiplier);
 
@@ -421,7 +424,7 @@ export const mockAIGeneration = (fitnessProfile: any) => {
 
   return {
     aiAnalysis: {
-      fitnessSummary: `Customer: ${fitnessProfile.fullName || 'Member'} | Age: ${age} | Gender: ${gender} | Height: ${height} cm | Weight: ${weight} kg | BMI: ${bmi} | Goal: ${goal} | Level: ${level} | Equipment: ${equipment} | Chest: ${measurements.chest} | Waist: ${measurements.waist} | Hips: ${measurements.hips} | Arms: ${measurements.arms} | Thighs: ${measurements.thighs}`,
+      fitnessSummary: `Customer: ${fitnessProfile.fullName || 'Member'} | Age: ${ageDisplay} | Gender: ${gender} | Height: ${height} cm | Weight: ${weight} kg | BMI: ${bmi} | Goal: ${goal} | Level: ${level} | Equipment: ${equipment} | Chest: ${measurements.chest} | Waist: ${measurements.waist} | Hips: ${measurements.hips} | Arms: ${measurements.arms} | Thighs: ${measurements.thighs}`,
       profileSummary: `Current Weight: ${weight} kg\nTarget Weight: ${fitnessProfile.targetWeight || '-'} kg\nHeight: ${height} cm\nBMI: ${bmi}\nFitness Goal: ${goal}\nExperience Level: ${level}\nActivity Level: ${activityLevel}\nTraining Days: ${days} days/week\nEquipment: ${equipment}`,
       goalAnalysis,
       recommendedApproach,
@@ -577,7 +580,7 @@ Generate a comprehensive, scientifically tailored fitness assessment, progressiv
 CUSTOMER BIOMETRICS & PROFILE:
 - Full Name: ${fitnessProfile.fullName || 'Member'}
 - Gender: ${fitnessProfile.gender || 'Not specified'}
-- Age: ${fitnessProfile.age || 28} years
+- Age: ${fitnessProfile.age ? `${fitnessProfile.age} years` : 'Not specified / unknown'}
 - Height: ${fitnessProfile.height || 172} cm
 - Weight: ${fitnessProfile.weight || 70} kg
 - Primary Fitness Goal: ${fitnessProfile.fitnessGoal || 'General Fitness'}

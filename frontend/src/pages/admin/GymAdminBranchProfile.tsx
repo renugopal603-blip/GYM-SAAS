@@ -129,6 +129,14 @@ const GymAdminBranchProfile = () => {
       alert('Phone number must be exactly 10 digits and start with 6, 7, 8, or 9');
       return;
     }
+    if (form.location?.city && !/^[A-Za-z\s.'-]+$/.test(String(form.location.city).trim())) {
+      alert('City must contain only alphabetic letters and spaces.');
+      return;
+    }
+    if (form.location?.state && !/^[A-Za-z\s.'-]+$/.test(String(form.location.state).trim())) {
+      alert('State must contain only alphabetic letters and spaces.');
+      return;
+    }
     try {
       setSaving(true);
       const res = await api.put(`/branches/${id}`, form);

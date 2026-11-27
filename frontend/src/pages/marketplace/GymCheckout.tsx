@@ -101,6 +101,13 @@ const GymCheckout = () => {
   const [refChecking, setRefChecking] = useState<boolean>(false);
   const [refError, setRefError] = useState<string>('');
 
+  // Reward Voucher states
+  const [voucherCodeInput, setVoucherCodeInput] = useState<string>('');
+  const [appliedVoucher, setAppliedVoucher] = useState<any>(null);
+  const [voucherError, setVoucherError] = useState<string>('');
+  const [validatingVoucher, setValidatingVoucher] = useState<boolean>(false);
+  const [myVouchers, setMyVouchers] = useState<any[]>([]);
+
   // Points redemption states
   const [userPointsBalance, setUserPointsBalance] = useState<number>(0);
   const [rewardSettings, setRewardSettings] = useState<any>(null);
@@ -174,6 +181,15 @@ const GymCheckout = () => {
           setPointsToRedeem(pts);
         }
       }).catch(() => { });
+
+      // Fetch claimed vouchers
+      api.get('/rewards/my-vouchers')
+        .catch(() => api.get('/referrals/my-vouchers'))
+        .then(res => {
+          const list = res.data?.vouchers || res.data?.claims || [];
+          setMyVouchers(list);
+        })
+        .catch(() => {});
     }
 
     // 1. If state was passed via React Router navigation
@@ -312,6 +328,48 @@ const GymCheckout = () => {
   const numPrice = Number(plan?.price ?? plan?.monthlyPrice ?? 0);
   const isFreeTrial = numPrice === 0 || Boolean(plan?.name?.toLowerCase().includes('trial'));
 
+  const handleApplyVoucher = async (codeToUse?: string) => {
+    const code = (codeToUse || voucherCodeInput).trim().toUpperCase();
+    if (!code) {
+      setVoucherError('Please enter a voucher code');
+      return;
+    }
+    setValidatingVoucher(true);
+    setVoucherError('');
+    try {
+      const res = await api.post('/rewards/validate-voucher', {
+        voucherCode: code,
+        context: 'membership',
+        amount: numPrice
+      });
+      if (res.data?.success) {
+        setAppliedVoucher(res.data.voucher);
+        setVoucherCodeInput(code);
+      } else {
+        setVoucherError(res.data?.message || 'Invalid voucher');
+      }
+    } catch (err: any) {
+      setVoucherError(err.response?.data?.message || 'Failed to validate voucher');
+    } finally {
+      setValidatingVoucher(false);
+    }
+  };
+
+  const handleRemoveVoucher = () => {
+    setAppliedVoucher(null);
+    setVoucherCodeInput('');
+    setVoucherError('');
+  };
+
+  const availableMembershipVouchers = myVouchers.filter((v: any) =>
+    (v.claimStatus === 'Approved' || v.status === 'Approved' || v.claimStatus === 'Active') &&
+    (v.reward?.category === 'Discount Coupon' ||
+     v.reward?.category === 'Free Membership Month' ||
+     v.reward?.applicableService === 'All Services' ||
+     v.reward?.applicableService === 'Membership' ||
+     !v.reward?.applicableService)
+  );
+
   // Calculate Referral Discount
   const rawDiscount = appliedReferral
     ? (appliedReferral.refereeReward?.discountType === 'Percentage'
@@ -331,7 +389,12 @@ const GymCheckout = () => {
   const cappedPointsDiscount = Math.min(rawPointsDiscount, maxAllowedBySetting);
   const pointsDiscount = isFreeTrial ? 0 : Math.min(Math.max(0, numPrice - referralDiscount), cappedPointsDiscount);
 
-  const combinedDiscount = isFreeTrial ? 0 : Math.min(numPrice, referralDiscount + pointsDiscount);
+  // Calculate Voucher Discount
+  const voucherDiscount = isFreeTrial ? 0 : (appliedVoucher
+    ? Math.min(appliedVoucher.discount ?? 0, Math.max(0, numPrice - referralDiscount - pointsDiscount))
+    : 0);
+
+  const combinedDiscount = isFreeTrial ? 0 : Math.min(numPrice, referralDiscount + pointsDiscount + voucherDiscount);
   const discountedPrice = Math.max(0, numPrice - combinedDiscount);
   const tax = isFreeTrial ? 0 : Math.round(discountedPrice * 0.18); // 18% GST for paid plans
   const total = isFreeTrial ? 0 : Math.round(discountedPrice + tax);
@@ -387,6 +450,8 @@ const GymCheckout = () => {
         price: numPrice,
         discount: combinedDiscount,
         pointsToRedeem: usePoints ? pointsToRedeem : 0,
+        voucherCode: appliedVoucher ? appliedVoucher.voucherCode : undefined,
+        voucherDiscount: voucherDiscount,
         referralCode: appliedReferral ? appliedReferral.referralCode : (referralCodeInput?.trim() || undefined),
         paymentMethod: isFreeTrial ? 'Free Trial' : paymentMethod,
         paymentReference: `PAY-${Date.now().toString().slice(-8)}${Math.floor(100 + Math.random() * 900)}`,
@@ -877,6 +942,82 @@ const GymCheckout = () => {
               </div>
             )}
 
+            {/* Reward Voucher Code Input */}
+            {!isFreeTrial && (
+              <div className="p-3.5 bg-[#F8FAFC] rounded-2xl border border-[#E2E8F0] space-y-2.5">
+                <div className="flex items-center justify-between text-xs font-bold text-[#111827]">
+                  <span className="flex items-center gap-1.5"><Tag size={14} className="text-[#EA580C]" /> Claimed Reward Voucher</span>
+                  {appliedVoucher && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveVoucher}
+                      className="text-[10px] text-red-600 hover:underline font-bold cursor-pointer"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+
+                {appliedVoucher ? (
+                  <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-200 text-xs flex items-center justify-between">
+                    <div>
+                      <p className="font-bold text-emerald-800 font-mono">{appliedVoucher.voucherCode}</p>
+                      <p className="text-[10px] text-emerald-600">{appliedVoucher.rewardTitle || 'Reward Voucher'}</p>
+                    </div>
+                    <span className="font-extrabold text-emerald-700 text-sm">-₹{voucherDiscount}</span>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={voucherCodeInput}
+                        onChange={(e) => {
+                          setVoucherCodeInput(e.target.value.toUpperCase());
+                          setVoucherError('');
+                        }}
+                        placeholder="e.g. RWD-ABC123"
+                        className="w-full bg-[#FFFFFF] border border-[#E2E8F0] rounded-xl px-3 py-1.5 text-xs text-[#111827] placeholder-[#94A3B8] uppercase font-mono outline-none focus:border-[#FDBA74]"
+                      />
+                      <button
+                        type="button"
+                        disabled={!voucherCodeInput || validatingVoucher}
+                        onClick={() => handleApplyVoucher()}
+                        className="px-3.5 py-1.5 bg-[#C2410C] hover:bg-[#9A3412] disabled:bg-[#CBD5E1] disabled:text-[#475569] text-[#FFFFFF] font-bold text-xs rounded-xl transition-all whitespace-nowrap cursor-pointer"
+                      >
+                        {validatingVoucher ? '...' : 'Apply'}
+                      </button>
+                    </div>
+
+                    {voucherError && (
+                      <p className="text-[11px] text-red-600 flex items-center gap-1">
+                        <AlertCircle size={12} /> {voucherError}
+                      </p>
+                    )}
+
+                    {availableMembershipVouchers.length > 0 && (
+                      <div className="pt-2 border-t border-[#E2E8F0]/60 space-y-1.5">
+                        <p className="text-[10px] font-bold text-[#64748B] uppercase tracking-wider">Your Claimed Vouchers:</p>
+                        <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                          {availableMembershipVouchers.map((v: any) => (
+                            <button
+                              key={v._id || v.claimCode}
+                              type="button"
+                              onClick={() => handleApplyVoucher(v.claimCode)}
+                              className="px-2.5 py-1 bg-[#FFFFFF] border border-[#E2E8F0] hover:border-[#EA580C] rounded-lg text-left text-xs transition-colors cursor-pointer group flex items-center gap-1.5 shadow-2xs"
+                            >
+                              <span className="font-mono font-bold text-[#EA580C] group-hover:underline">{v.claimCode}</span>
+                              <span className="text-[10px] text-[#64748B] truncate max-w-[120px]">• {v.rewardId?.title || v.reward?.title || 'Voucher'}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Referral Points Redemption Input */}
             {!isFreeTrial && rewardSettings?.enableMembershipDiscount !== false && userPointsBalance > 0 && (
               <div className="p-3.5 bg-[#F8FAFC] rounded-2xl border border-[#E2E8F0] space-y-2.5">
@@ -943,6 +1084,12 @@ const GymCheckout = () => {
                 <div className="flex justify-between text-xs text-[#15803D] font-semibold">
                   <span className="flex items-center gap-1"><Coins size={12} /> Points Discount ({pointsToRedeem} pts)</span>
                   <span>- ₹{pointsDiscount.toLocaleString('en-IN')}</span>
+                </div>
+              )}
+              {voucherDiscount > 0 && (
+                <div className="flex justify-between text-xs text-[#15803D] font-semibold">
+                  <span className="flex items-center gap-1"><Tag size={12} /> Voucher Discount ({appliedVoucher?.voucherCode})</span>
+                  <span>- ₹{voucherDiscount.toLocaleString('en-IN')}</span>
                 </div>
               )}
               {!isFreeTrial && (

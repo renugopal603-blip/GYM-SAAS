@@ -156,6 +156,7 @@ export const GymAdminEnquiries = () => {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-[#F8FAFC] border-b border-[#F8FAFC]">
+                  <th className="px-6 py-4 text-xs font-semibold text-[#64748B] uppercase tracking-wider w-16 text-center">S.No</th>
                   <th className="px-6 py-4 text-xs font-semibold text-[#64748B] uppercase tracking-wider">Customer</th>
                   <th className="px-6 py-4 text-xs font-semibold text-[#64748B] uppercase tracking-wider">Contact</th>
                   <th className="px-6 py-4 text-xs font-semibold text-[#64748B] uppercase tracking-wider">Type</th>
@@ -165,8 +166,11 @@ export const GymAdminEnquiries = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F8FAFC]">
-                {filteredEnquiries.map((enq) => (
+                {filteredEnquiries.map((enq, index) => (
                   <tr key={enq._id} className="hover:bg-[#FFF7ED] transition-colors">
+                    <td className="px-6 py-4 text-center font-bold text-xs text-[#64748B]">
+                      {index + 1}
+                    </td>
                     <td className="px-6 py-4">
                       <div className="font-semibold text-[#111827]">{enq.customerName}</div>
                       <div className="text-sm text-[#64748B]">{enq.enquiryId}</div>
@@ -202,7 +206,7 @@ export const GymAdminEnquiries = () => {
                 ))}
                 {filteredEnquiries.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-[#64748B]">
+                    <td colSpan={7} className="px-6 py-12 text-center text-[#64748B]">
                       <MessageSquare size={40} className="mx-auto text-[#9A3412] mb-3" />
                       No enquiries found.
                     </td>

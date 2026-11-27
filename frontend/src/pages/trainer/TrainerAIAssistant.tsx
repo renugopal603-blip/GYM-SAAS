@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Bot, Search, UserCheck, CheckCircle2, Clock, FileEdit 
 } from 'lucide-react';
@@ -135,6 +135,7 @@ const TrainerAIAssistant = () => {
           <table className="w-full text-left">
             <thead>
               <tr className="bg-[#F8FAFC] border-b border-[#F8FAFC] text-xs font-bold text-[#64748B] uppercase tracking-wider">
+                <th className="px-6 py-4 w-14 text-center">S.No</th>
                 <th className="px-6 py-4">Client Name</th>
                 <th className="px-6 py-4">Fitness Goal</th>
                 <th className="px-6 py-4">Fitness Level</th>
@@ -146,22 +147,23 @@ const TrainerAIAssistant = () => {
             <tbody className="divide-y divide-[#F8FAFC]">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-16 text-center text-[#64748B]">
+                  <td colSpan={7} className="px-6 py-16 text-center text-[#64748B]">
                     <div className="w-8 h-8 border-4 border-[#FDBA74] border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
                     <p className="font-semibold text-xs text-[#64748B]">Loading clients...</p>
                   </td>
                 </tr>
               ) : filteredCustomers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-16 text-center text-[#64748B]">
+                  <td colSpan={7} className="px-6 py-16 text-center text-[#64748B]">
                     <Bot size={36} className="mx-auto text-[#E2E8F0] mb-2" />
                     <p className="font-bold text-sm text-[#111827]">No clients found</p>
                     <p className="text-xs text-[#64748B] mt-1">No customer assessment records matching this filter.</p>
                   </td>
                 </tr>
               ) : (
-                filteredCustomers.map((customer) => (
+                filteredCustomers.map((customer, index) => (
                   <tr key={customer._id} className="hover:bg-[#FFF7ED] transition-colors">
+                    <td className="px-6 py-4 text-center font-bold text-xs text-[#64748B]">{index + 1}</td>
                     <td className="px-6 py-4">
                       <div className="flex items-center space-x-3">
                         <div className="w-10 h-10 bg-[#FFF7ED] text-[#EA580C] rounded-full flex items-center justify-center font-bold text-sm shrink-0">

@@ -29,6 +29,8 @@ export interface ICustomerMembership extends Document {
   duration: string;
   price: number;
   discount: number;
+  voucherCode?: string;
+  voucherDiscount?: number;
   tax: number;
   finalAmount: number;
   status: CustomerMembershipStatus;
@@ -76,6 +78,8 @@ const customerMembershipSchema = new Schema<ICustomerMembership>(
     duration: { type: String, required: true },
     price: { type: Number, required: true },
     discount: { type: Number, default: 0 },
+    voucherCode: { type: String },
+    voucherDiscount: { type: Number, default: 0 },
     tax: { type: Number, default: 0 },
     finalAmount: { type: Number, required: true },
     status: {

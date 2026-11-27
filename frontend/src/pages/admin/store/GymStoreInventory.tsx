@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Search, Loader2, Package, AlertTriangle, CheckCircle2,
   TrendingUp, TrendingDown, Plus, Minus, X, ArrowDownUp, Eye
@@ -209,6 +209,7 @@ const GymStoreInventory = () => {
                 <table className="w-full text-left text-sm text-[#64748B] whitespace-nowrap">
                   <thead className="bg-[#FFFFFF] border-b border-[#E2E8F0] text-[#111827]">
                     <tr>
+                      <th className="px-6 py-4 font-semibold w-16 text-center">S.No</th>
                       <th className="px-6 py-4 font-semibold">Product</th>
                       <th className="px-6 py-4 font-semibold">SKU</th>
                       <th className="px-6 py-4 font-semibold">Category</th>
@@ -220,13 +221,16 @@ const GymStoreInventory = () => {
                   </thead>
                   <tbody className="divide-y divide-[#E2E8F0]">
                     {products.length === 0 ? (
-                      <tr><td colSpan={7} className="px-6 py-10 text-center">No products found.</td></tr>
-                    ) : products.map((p) => {
+                      <tr><td colSpan={8} className="px-6 py-10 text-center">No products found.</td></tr>
+                    ) : products.map((p, index) => {
                       const stockVal = Number(p?.stock) || 0;
                       const thresholdVal = Number(p?.lowStockThreshold) || 5;
                       const level = stockVal <= 0 ? 'out' : stockVal <= thresholdVal ? 'low' : 'ok';
                       return (
                         <tr key={p._id} className="hover:bg-[#FFF7ED] transition-colors">
+                          <td className="px-6 py-4 text-center font-bold text-xs text-[#64748B]">
+                            {index + 1}
+                          </td>
                           <td className="px-6 py-4">
                             <p className="font-bold text-[#111827]">{p.name}</p>
                             {p.brand && <p className="text-xs text-[#64748B]">{p.brand}</p>}

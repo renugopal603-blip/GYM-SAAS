@@ -66,6 +66,8 @@ export interface IStoreOrder extends Document {
   cancellationReason?: string;
   pointsRedeemed?: number;
   pointsDiscount?: number;
+  voucherCode?: string;
+  voucherDiscount?: number;
   refundDetails?: {
     amount: number;
     reason: string;
@@ -130,6 +132,8 @@ const storeOrderSchema = new Schema<IStoreOrder>(
     cancellationReason: { type: String },
     pointsRedeemed: { type: Number, default: 0, min: 0 },
     pointsDiscount: { type: Number, default: 0, min: 0 },
+    voucherCode: { type: String },
+    voucherDiscount: { type: Number, default: 0, min: 0 },
     refundDetails: {
       amount: { type: Number },
       reason: { type: String },

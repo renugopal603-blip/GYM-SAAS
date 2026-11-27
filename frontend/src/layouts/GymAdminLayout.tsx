@@ -13,7 +13,7 @@ import {
   Bell, BarChart, Activity, Building2, Menu, LogOut, Trash2, MapPin, MessageSquare,
   Video, Trophy, Gift, Award,
   Store, Package, Boxes, ShoppingCart, Bot, TrendingUp, Star,
-  Briefcase, UserCheck, Search, X
+  Briefcase, Search, X, Check
 } from 'lucide-react';
 
 const getNotificationLink = (notif: any) => {
@@ -35,6 +35,23 @@ const GymAdminLayout = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('gymora_admin_sidebar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleSidebarCollapse = () => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('gymora_admin_sidebar_collapsed', String(next));
+      } catch {}
+      return next;
+    });
+  };
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [trainerFeesOpen, setTrainerFeesOpen] = useState(() => location.pathname.startsWith('/admin/trainer-fees'));
 
@@ -50,7 +67,8 @@ const GymAdminLayout = () => {
   const notifRef = useRef<HTMLDivElement>(null);
 
   const [notifications, setNotifications] = useState<any[]>([]);
-  const unreadCount = notifications.filter(n => !n.isRead).length;
+  const unreadNotifications = notifications.filter(n => !n.isRead);
+  const unreadCount = unreadNotifications.length;
 
   const fetchNotifications = async () => {
     try {
@@ -190,8 +208,7 @@ const GymAdminLayout = () => {
         items: [
           { label: 'Post a Job', path: '/admin/hiring/jobs/new', icon: UserPlus },
           { label: 'Manage Jobs', path: '/admin/hiring/jobs', icon: Briefcase },
-          { label: 'Job Applications', path: '/admin/hiring/applications', icon: Users },
-          { label: 'Hired Trainers', path: '/admin/hiring/hired', icon: UserCheck }
+          { label: 'Job Applications', path: '/admin/hiring/applications', icon: Users }
         ]
       },
       {
@@ -321,13 +338,15 @@ const GymAdminLayout = () => {
         />
       )}
 
-      {/* Sidebar — desktop always visible, mobile slide-in */}
+      {/* Sidebar — desktop collapsible, mobile slide-in */}
       <aside
         className={clsx(
-          'fixed lg:static top-0 left-0 h-full w-64 bg-[#FFFFFF] text-[#1F2937] border-r border-[#E2E8F0] flex flex-col z-40 shrink-0 transition-transform duration-300 ease-in-out shadow-lg lg:shadow-none',
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+          'fixed lg:static top-0 left-0 h-full bg-[#FFFFFF] text-[#1F2937] border-r border-[#E2E8F0] flex flex-col z-40 shrink-0 transition-all duration-300 ease-in-out shadow-lg lg:shadow-none overflow-hidden',
+          sidebarOpen ? 'translate-x-0 w-64' : '-translate-x-full lg:translate-x-0',
+          sidebarCollapsed ? 'lg:w-0 lg:border-r-0' : 'lg:w-64'
         )}
       >
+        <div className="w-64 h-full flex flex-col shrink-0">
         {/* Logo Header aligned with main header h-16 */}
         <div className="h-16 px-5 border-b border-[#E2E8F0] flex items-center justify-between shrink-0">
           <Link
@@ -348,8 +367,15 @@ const GymAdminLayout = () => {
           </Link>
           <button
             type="button"
-            onClick={() => setSidebarOpen(false)}
-            className="lg:hidden w-8 h-8 flex items-center justify-center bg-[#F8FAFC] border border-[#E2E8F0] text-[#64748B] hover:text-[#EA580C] rounded-lg hover:bg-[#FFF7ED] active:bg-[#FFEDD5] transition-colors shrink-0 cursor-pointer"
+            onClick={() => {
+              if (window.innerWidth < 1024) {
+                setSidebarOpen(false);
+              } else {
+                toggleSidebarCollapse();
+              }
+            }}
+            className="w-8 h-8 flex items-center justify-center bg-[#F8FAFC] border border-[#E2E8F0] text-[#64748B] hover:text-[#EA580C] rounded-lg hover:bg-[#FFF7ED] active:bg-[#FFEDD5] transition-colors shrink-0 cursor-pointer"
+            title="Collapse sidebar"
             aria-label="Close menu"
           >
             <X size={18} />
@@ -426,6 +452,7 @@ const GymAdminLayout = () => {
             <span>Logout</span>
           </button>
         </div>
+        </div>
       </aside>
 
       {/* Main Content */}
@@ -433,13 +460,21 @@ const GymAdminLayout = () => {
         {/* Header */}
         <header className={`h-16 pt-safe border-b border-[#E2E8F0] flex items-center px-3 sm:px-6 md:px-8 justify-between bg-[#FFFFFF] sticky top-0 shrink-0 text-[#111827] ${notifOpen ? 'z-50' : 'z-20'}`}>
           <div className="flex items-center space-x-2 sm:space-x-3">
-            {/* Hamburger — mobile only */}
+            {/* Top header sidebar toggle button (collapses/expands sidebar on desktop, toggles drawer on mobile) */}
             <button
-              className="lg:hidden w-10 h-10 flex items-center justify-center text-[#64748B] hover:text-[#EA580C] transition-colors rounded-xl hover:bg-[#FFF7ED] cursor-pointer shrink-0"
-              onClick={() => setSidebarOpen(true)}
-              aria-label="Open menu"
+              type="button"
+              className="w-10 h-10 flex items-center justify-center text-[#64748B] hover:text-[#EA580C] transition-colors rounded-xl hover:bg-[#FFF7ED] border border-[#E2E8F0] cursor-pointer shrink-0 shadow-2xs"
+              onClick={() => {
+                if (window.innerWidth < 1024) {
+                  setSidebarOpen(!sidebarOpen);
+                } else {
+                  toggleSidebarCollapse();
+                }
+              }}
+              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-label="Toggle sidebar"
             >
-              <Menu size={22} />
+              <Menu size={20} />
             </button>
             {currentNav && <currentNav.icon size={20} className="text-[#EA580C] hidden sm:block" />}
             <h2 className="text-sm sm:text-base md:text-lg font-bold tracking-tight text-[#111827] truncate max-w-[180px] sm:max-w-none">
@@ -531,21 +566,27 @@ const GymAdminLayout = () => {
                       </div>
                     </div>
 
-                    {/* Notification list */}
+                    {/* Notification list — show only new (unread) notifications */}
                     <div className="divide-y divide-[#E2E8F0] max-h-[60vh] sm:max-h-80 overflow-y-auto">
-                      {notifications.length === 0 ? (
-                        <div className="p-4 text-center text-sm text-[#64748B]">No notifications</div>
+                      {unreadNotifications.length === 0 ? (
+                        <div className="py-8 px-4 text-center space-y-2">
+                          <div className="w-10 h-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto border border-emerald-200 shadow-2xs">
+                            <Check size={20} />
+                          </div>
+                          <p className="text-sm font-bold text-[#111827]">All caught up!</p>
+                          <p className="text-xs text-[#64748B]">No unread notifications at this time.</p>
+                        </div>
                       ) : (
-                        notifications.slice(0, 5).map(notif => (
+                        unreadNotifications.map(notif => (
                           <div
                             key={notif._id}
                             onClick={() => {
-                              if (!notif.isRead) markAsRead(notif._id);
+                              markAsRead(notif._id);
                               setNotifOpen(false);
                               const targetLink = getNotificationLink(notif);
                               if (targetLink) navigate(targetLink);
                             }}
-                            className={`flex items-start gap-3 px-4 py-3 hover:bg-[#FFF7ED] transition-colors cursor-pointer ${!notif.isRead ? 'bg-[#FFF7ED]/50' : ''}`}
+                            className="flex items-start gap-3 px-4 py-3 hover:bg-[#FFF7ED] bg-[#FFF7ED]/30 transition-colors cursor-pointer group"
                           >
                             <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
                               notif.type === 'alert' ? 'bg-amber-100 text-amber-700' :
@@ -558,11 +599,25 @@ const GymAdminLayout = () => {
                                notif.type === 'message' ? '💬' : 'ℹ️'}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className={`text-sm font-semibold text-[#111827] ${!notif.isRead ? 'font-bold' : ''}`}>{notif.title}</p>
+                              <p className="text-sm font-bold text-[#111827]">{notif.title}</p>
                               <p className="text-xs text-[#64748B] mt-0.5 leading-snug break-words">{notif.message}</p>
                               <p className="text-[10px] text-[#94A3B8] mt-1">{new Date(notif.createdAt).toLocaleDateString()}</p>
                             </div>
-                            {!notif.isRead && <div className="w-2 h-2 bg-[#F97316] rounded-full mt-2 shrink-0" />}
+                            <div className="flex items-center gap-1.5 shrink-0 mt-1">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  markAsRead(notif._id);
+                                }}
+                                className="p-1.5 rounded-lg text-[#94A3B8] hover:text-[#15803D] hover:bg-emerald-50 transition-colors cursor-pointer"
+                                title="Mark as read"
+                                aria-label="Mark as read"
+                              >
+                                <Check size={14} />
+                              </button>
+                              <div className="w-2 h-2 bg-[#F97316] rounded-full shrink-0" />
+                            </div>
                           </div>
                         ))
                       )}

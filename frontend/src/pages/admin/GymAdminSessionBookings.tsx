@@ -101,6 +101,7 @@ const GymAdminSessionBookings = () => {
           <table className="w-full text-left text-sm text-[#64748B] whitespace-nowrap">
             <thead className="bg-[#F8FAFC] border-b border-[#E2E8F0] text-[#111827]">
               <tr>
+                <th className="px-6 py-4 font-semibold w-16">S.No</th>
                 <th className="px-6 py-4 font-semibold">Booking ID</th>
                 <th className="px-6 py-4 font-semibold">Member</th>
                 <th className="px-6 py-4 font-semibold">Assigned Trainer</th>
@@ -113,24 +114,27 @@ const GymAdminSessionBookings = () => {
             <tbody className="divide-y divide-[#E2E8F0]">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center">
+                  <td colSpan={8} className="px-6 py-12 text-center">
                     <Loader2 className="animate-spin text-[#EA580C] mx-auto" size={32} />
                   </td>
                 </tr>
               ) : filteredBookings.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-[#64748B]">
+                  <td colSpan={8} className="px-6 py-12 text-center text-[#64748B]">
                     No session bookings found.
                   </td>
                 </tr>
               ) : (
-                filteredBookings.map((booking) => (
+                filteredBookings.map((booking, index) => (
                   <tr key={booking._id} className="hover:bg-[#FFF7ED] transition-colors relative">
                     {actionLoading === booking._id && (
-                       <td colSpan={7} className="absolute inset-0 bg-[#FFFFFF]/50 flex items-center justify-center z-10">
+                       <td colSpan={8} className="absolute inset-0 bg-[#FFFFFF]/50 flex items-center justify-center z-10">
                          <Loader2 className="animate-spin text-[#EA580C]" size={24} />
                        </td>
                     )}
+                    <td className="px-6 py-4 font-semibold text-[#64748B] text-xs">
+                      {index + 1}
+                    </td>
                     <td className="px-6 py-4 font-mono text-[#EA580C] font-bold">{booking.bookingId || booking._id.slice(-6).toUpperCase()}</td>
                     <td className="px-6 py-4 font-semibold text-[#111827]">
                       <div className="flex items-center space-x-2">

@@ -38,6 +38,8 @@ export interface ITrainerSession extends Document {
   // Payment specifics
   paymentId?: mongoose.Types.ObjectId;
   paymentStatus?: 'Pending' | 'Paid' | 'Failed' | 'Refunded';
+  voucherCode?: string;
+  voucherDiscount?: number;
   
   // Online specifics
   meetingId?: string;
@@ -106,6 +108,8 @@ const trainerSessionSchema = new Schema<ITrainerSession>(
 
     paymentId: { type: Schema.Types.ObjectId, ref: 'Payment' },
     paymentStatus: { type: String, enum: ['Pending', 'Paid', 'Failed', 'Refunded'] },
+    voucherCode: { type: String },
+    voucherDiscount: { type: Number, default: 0 },
     
     meetingId: { type: String },
     meetingLink: { type: String },

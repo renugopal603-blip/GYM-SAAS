@@ -647,14 +647,6 @@ const GymAdminAttendance = () => {
             ))}
           </div>
 
-          {/* Live tracking badge */}
-          <div className="flex items-center space-x-2 text-xs font-bold bg-[#FFFFFF] border border-[#E2E8F0] px-3.5 py-2.5 rounded-xl text-[#111827] shadow-sm">
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></div>
-            <span>
-              {activeTab === 'CUSTOMERS' ? 'Live Tracking Active' : `${trainerStats.onDutyCount} Trainers On Duty`}
-            </span>
-          </div>
-
           {/* Download PDF button */}
           <button
             onClick={handleDownloadPDF}
@@ -878,9 +870,10 @@ const GymAdminAttendance = () => {
             </div>
 
             <div className="overflow-x-auto custom-scrollbar">
-              <table className="w-full text-left text-sm min-w-[760px]">
+              <table className="w-full text-left text-sm min-w-[800px]">
                 <thead>
                   <tr className="border-b border-[#E2E8F0] text-[#64748B] text-xs font-bold uppercase tracking-wider bg-[#F8FAFC]">
+                    <th className="py-3.5 px-4 w-14 text-center whitespace-nowrap">S.No</th>
                     <th className="py-3.5 px-4 min-w-[200px] whitespace-nowrap">Member Name</th>
                     <th className="py-3.5 px-4 min-w-[140px] whitespace-nowrap">Type</th>
                     <th className="py-3.5 px-4 min-w-[130px] whitespace-nowrap">Date</th>
@@ -890,8 +883,13 @@ const GymAdminAttendance = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E2E8F0]">
-                  {filteredCustomerCheckins.map((item) => (
+                  {filteredCustomerCheckins.map((item, index) => (
                     <tr key={item.id} className="hover:bg-[#FFF7ED]/70 transition-colors">
+                      {/* S.No */}
+                      <td className="py-3.5 px-4 text-center font-bold text-xs text-[#64748B] align-middle whitespace-nowrap">
+                        {index + 1}
+                      </td>
+
                       {/* 1. Member Name */}
                       <td className="py-3.5 px-4 font-semibold text-[#111827] align-middle whitespace-nowrap">
                         <div className="flex items-center space-x-2.5">
@@ -955,7 +953,7 @@ const GymAdminAttendance = () => {
                   ))}
                   {filteredCustomerCheckins.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-[#64748B] text-xs font-medium">
+                      <td colSpan={7} className="py-8 text-center text-[#64748B] text-xs font-medium">
                         No customer attendance records found for this timeframe.
                       </td>
                     </tr>
@@ -1132,9 +1130,10 @@ const GymAdminAttendance = () => {
             </div>
 
             <div className="overflow-x-auto custom-scrollbar">
-              <table className="w-full text-left text-sm min-w-[1040px]">
+              <table className="w-full text-left text-sm min-w-[1080px]">
                 <thead>
                   <tr className="border-b border-[#E2E8F0] text-[#64748B] text-xs font-bold uppercase tracking-wider bg-[#F8FAFC]">
+                    <th className="py-3.5 px-4 w-14 text-center whitespace-nowrap">S.No</th>
                     <th className="py-3.5 px-4 min-w-[180px] whitespace-nowrap">Trainer</th>
                     <th className="py-3.5 px-4 min-w-[125px] whitespace-nowrap">Date</th>
                     <th className="py-3.5 px-4 min-w-[215px] whitespace-nowrap">Assigned Duty / Mode</th>
@@ -1146,8 +1145,13 @@ const GymAdminAttendance = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#E2E8F0]">
-                  {filteredTrainerRecords.map((t) => (
+                  {filteredTrainerRecords.map((t, index) => (
                     <tr key={t.id} className="hover:bg-[#FFF7ED]/70 transition-colors">
+                      {/* S.No */}
+                      <td className="py-3.5 px-4 text-center font-bold text-xs text-[#64748B] align-middle whitespace-nowrap">
+                        {index + 1}
+                      </td>
+
                       {/* 1. Trainer */}
                       <td className="py-3.5 px-4 font-semibold text-[#111827] align-middle whitespace-nowrap">
                         <div className="flex items-center space-x-2.5">
@@ -1240,7 +1244,7 @@ const GymAdminAttendance = () => {
                   ))}
                   {filteredTrainerRecords.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="py-8 text-center text-[#64748B] text-xs font-medium">
+                      <td colSpan={9} className="py-8 text-center text-[#64748B] text-xs font-medium">
                         No trainer attendance records found for this timeframe.
                       </td>
                     </tr>

@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'r
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import NavigationGuard, { markAuthorizedNavigation } from './components/NavigationGuard';
+import ErrorBoundary from './components/ErrorBoundary';
 import {
   resolveMemberRoute,
   resolveTrainerRoute,
@@ -291,11 +292,12 @@ function GlobalCatchAll() {
 
 function App() {
   return (
-    <AuthProvider>
-      <Router>
-        <ScrollToTop />
-        <NavigationGuard />
-        <Routes>
+    <ErrorBoundary>
+      <AuthProvider>
+        <Router>
+          <ScrollToTop />
+          <NavigationGuard />
+          <Routes>
           {/* Public Routes */}
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
@@ -607,6 +609,7 @@ function App() {
         </Routes>
       </Router>
     </AuthProvider>
+    </ErrorBoundary>
   );
 }
 
